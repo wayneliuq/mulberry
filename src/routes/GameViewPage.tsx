@@ -12,6 +12,10 @@ import { Link, useParams } from "react-router-dom";
 import { useAdminSession } from "../features/admin/AdminSessionContext";
 import { calculateFightTheLandlordRound } from "../features/game-types/fightTheLandlord";
 import { calculateTexasHoldemRound } from "../features/game-types/texasHoldem";
+import {
+  PlayerSortButtons,
+  useSortedPlayers,
+} from "../features/players/SortablePlayerList";
 import { adminWrite } from "../lib/api/admin";
 import { fetchGameDetails, fetchPlayers } from "../lib/api/read";
 import { formatDateTime, formatMoneyCents } from "../lib/format";
@@ -65,6 +69,13 @@ export function GameViewPage() {
     (player) => !currentGamePlayerIds.has(player.id),
   );
   const unlockedPlayers = game?.players.filter((player) => !player.isLocked) ?? [];
+
+  const [sortedAvailablePlayers, addPlayersSort, setAddPlayersSort] =
+    useSortedPlayers(availablePlayers);
+  const [sortedGamePlayers, gamePlayersSort, setGamePlayersSort] =
+    useSortedPlayers(game?.players ?? [], "id");
+  const [sortedUnlockedPlayers, unlockedSort, setUnlockedSort] =
+    useSortedPlayers(unlockedPlayers);
 
   const invalidateGameData = async () => {
     await Promise.all([
@@ -476,8 +487,13 @@ export function GameViewPage() {
               {availablePlayers.length === 0 ? (
                 <p className="muted">All players are already in this game.</p>
               ) : (
-                <div className="checkbox-list">
-                  {availablePlayers.map((player) => (
+                <>
+                  <PlayerSortButtons
+                    sortMode={addPlayersSort}
+                    onSortChange={setAddPlayersSort}
+                  />
+                  <div className="checkbox-list player-list-two-col">
+                    {sortedAvailablePlayers.map((player) => (
                     <label key={player.id} className="checkbox-item">
                       <input
                         type="checkbox"
@@ -494,6 +510,7 @@ export function GameViewPage() {
                     </label>
                   ))}
                 </div>
+                </>
               )}
               {addPlayersMutation.error ? (
                 <p className="form-error">{addPlayersMutation.error.message}</p>
@@ -569,7 +586,7 @@ export function GameViewPage() {
                 : "Fight the Landlord round"}
             </strong>
 
-            {unlockedPlayers.length < 2 ? (
+            {sortedUnlockedPlayers.length < 2 ? (
               <p className="muted">
                 Unlock at least two players before creating a round.
               </p>
@@ -581,7 +598,7 @@ export function GameViewPage() {
                   void handleTexasHoldemRoundSubmit();
                 }}
               >
-                {unlockedPlayers.map((player) => (
+                {sortedUnlockedPlayers.map((player) => (
                   <label key={player.playerId} className="stack-xs">
                     <span>{player.displayName}</span>
                     <input
@@ -651,7 +668,7 @@ export function GameViewPage() {
                     }
                   >
                     <option value="">Select landlord</option>
-                    {unlockedPlayers.map((player) => (
+                    {sortedUnlockedPlayers.map((player) => (
                       <option key={player.playerId} value={player.playerId}>
                         {player.displayName}
                       </option>
@@ -692,8 +709,12 @@ export function GameViewPage() {
                 </div>
                 <div className="stack-sm">
                   <span>Landlord friends</span>
-                  <div className="checkbox-list">
-                    {unlockedPlayers
+                  <PlayerSortButtons
+                    sortMode={unlockedSort}
+                    onSortChange={setUnlockedSort}
+                  />
+                  <div className="checkbox-list player-list-two-col">
+                    {sortedUnlockedPlayers
                       .filter(
                         (player) =>
                           String(player.playerId) !== landlordValues.landlordId,
@@ -741,8 +762,14 @@ export function GameViewPage() {
           </div>
         ) : null}
 
-        <ul className="list-reset stack-sm">
-          {game.players.map((player) => (
+        <div className="stack-xs">
+          <PlayerSortButtons
+            sortMode={gamePlayersSort}
+            onSortChange={setGamePlayersSort}
+          />
+        </div>
+        <ul className="list-reset stack-sm player-list-two-col">
+          {sortedGamePlayers.map((player) => (
             <li key={player.gamePlayerId} className="list-item">
               <div className="stack-xs">
                 <strong>{player.displayName}</strong>

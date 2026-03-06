@@ -69,9 +69,25 @@ type RawRoundEntry = {
   }> | null;
 };
 
+type GroupedUnit = {
+  id: string;
+  label: string;
+  amountCents: number;
+  playerIds: number[];
+};
+
+type TotalsSnapshotEntry = {
+  playerId: number;
+  displayName: string;
+  familyId: string | null;
+  amountCents: number;
+};
+
 type RawSettlement = {
   id: string;
   created_at: string;
+  grouped_units?: GroupedUnit[];
+  totals_snapshot?: TotalsSnapshotEntry[];
 };
 
 type RawTransfer = {
@@ -80,12 +96,14 @@ type RawTransfer = {
   family_label: string | null;
   from_player_id: number | null;
   to_player_id: number | null;
-  from_player?: Array<{
-    display_name: string;
-  }> | null;
-  to_player?: Array<{
-    display_name: string;
-  }> | null;
+  from_player?:
+    | Array<{ display_name: string }>
+    | { display_name: string }
+    | null;
+  to_player?:
+    | Array<{ display_name: string }>
+    | { display_name: string }
+    | null;
 };
 
 type RawSettlementPlayer = {
@@ -174,10 +192,18 @@ export async function fetchGames() {
   }));
 }
 
+function getNestedDisplayName(
+  p: Array<{ display_name: string }> | { display_name: string } | null | undefined,
+): string | undefined {
+  if (!p) return undefined;
+  const obj = Array.isArray(p) ? p[0] : p;
+  return obj?.display_name;
+}
+
 async function fetchSettlement(gameId: string): Promise<SettlementSummary | null> {
   const { data: settlementData, error: settlementError } = await supabase
     .from("money_settlements")
-    .select("id, created_at")
+    .select("id, created_at, grouped_units, totals_snapshot")
     .eq("game_id", gameId)
     .maybeSingle();
 
@@ -213,24 +239,57 @@ async function fetchSettlement(gameId: string): Promise<SettlementSummary | null
     throw new Error(playerImpactsError.message);
   }
 
+  const groupedUnits = (settlement.grouped_units ?? []) as GroupedUnit[];
+  const totalsSnapshot = (settlement.totals_snapshot ?? []) as TotalsSnapshotEntry[];
+  const playerIdToName = new Map(
+    totalsSnapshot.map((e) => [e.playerId, e.displayName]),
+  );
+
+  function formatUnitLabel(
+    playerId: number | null,
+    familyLabelPart: string | undefined,
+    joinedDisplayName: string | undefined,
+  ): string {
+    if (playerId != null) {
+      const name = joinedDisplayName ?? playerIdToName.get(playerId) ?? String(playerId);
+      if (name) return name;
+    }
+    if (familyLabelPart) {
+      const unit = groupedUnits.find((u) => u.label === familyLabelPart);
+      if (unit && unit.playerIds.length > 1) {
+        const names = unit.playerIds
+          .map((id) => playerIdToName.get(id) ?? String(id))
+          .join(", ");
+        return names || familyLabelPart;
+      }
+      return familyLabelPart;
+    }
+    return "Unknown";
+  }
+
   return {
     id: settlement.id,
     createdAt: settlement.created_at,
-    transfers: (transfersData ?? []).map((transfer: RawTransfer) => ({
-      id: transfer.id,
-      fromLabel:
-        transfer.family_label?.split(" -> ")[0] ??
-        transfer.from_player?.[0]?.display_name ??
-        "Grouped unit",
-      toLabel:
-        transfer.family_label?.split(" -> ")[1] ??
-        transfer.to_player?.[0]?.display_name ??
-        "Grouped unit",
-      amountCents: transfer.amount_cents,
-    })),
+    transfers: (transfersData ?? []).map((transfer: RawTransfer) => {
+      const fromPart = transfer.family_label?.split(" -> ")[0];
+      const toPart = transfer.family_label?.split(" -> ")[1];
+      const fromJoined = getNestedDisplayName(transfer.from_player);
+      const toJoined = getNestedDisplayName(transfer.to_player);
+      return {
+        id: transfer.id,
+        fromLabel: formatUnitLabel(
+          transfer.from_player_id,
+          fromPart,
+          fromJoined,
+        ),
+        toLabel: formatUnitLabel(transfer.to_player_id, toPart, toJoined),
+        amountCents: transfer.amount_cents,
+      };
+    }),
     playerImpacts: (playerImpactsData ?? []).map((impact: RawSettlementPlayer) => ({
       playerId: impact.player_id,
-      displayName: impact.players?.[0]?.display_name ?? String(impact.player_id),
+      displayName:
+        getNestedDisplayName(impact.players) ?? String(impact.player_id),
       amountCents: impact.amount_cents,
     })),
   };
@@ -304,9 +363,11 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
 
   for (const entry of (roundEntriesResult.data ?? []) as RawRoundEntry[]) {
     const existingEntries = roundEntriesByRoundId.get(entry.round_id) ?? [];
+    const displayName =
+      getNestedDisplayName(entry.players) ?? String(entry.player_id);
     existingEntries.push({
       playerId: entry.player_id,
-      displayName: entry.players?.[0]?.display_name ?? String(entry.player_id),
+      displayName,
       pointDelta: entry.point_delta,
     });
     roundEntriesByRoundId.set(entry.round_id, existingEntries);
@@ -322,15 +383,19 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
     createdAt: game.created_at,
     updatedAt: game.updated_at,
     endedAt: game.ended_at,
-    players: ((gamePlayersResult.data ?? []) as RawGamePlayer[]).map((player) => ({
-      gamePlayerId: player.id,
-      playerId: player.player_id,
-      displayName: player.players?.[0]?.display_name ?? String(player.player_id),
-      familyId: player.players?.[0]?.family_id ?? null,
-      joinOrder: player.join_order,
-      isLocked: player.is_locked,
-      total: totalByGamePlayerId.get(player.id) ?? 0,
-    })),
+    players: ((gamePlayersResult.data ?? []) as RawGamePlayer[]).map((player) => {
+      const p = player.players;
+      const nested = Array.isArray(p) ? p[0] : p;
+      return {
+        gamePlayerId: player.id,
+        playerId: player.player_id,
+        displayName: nested?.display_name ?? String(player.player_id),
+        familyId: nested?.family_id ?? null,
+        joinOrder: player.join_order,
+        isLocked: player.is_locked,
+        total: totalByGamePlayerId.get(player.id) ?? 0,
+      };
+    }),
     rounds: ((roundsResult.data ?? []) as RawRound[]).map((round) => ({
       id: round.id,
       roundNumber: round.round_number,

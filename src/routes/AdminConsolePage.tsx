@@ -5,6 +5,10 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useAdminSession } from "../features/admin/AdminSessionContext";
+import {
+  PlayerSortButtons,
+  useSortedPlayers,
+} from "../features/players/SortablePlayerList";
 import { adminWrite } from "../lib/api/admin";
 import { fetchPlayers } from "../lib/api/read";
 
@@ -76,6 +80,7 @@ export function AdminConsolePage() {
   });
 
   const players = playersQuery.data ?? [];
+  const [sortedPlayers, sortMode, setSortMode] = useSortedPlayers(players);
 
   return (
     <section className="stack-lg">
@@ -107,16 +112,19 @@ export function AdminConsolePage() {
         ) : null}
 
         <div className="stack-sm">
-          {players.map((player) => (
-            <article key={player.id} className="card-subsection stack-sm">
-              <div className="card-header">
-                <div>
-                  <strong>{player.displayName}</strong>
-                  <p className="muted">
-                    {player.familyId ? `Family linked` : "No family set"}
-                  </p>
+          <PlayerSortButtons sortMode={sortMode} onSortChange={setSortMode} />
+          <div className="player-list-two-col">
+            {sortedPlayers.map((player) => (
+              <article key={player.id} className="card-subsection stack-sm">
+                <div className="card-header">
+                  <div>
+                    <strong>{player.displayName}</strong>
+                    <span className="player-id-muted"> #{player.id}</span>
+                    <p className="muted">
+                      {player.familyId ? `Family linked` : "No family set"}
+                    </p>
+                  </div>
                 </div>
-              </div>
 
               <form
                 className="form-grid"
@@ -191,6 +199,7 @@ export function AdminConsolePage() {
               </form>
             </article>
           ))}
+          </div>
         </div>
 
         {renameMutation.error ? (
