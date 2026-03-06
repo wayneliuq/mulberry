@@ -33,4 +33,6 @@ export const appRoutes: RouteObject[] = [
   },
 ];
 
-export const appRouter = createBrowserRouter(appRoutes);
+export const appRouter = createBrowserRouter(appRoutes, {
+  basename: "/mulberry",
+});
