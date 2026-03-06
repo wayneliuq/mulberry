@@ -13,7 +13,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useAdminSession } from "../features/admin/AdminSessionContext";
-import { gameTypeOptions } from "../features/game-types";
+import { gameTypeOptions, getGameTypeOption } from "../features/game-types";
 import { adminWrite } from "../lib/api/admin";
 import { fetchGames } from "../lib/api/read";
 import { formatRelativeDate } from "../lib/format";
@@ -219,6 +219,7 @@ export function GamesPage() {
             <label className="stack-xs">
               <span>Display name</span>
               <input
+                maxLength={25}
                 value={createGameValues.displayName}
                 onChange={(event) =>
                   setCreateGameValues((current) => ({
@@ -299,10 +300,11 @@ export function GamesPage() {
           {recentGames.map((game) => (
             <li key={game.id} className="list-item">
               <div className="stack-xs">
-                <Link to={`/games/${game.id}`} className="game-link">
+                <Link to={`/games/${game.id}`} className="game-link text-wrap-safe">
                   {game.displayName}
                 </Link>
                 <p className="muted">
+                  {getGameTypeOption(game.gameTypeId)?.name ?? game.gameTypeId} ·{" "}
                   {formatRelativeDate(game.updatedAt)} · {game.roundCount} rounds ·{" "}
                   {game.playerCount} players
                 </p>

@@ -410,116 +410,157 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
   };
 }
 
+type RawRoundEntryRow = {
+  player_id: number;
+  point_delta: number;
+  game_id: string;
+};
+
+type RawMoneySettlementPlayer = {
+  player_id: number;
+  amount_cents: number;
+  money_settlements: { game_id: string } | { game_id: string }[] | null;
+};
+
 export async function fetchLeaderboards(
   gameTypeFilter: GameTypeId | "all" = "all",
 ): Promise<LeaderboardData> {
-  const [
-    pointsResult,
-    moneyResult,
-    totalsResult,
-    gamesResult,
-    playersResult,
-    familiesResult,
-  ] = await Promise.all([
-    supabase
-      .from("player_points_leaderboard")
-      .select("player_id, display_name, family_id, total_points, rounds_won, rounds_lost"),
-    supabase
-      .from("player_money_leaderboard")
-      .select("player_id, display_name, total_money_cents"),
+  const [gamesResult, totalsResult, playersResult, familiesResult] = await Promise.all([
+    supabase.from("games").select("id, game_type_id"),
     supabase
       .from("game_point_totals")
       .select("game_id, game_player_id, player_id, point_total"),
-    supabase.from("games").select("id, game_type_id"),
     supabase.from("players").select("id, display_name, family_id"),
     supabase.from("families").select("id, name"),
   ]);
 
-  if (pointsResult.error) {
-    throw new Error(pointsResult.error.message);
-  }
-
-  if (moneyResult.error) {
-    throw new Error(moneyResult.error.message);
-  }
-
-  if (totalsResult.error) {
-    throw new Error(totalsResult.error.message);
-  }
-
   if (gamesResult.error) {
     throw new Error(gamesResult.error.message);
   }
-
+  if (totalsResult.error) {
+    throw new Error(totalsResult.error.message);
+  }
   if (playersResult.error) {
     throw new Error(playersResult.error.message);
   }
-
   if (familiesResult.error) {
     throw new Error(familiesResult.error.message);
   }
 
-  const moneyByPlayerId = new Map(
-    ((moneyResult.data ?? []) as RawPlayerMoneyLeaderboard[]).map((row) => [
-      row.player_id,
-      row.total_money_cents,
-    ]),
+  const games = (gamesResult.data ?? []) as Array<{ id: string; game_type_id: GameTypeId }>;
+  const gameTypeByGameId = new Map(games.map((g) => [g.id, g.game_type_id]));
+  const filteredGameIds = new Set(
+    gameTypeFilter === "all"
+      ? games.map((g) => g.id)
+      : games.filter((g) => g.game_type_id === gameTypeFilter).map((g) => g.id),
   );
 
-  const gameTypeByGameId = new Map(
-    (gamesResult.data ?? []).map((game) => [game.id as string, game.game_type_id as GameTypeId]),
-  );
+  const [roundEntriesResult, moneyResult] = await Promise.all([
+    filteredGameIds.size > 0
+      ? supabase
+          .from("round_entries")
+          .select("player_id, point_delta, game_id")
+          .in("game_id", Array.from(filteredGameIds))
+      : { data: [] as RawRoundEntryRow[], error: null },
+    supabase
+      .from("money_settlement_players")
+      .select("player_id, amount_cents, money_settlements(game_id)"),
+  ]);
+
+  if (roundEntriesResult.error) {
+    throw new Error(roundEntriesResult.error.message);
+  }
+  if (moneyResult.error) {
+    throw new Error(moneyResult.error.message);
+  }
+
+  const roundEntries = (roundEntriesResult.data ?? []) as RawRoundEntryRow[];
+  const moneyRows = (moneyResult.data ?? []) as RawMoneySettlementPlayer[];
+
+  const moneyByPlayerId = new Map<number, number>();
+  for (const row of moneyRows) {
+    const settlement = row.money_settlements;
+    const gameId = Array.isArray(settlement)
+      ? settlement[0]?.game_id
+      : settlement?.game_id;
+    if (gameId && filteredGameIds.has(gameId)) {
+      const current = moneyByPlayerId.get(row.player_id) ?? 0;
+      moneyByPlayerId.set(row.player_id, current + row.amount_cents);
+    }
+  }
+
+  const pointsByPlayerId = new Map<
+    number,
+    { totalPoints: number; roundsWon: number; roundsLost: number }
+  >();
+  for (const entry of roundEntries) {
+    const existing = pointsByPlayerId.get(entry.player_id) ?? {
+      totalPoints: 0,
+      roundsWon: 0,
+      roundsLost: 0,
+    };
+    existing.totalPoints += entry.point_delta;
+    if (entry.point_delta > 0) existing.roundsWon += 1;
+    else if (entry.point_delta < 0) existing.roundsLost += 1;
+    pointsByPlayerId.set(entry.player_id, existing);
+  }
 
   const filteredGameTotals = ((totalsResult.data ?? []) as RawGamePointTotal[]).filter(
-    (row) =>
-      gameTypeFilter === "all" ||
-      gameTypeByGameId.get(row.game_id) === gameTypeFilter,
+    (row) => filteredGameIds.has(row.game_id),
   );
 
   const gameWinLossByPlayerId = new Map<number, { gamesWon: number; gamesLost: number }>();
-
   for (const total of filteredGameTotals) {
     const existing = gameWinLossByPlayerId.get(total.player_id) ?? {
       gamesWon: 0,
       gamesLost: 0,
     };
-
-    if (total.point_total > 0) {
-      existing.gamesWon += 1;
-    } else if (total.point_total < 0) {
-      existing.gamesLost += 1;
-    }
-
+    if (total.point_total > 0) existing.gamesWon += 1;
+    else if (total.point_total < 0) existing.gamesLost += 1;
     gameWinLossByPlayerId.set(total.player_id, existing);
   }
 
-  const playerRows = ((pointsResult.data ?? []) as RawPlayerPointsLeaderboard[])
-    .map<PlayerLeaderboardRow>((row) => {
-      const gameStats = gameWinLossByPlayerId.get(row.player_id) ?? {
+  const allPlayers = (playersResult.data ?? []) as RawPlayer[];
+  const playerById = new Map(allPlayers.map((p) => [p.id, p]));
+
+  const allPlayerIds = new Set<number>();
+  for (const id of pointsByPlayerId.keys()) allPlayerIds.add(id);
+  for (const id of moneyByPlayerId.keys()) allPlayerIds.add(id);
+  for (const id of gameWinLossByPlayerId.keys()) allPlayerIds.add(id);
+
+  const playerRows: PlayerLeaderboardRow[] = Array.from(allPlayerIds)
+    .map((playerId) => {
+      const player = playerById.get(playerId);
+      const points = pointsByPlayerId.get(playerId) ?? {
+        totalPoints: 0,
+        roundsWon: 0,
+        roundsLost: 0,
+      };
+      const gameStats = gameWinLossByPlayerId.get(playerId) ?? {
         gamesWon: 0,
         gamesLost: 0,
       };
-
       return {
-        playerId: row.player_id,
-        displayName: row.display_name,
-        familyId: row.family_id,
-        totalPoints: row.total_points,
-        totalMoneyCents: moneyByPlayerId.get(row.player_id) ?? 0,
-        roundsWon: row.rounds_won,
-        roundsLost: row.rounds_lost,
+        playerId,
+        displayName: player?.display_name ?? String(playerId),
+        familyId: player?.family_id ?? null,
+        totalPoints: points.totalPoints,
+        totalMoneyCents: moneyByPlayerId.get(playerId) ?? 0,
+        roundsWon: points.roundsWon,
+        roundsLost: points.roundsLost,
         gamesWon: gameStats.gamesWon,
         gamesLost: gameStats.gamesLost,
       };
     })
     .sort((left, right) => right.totalPoints - left.totalPoints);
 
-  const players = (playersResult.data ?? []) as RawPlayer[];
   const families = (familiesResult.data ?? []) as RawFamily[];
 
   const familyRows: FamilyLeaderboardRow[] = families
     .map((family) => {
-      const members = players.filter((player) => player.family_id === family.id);
+      const members = allPlayers.filter(
+        (player) => player.family_id === family.id,
+      );
       if (members.length < 2) {
         return null;
       }

@@ -187,6 +187,25 @@ select,
   color: #fff;
 }
 
+.player-sort-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.sort-btn,
+.pill-small {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.8rem;
+  min-height: unset;
+}
+
+.pill-small {
+  background: rgba(226, 181, 255, 0.22);
+  color: #fff;
+}
+
 .link-button {
   display: inline-flex;
   align-items: center;
@@ -255,6 +274,12 @@ select {
   color: #99f5c5;
 }
 
+.table-shell td {
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
+}
+
 .table-shell {
   overflow-x: auto;
 }
@@ -313,6 +338,12 @@ td {
   font-size: 0.85em;
   color: #9ca3af;
   font-weight: 400;
+}
+
+.text-wrap-safe {
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
 }
 
 .checkbox-item {

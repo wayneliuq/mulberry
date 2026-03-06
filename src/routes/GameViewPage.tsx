@@ -418,10 +418,11 @@ export function GameViewPage() {
               void updateSettingsMutation.mutateAsync();
             }}
           >
-            <label className="stack-xs">
-              <span>Display name</span>
-              <input
-                value={settingsValues.displayName}
+              <label className="stack-xs">
+                <span>Display name</span>
+                <input
+                  maxLength={25}
+                  value={settingsValues.displayName}
                 onChange={(event) =>
                   setSettingsValues((current) => ({
                     ...current,
@@ -506,7 +507,7 @@ export function GameViewPage() {
                           )
                         }
                       />
-                      <span>{player.displayName}</span>
+                      <span className="text-wrap-safe">{player.displayName}</span>
                     </label>
                   ))}
                 </div>
@@ -545,6 +546,7 @@ export function GameViewPage() {
               <label className="stack-xs">
                 <span>Name</span>
                 <input
+                  maxLength={25}
                   value={createPlayerValues.displayName}
                   onChange={(event) =>
                     setCreatePlayerValues((current) => ({
@@ -772,7 +774,7 @@ export function GameViewPage() {
           {sortedGamePlayers.map((player) => (
             <li key={player.gamePlayerId} className="list-item">
               <div className="stack-xs">
-                <strong>{player.displayName}</strong>
+                <strong className="text-wrap-safe">{player.displayName}</strong>
                 <p className="muted">
                   {player.isLocked ? "Locked for new rounds" : "Active"}
                 </p>
@@ -883,7 +885,7 @@ export function GameViewPage() {
             {game.settlement.transfers.map((transfer) => (
               <li key={transfer.id} className="list-item">
                 <div className="stack-xs">
-                  <strong>
+                  <strong className="text-wrap-safe">
                     {transfer.fromLabel} {"->"} {transfer.toLabel}
                   </strong>
                   <p className="muted">{formatMoneyCents(transfer.amountCents)}</p>

@@ -73,7 +73,7 @@ export function LeaderboardsPage() {
             <tbody>
               {playerRows.map((row) => (
                 <tr key={row.playerId}>
-                  <td>{row.displayName}</td>
+                  <td className="text-wrap-safe">{row.displayName}</td>
                   <td>{row.totalPoints}</td>
                   <td>{formatMoneyCents(row.totalMoneyCents)}</td>
                   <td>
@@ -118,7 +118,7 @@ export function LeaderboardsPage() {
               <tbody>
                 {familyRows.map((family) => (
                   <tr key={family.familyId}>
-                    <td>{family.familyName}</td>
+                    <td className="text-wrap-safe">{family.familyName}</td>
                     <td>{family.memberNames.join(", ")}</td>
                     <td>{family.totalPoints}</td>
                     <td>{formatMoneyCents(family.totalMoneyCents)}</td>
@@ -136,34 +136,6 @@ export function LeaderboardsPage() {
         )}
       </article>
 
-      <article className="card stack-sm">
-        <div className="card-header">
-          <div>
-            <p className="card-eyebrow">Money</p>
-            <h2>Player money leaderboard</h2>
-          </div>
-          <span className="pill">Derived from settlements</span>
-        </div>
-
-        <ul className="list-reset stack-sm">
-          {playerRows.map((row) => (
-            <li key={`${row.playerId}-money`} className="list-item">
-              <strong>{row.displayName}</strong>
-              <span
-                className={
-                  row.totalMoneyCents > 0
-                    ? "score-positive"
-                    : row.totalMoneyCents < 0
-                      ? "score-negative"
-                      : "score-neutral"
-                }
-              >
-                {formatMoneyCents(row.totalMoneyCents)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </article>
     </section>
   );
 }

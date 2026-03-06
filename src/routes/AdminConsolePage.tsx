@@ -118,7 +118,7 @@ export function AdminConsolePage() {
               <article key={player.id} className="card-subsection stack-sm">
                 <div className="card-header">
                   <div>
-                    <strong>{player.displayName}</strong>
+                    <strong className="text-wrap-safe">{player.displayName}</strong>
                     <span className="player-id-muted"> #{player.id}</span>
                     <p className="muted">
                       {player.familyId ? `Family linked` : "No family set"}
@@ -141,6 +141,7 @@ export function AdminConsolePage() {
                 <label className="stack-xs">
                   <span>Rename player</span>
                   <input
+                    maxLength={25}
                     value={renameValues[player.id] ?? player.displayName}
                     onChange={(event) =>
                       setRenameValues((current) => ({

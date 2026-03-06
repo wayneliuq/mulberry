@@ -43,24 +43,28 @@ export function PlayerSortButtons({
   onSortChange: (mode: PlayerSortMode) => void;
 }) {
   return (
-    <div className="inline-actions stack-xs" role="group" aria-label="Sort players">
+    <div
+      className="player-sort-buttons"
+      role="group"
+      aria-label="Sort players"
+    >
       <button
         type="button"
-        className={sortMode === "id" ? "pill" : "secondary-button"}
+        className={sortMode === "id" ? "pill pill-small" : "sort-btn"}
         onClick={() => onSortChange("id")}
       >
         By ID
       </button>
       <button
         type="button"
-        className={sortMode === "name-asc" ? "pill" : "secondary-button"}
+        className={sortMode === "name-asc" ? "pill pill-small" : "sort-btn"}
         onClick={() => onSortChange("name-asc")}
       >
         A→Z
       </button>
       <button
         type="button"
-        className={sortMode === "name-desc" ? "pill" : "secondary-button"}
+        className={sortMode === "name-desc" ? "pill pill-small" : "sort-btn"}
         onClick={() => onSortChange("name-desc")}
       >
         Z→A
