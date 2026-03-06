@@ -4,6 +4,7 @@ export type AdminWriteAction =
   | "create_player"
   | "rename_player"
   | "set_player_family"
+  | "delete_player"
   | "create_game"
   | "add_players_to_game"
   | "update_game_settings"

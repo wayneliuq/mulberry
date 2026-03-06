@@ -31,6 +31,11 @@ const actionSchema = z.discriminatedUnion("action", [
     familyName: z.string().trim().nullable(),
   }),
   z.object({
+    action: z.literal("delete_player"),
+    password: z.string(),
+    playerId: z.number().int().positive(),
+  }),
+  z.object({
     action: z.literal("create_game"),
     password: z.string(),
     gameTypeId: z.enum(["texas-holdem", "fight-the-landlord"]),
@@ -367,6 +372,28 @@ async function handleSetPlayerFamily(
       family_name: action.familyName?.trim() || null,
     },
   );
+
+  return jsonResponse({ player: data });
+}
+
+async function handleDeletePlayer(
+  supabase: Awaited<ReturnType<typeof createVerifiedAdminClient>>["supabase"],
+  action: Extract<AdminAction, { action: "delete_player" }>,
+) {
+  const { data, error } = await supabase
+    .from("players")
+    .update({ is_active: false })
+    .eq("id", action.playerId)
+    .select("id, display_name")
+    .single<PlayerRow>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  await insertAuditLog(supabase, "delete_player", "player", String(data.id), {
+    display_name: data.display_name,
+  });
 
   return jsonResponse({ player: data });
 }
@@ -1056,6 +1083,8 @@ Deno.serve(async (request) => {
         return await handleRenamePlayer(supabase, action);
       case "set_player_family":
         return await handleSetPlayerFamily(supabase, action);
+      case "delete_player":
+        return await handleDeletePlayer(supabase, action);
       case "create_game":
         return await handleCreateGame(supabase, action);
       case "add_players_to_game":

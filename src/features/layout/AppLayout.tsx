@@ -12,7 +12,6 @@ export function AppLayout() {
       <header className="app-header">
         <div>
           <p className="eyebrow">Mulberry</p>
-          <h1>Game history first.</h1>
           <p className="subtitle">
             Mobile-first scorekeeping, history, leaderboards, and settlements.
           </p>

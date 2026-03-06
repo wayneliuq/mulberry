@@ -119,7 +119,6 @@ export function GamesPage() {
         <div className="card-header">
           <div>
             <p className="card-eyebrow">Admin access</p>
-            <h2>Public read, admin write</h2>
           </div>
           <span className={isAdmin ? "pill pill-success" : "pill"}>
             {isAdmin ? "Editing enabled" : "View only"}
@@ -128,9 +127,7 @@ export function GamesPage() {
 
         {isAdmin ? (
           <div className="inline-actions">
-            <p className="muted">
-              Admin mode is verified against Supabase and required for writes.
-            </p>
+            <p className="muted">Admin logged in</p>
             <button type="button" className="secondary-button" onClick={logout}>
               Log out
             </button>

@@ -79,6 +79,27 @@ export function AdminConsolePage() {
     },
   });
 
+  const deletePlayerMutation = useMutation({
+    mutationFn: async (playerId: number) => {
+      if (!password) {
+        throw new Error("Admin session has expired. Please log in again.");
+      }
+
+      return adminWrite({
+        action: "delete_player",
+        password,
+        playerId,
+      });
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["players"] }),
+        queryClient.invalidateQueries({ queryKey: ["game"] }),
+        queryClient.invalidateQueries({ queryKey: ["leaderboards"] }),
+      ]);
+    },
+  });
+
   const players = playersQuery.data ?? [];
   const [sortedPlayers, sortMode, setSortMode] = useSortedPlayers(players);
 
@@ -118,8 +139,45 @@ export function AdminConsolePage() {
               <article key={player.id} className="card-subsection stack-sm">
                 <div className="card-header">
                   <div>
-                    <strong className="text-wrap-safe">{player.displayName}</strong>
-                    <span className="player-id-muted"> #{player.id}</span>
+                    <div className="inline-actions">
+                      <strong className="text-wrap-safe">{player.displayName}</strong>
+                      <span className="player-id-muted"> #{player.id}</span>
+                      <button
+                        type="button"
+                        className="icon-button"
+                        disabled={!isAdmin}
+                        aria-label={`Delete ${player.displayName}`}
+                        onClick={() => {
+                          const shouldDelete = window.confirm(
+                            `Delete ${player.displayName}? This will deactivate the player and remove them from player lists.`,
+                          );
+
+                          if (!shouldDelete) {
+                            return;
+                          }
+
+                          void deletePlayerMutation.mutateAsync(player.id);
+                        }}
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden
+                        >
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                          <line x1="10" y1="11" x2="10" y2="17" />
+                          <line x1="14" y1="11" x2="14" y2="17" />
+                        </svg>
+                      </button>
+                    </div>
                     <p className="muted">
                       {player.familyId ? `Family linked` : "No family set"}
                     </p>
@@ -208,6 +266,9 @@ export function AdminConsolePage() {
         ) : null}
         {setFamilyMutation.error ? (
           <p className="form-error">{setFamilyMutation.error.message}</p>
+        ) : null}
+        {deletePlayerMutation.error ? (
+          <p className="form-error">{deletePlayerMutation.error.message}</p>
         ) : null}
       </article>
     </section>

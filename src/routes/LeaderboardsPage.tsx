@@ -21,7 +21,6 @@ export function LeaderboardsPage() {
         <div className="card-header">
           <div>
             <p className="card-eyebrow">Leaderboards</p>
-            <h2>Derived from saved history</h2>
           </div>
           <div className="filter-row" role="tablist" aria-label="Game filters">
             <button
@@ -93,7 +92,6 @@ export function LeaderboardsPage() {
         <div className="card-header">
           <div>
             <p className="card-eyebrow">Families</p>
-            <h2>Grouped totals</h2>
           </div>
           <span className="pill">{familyRows.length} families</span>
         </div>
