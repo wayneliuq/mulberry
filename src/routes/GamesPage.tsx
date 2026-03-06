@@ -328,9 +328,20 @@ export function GamesPage() {
           {recentGames.map((game) => (
             <li key={game.id} className="list-item">
               <div className="stack-xs">
-                <Link to={`/games/${game.id}`} className="game-link text-wrap-safe">
-                  {game.displayName}
-                </Link>
+                <div className="inline-actions">
+                  <Link to={`/games/${game.id}`} className="game-link text-wrap-safe">
+                    {game.displayName}
+                  </Link>
+                  <span
+                    className={
+                      game.status === "settled"
+                        ? "pill pill-success"
+                        : "pill"
+                    }
+                  >
+                    {game.status === "settled" ? "Settled" : "Ongoing"}
+                  </span>
+                </div>
                 <p className="muted">
                   {getGameTypeOption(game.gameTypeId)?.name ?? game.gameTypeId} ·{" "}
                   {formatRelativeDate(game.updatedAt)} · {game.roundCount} rounds ·{" "}

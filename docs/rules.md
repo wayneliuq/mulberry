@@ -1,6 +1,6 @@
 # Mulberry Rules Decisions
 
-This document resolves the open questions called out in `docs/implementation-roadmap.md` so implementation can proceed without revisiting core behavior mid-build.
+This document captures core behavior decisions so implementation can proceed without revisiting them mid-build.
 
 ## General principles
 
@@ -63,8 +63,8 @@ This document resolves the open questions called out in `docs/implementation-roa
 
 - Money must be stored in integer cents, not floating-point dollars.
 - UI displays dollars, but all calculations and persistence use cents.
-- The initial game settings UI uses 5-cent increments for `money_per_point`, so current v1 calculations should always resolve exactly to whole cents.
-- If a future rule introduces a fractional-cent intermediate result, round half away from zero to the nearest cent before persistence.
+- The initial game settings UI uses 5-cent increments for `money_per_point`.
+- Point deltas may be decimal (up to 2 places). Settlement calculations can produce fractional-cent intermediates; round half away from zero to the nearest cent before persistence.
 - Settlement transfer totals must always sum exactly to zero across the game.
 
 ## Settlement grouping
@@ -76,13 +76,12 @@ This document resolves the open questions called out in `docs/implementation-roa
 ## Fight the Landlord distribution
 
 - Fight the Landlord must remain zero-sum for every round.
-- Use the roadmap formula as the base rule:
+- Base formula:
   - landlord points = `point_basis * bomb_multiplier * landlord_multiplier`
   - each landlord friend points = `point_basis * bomb_multiplier`
-- When the winning side gains points, the losing side shares the total loss as evenly as possible.
-- When the losing side loses points, the winning side shares the total gain as evenly as possible.
-- If an equal split would leave a remainder, distribute the extra `1` point at a time using the affected players' game join order, starting from the earliest joined active player.
-- Join order must therefore be stored for each player within a game.
+- When the winning side gains points, the losing side shares the total loss evenly.
+- When the losing side loses points, the winning side shares the total gain evenly.
+- Splits use decimal division (e.g. 9 points among 2 players = 4.5 each). Point deltas are stored with up to two decimal places.
 
 ## Game settings changes
 
