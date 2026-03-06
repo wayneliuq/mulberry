@@ -296,6 +296,21 @@ td {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.sortable-th {
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.sortable-th:hover {
+  text-decoration: underline;
+}
+
 .score-positive {
   color: #99f5c5;
   font-weight: 700;
