@@ -17,6 +17,10 @@ export function AdminConsolePage() {
   const { isAdmin, password } = useAdminSession();
   const [renameValues, setRenameValues] = useState<Record<number, string>>({});
   const [familyValues, setFamilyValues] = useState<Record<number, string>>({});
+  const [createPlayerValues, setCreatePlayerValues] = useState({
+    displayName: "",
+    familyName: "",
+  });
 
   const playersQuery = useQuery({
     queryKey: ["players"],
@@ -79,6 +83,29 @@ export function AdminConsolePage() {
     },
   });
 
+  const createPlayerMutation = useMutation({
+    mutationFn: async () => {
+      if (!password) {
+        throw new Error("Admin session has expired. Please log in again.");
+      }
+
+      return adminWrite({
+        action: "create_player",
+        password,
+        displayName: createPlayerValues.displayName,
+        familyName: createPlayerValues.familyName || null,
+      });
+    },
+    onSuccess: async () => {
+      setCreatePlayerValues({ displayName: "", familyName: "" });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["players"] }),
+        queryClient.invalidateQueries({ queryKey: ["game"] }),
+        queryClient.invalidateQueries({ queryKey: ["leaderboards"] }),
+      ]);
+    },
+  });
+
   const deletePlayerMutation = useMutation({
     mutationFn: async (playerId: number) => {
       if (!password) {
@@ -130,6 +157,51 @@ export function AdminConsolePage() {
         ) : null}
         {playersQuery.error ? (
           <p className="form-error">{playersQuery.error.message}</p>
+        ) : null}
+
+        {isAdmin ? (
+          <form
+            className="card-subsection stack-sm"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void createPlayerMutation.mutateAsync();
+            }}
+          >
+            <strong>Create player</strong>
+            <label className="stack-xs">
+              <span>Name</span>
+              <input
+                maxLength={25}
+                value={createPlayerValues.displayName}
+                onChange={(event) =>
+                  setCreatePlayerValues((current) => ({
+                    ...current,
+                    displayName: event.target.value,
+                  }))
+                }
+                placeholder="New player name"
+              />
+            </label>
+            <label className="stack-xs">
+              <span>Family name (optional)</span>
+              <input
+                value={createPlayerValues.familyName}
+                onChange={(event) =>
+                  setCreatePlayerValues((current) => ({
+                    ...current,
+                    familyName: event.target.value,
+                  }))
+                }
+                placeholder="Optional family"
+              />
+            </label>
+            {createPlayerMutation.error ? (
+              <p className="form-error">{createPlayerMutation.error.message}</p>
+            ) : null}
+            <button type="submit" className="secondary-button">
+              Create player
+            </button>
+          </form>
         ) : null}
 
         <div className="stack-sm">

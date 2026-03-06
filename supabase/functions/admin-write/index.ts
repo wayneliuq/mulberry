@@ -86,7 +86,7 @@ const actionSchema = z.discriminatedUnion("action", [
       .array(
         z.object({
           playerId: z.number().int().positive(),
-          pointDelta: z.number().int(),
+          pointDelta: z.number(),
         }),
       )
       .min(2),
@@ -852,11 +852,11 @@ async function handleCalculateSettlement(
   }
 
   const totalPoints = typedTotals.reduce(
-    (sum, total) => sum + total.point_total,
+    (sum, total) => sum + Number(total.point_total),
     0,
   );
 
-  if (totalPoints !== 0) {
+  if (Math.abs(totalPoints) > 0.01) {
     throw new Error("Game totals must sum to zero before settlement.");
   }
 
@@ -887,11 +887,46 @@ async function handleCalculateSettlement(
     (families ?? []).map((family) => [family.id as string, family.name as string]),
   );
 
-  const perPlayerImpacts = typedTotals.map((row) => ({
-    playerId: row.player_id,
-    amountCents: row.point_total * game.money_per_point_cents,
-    displayName: playerById.get(row.player_id)?.display_name ?? String(row.player_id),
-    familyId: playerById.get(row.player_id)?.family_id ?? null,
+  const moneyPerPoint = game.money_per_point_cents;
+  // Rule: round each amount to nearest cent; if sum of rounded ≠ 0, adjust the
+  // amounts with largest fractional error so total is exact to the cent.
+  const rawAmounts = typedTotals.map((row) => {
+    const pointTotal = Number(row.point_total);
+    const rawCents = pointTotal * moneyPerPoint;
+    return {
+      playerId: row.player_id,
+      rawCents,
+      displayName: playerById.get(row.player_id)?.display_name ?? String(row.player_id),
+      familyId: playerById.get(row.player_id)?.family_id ?? null,
+    };
+  });
+
+  const roundedCents = rawAmounts.map((r) => Math.round(r.rawCents));
+  let sumRounded = roundedCents.reduce((s, c) => s + c, 0);
+
+  if (sumRounded !== 0) {
+    const indexed = rawAmounts
+      .map((r, i) => ({
+        index: i,
+        rawCents: r.rawCents,
+        rounded: roundedCents[i],
+        fractionalError: Math.abs(r.rawCents - Math.round(r.rawCents)),
+      }))
+      .sort((a, b) => b.fractionalError - a.fractionalError);
+
+    for (const { index } of indexed) {
+      if (sumRounded === 0) break;
+      const adjust = sumRounded > 0 ? -1 : 1;
+      roundedCents[index] += adjust;
+      sumRounded += adjust;
+    }
+  }
+
+  const perPlayerImpacts = rawAmounts.map((r, i) => ({
+    playerId: r.playerId,
+    amountCents: roundedCents[i],
+    displayName: r.displayName,
+    familyId: r.familyId,
   }));
 
   const groupedUnitsMap = new Map<

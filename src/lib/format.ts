@@ -17,3 +17,10 @@ export function formatMoneyCents(amountCents: number) {
     currency: "USD",
   }).format(amountCents / 100);
 }
+
+export function formatPoints(value: number) {
+  return new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value);
+}

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { gameTypeOptions } from "../features/game-types";
 import { fetchLeaderboards } from "../lib/api/read";
-import { formatMoneyCents } from "../lib/format";
+import { formatMoneyCents, formatPoints } from "../lib/format";
 import type {
   FamilyLeaderboardRow,
   PlayerLeaderboardRow,
@@ -291,7 +291,7 @@ export function LeaderboardsPage() {
               {playerRows.map((row) => (
                 <tr key={row.playerId}>
                   <td className="text-wrap-safe">{row.displayName}</td>
-                  <td>{row.totalPoints}</td>
+                  <td>{formatPoints(row.totalPoints)}</td>
                   <td>{formatMoneyCents(row.totalMoneyCents)}</td>
                   <td>
                     {row.roundsWon}-{row.roundsLost}
@@ -382,7 +382,7 @@ export function LeaderboardsPage() {
                   <tr key={family.familyId}>
                     <td className="text-wrap-safe">{family.familyName}</td>
                     <td>{family.memberNames.join(", ")}</td>
-                    <td>{family.totalPoints}</td>
+                    <td>{formatPoints(family.totalPoints)}</td>
                     <td>{formatMoneyCents(family.totalMoneyCents)}</td>
                     <td>
                       {family.roundsWon}-{family.roundsLost}

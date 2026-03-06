@@ -18,7 +18,7 @@ import {
 } from "../features/players/SortablePlayerList";
 import { adminWrite } from "../lib/api/admin";
 import { fetchGameDetails, fetchPlayers } from "../lib/api/read";
-import { formatDateTime, formatMoneyCents } from "../lib/format";
+import { formatDateTime, formatMoneyCents, formatPoints } from "../lib/format";
 
 function sumPointTotals(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0);
@@ -51,6 +51,9 @@ export function GameViewPage() {
     bombMultiplier: "1",
     friendIds: [] as string[],
   });
+
+  const clampToTwoDecimals = (value: number) =>
+    Math.round(value * 100) / 100;
 
   const gameQuery = useQuery({
     queryKey: ["game", gameId],
@@ -277,15 +280,20 @@ export function GameViewPage() {
   }
 
   async function handleTexasHoldemRoundSubmit() {
-    const entries = unlockedPlayers.map((player) => ({
-      playerId: player.playerId,
-      pointDelta: Number(texasPointInputs[player.playerId] ?? 0),
-    }));
+    const entries = unlockedPlayers.map((player) => {
+      const raw = Number(texasPointInputs[player.playerId] ?? 0);
+      return {
+        playerId: player.playerId,
+        pointDelta: clampToTwoDecimals(raw),
+      };
+    });
     const result = calculateTexasHoldemRound({ entries });
 
-    if (!result.isZeroSum) {
+    const roundedTotal = clampToTwoDecimals(result.total);
+
+    if (Math.abs(roundedTotal) > 0.01) {
       const shouldContinue = window.confirm(
-        `This round totals ${result.total}. Continue anyway?`,
+        `This round totals ${roundedTotal}. Continue anyway?`,
       );
 
       if (!shouldContinue) {
@@ -299,7 +307,9 @@ export function GameViewPage() {
           (entry) => entry.playerId === player.playerId,
         )?.pointDelta ?? 0;
 
-        return `${player.displayName} ${pointDelta > 0 ? "+" : ""}${pointDelta}`;
+        return `${player.displayName} ${
+          pointDelta > 0 ? "+" : ""
+        }${clampToTwoDecimals(pointDelta)}`;
       })
       .join(", ");
 
@@ -605,7 +615,7 @@ export function GameViewPage() {
                     <span>{player.displayName}</span>
                     <input
                       type="number"
-                      step="1"
+                      step="0.01"
                       value={texasPointInputs[player.playerId] ?? "0"}
                       onChange={(event) =>
                         setTexasPointInputs((current) => ({
@@ -771,26 +781,28 @@ export function GameViewPage() {
           />
         </div>
         <ul className="list-reset stack-sm player-list-two-col">
-          {sortedGamePlayers.map((player) => (
-            <li key={player.gamePlayerId} className="list-item">
-              <div className="stack-xs">
-                <strong className="text-wrap-safe">{player.displayName}</strong>
-                <p className="muted">
-                  {player.isLocked ? "Locked for new rounds" : "Active"}
-                </p>
-              </div>
-              <div className="inline-actions">
-                <span
-                  className={
-                    player.total > 0
-                      ? "score-positive"
-                      : player.total < 0
-                        ? "score-negative"
-                        : "score-neutral"
-                  }
-                >
-                  {player.total > 0 ? `+${player.total}` : player.total}
-                </span>
+          {sortedGamePlayers.map((player) => {
+            const formattedTotal = formatPoints(player.total);
+            return (
+              <li key={player.gamePlayerId} className="list-item">
+                <div className="stack-xs">
+                  <strong className="text-wrap-safe">{player.displayName}</strong>
+                  <p className="muted">
+                    {player.isLocked ? "Locked for new rounds" : "Active"}
+                  </p>
+                </div>
+                <div className="inline-actions">
+                  <span
+                    className={
+                      player.total > 0
+                        ? "score-positive"
+                        : player.total < 0
+                          ? "score-negative"
+                          : "score-neutral"
+                    }
+                  >
+                    {player.total > 0 ? `+${formattedTotal}` : formattedTotal}
+                  </span>
                 <button
                   type="button"
                   className="icon-button"
@@ -824,11 +836,12 @@ export function GameViewPage() {
                 </button>
               </div>
             </li>
-          ))}
+            );
+          })}
         </ul>
 
         <div className="inline-actions space-between">
-          <strong>Game total: {totalPoints}</strong>
+          <strong>Game total: {formatPoints(totalPoints)}</strong>
           <button
             type="button"
             className="primary-button"

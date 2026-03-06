@@ -7,7 +7,7 @@ import type {
 
 const texasHoldemEntrySchema = z.object({
   playerId: z.union([z.string().min(1), z.number().int().positive()]),
-  pointDelta: z.int(),
+  pointDelta: z.number(),
 });
 
 const texasHoldemRoundSchema = z.object({
