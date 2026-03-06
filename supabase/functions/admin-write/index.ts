@@ -677,7 +677,7 @@ async function handleCreateRound(
     0,
   );
 
-  if (entryTotal !== 0) {
+  if (Math.abs(entryTotal) > 0.01) {
     throw new Error("Round entries must sum to zero.");
   }
 

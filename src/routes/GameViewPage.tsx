@@ -687,38 +687,6 @@ export function GameViewPage() {
                     ))}
                   </select>
                 </label>
-                <div className="form-grid">
-                  <label className="stack-xs">
-                    <span>Bomb multiplier</span>
-                    <input
-                      type="number"
-                      min="1"
-                      max="10"
-                      value={landlordValues.bombMultiplier}
-                      onChange={(event) =>
-                        setLandlordValues((current) => ({
-                          ...current,
-                          bombMultiplier: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <label className="stack-xs">
-                    <span>Landlord multiplier</span>
-                    <input
-                      type="number"
-                      min="1"
-                      max="6"
-                      value={landlordValues.landlordMultiplier}
-                      onChange={(event) =>
-                        setLandlordValues((current) => ({
-                          ...current,
-                          landlordMultiplier: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                </div>
                 <div className="stack-sm">
                   <span>Landlord friends</span>
                   <PlayerSortButtons
@@ -753,6 +721,38 @@ export function GameViewPage() {
                         </label>
                       ))}
                   </div>
+                </div>
+                <div className="form-grid">
+                  <label className="stack-xs">
+                    <span>Bomb multiplier</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={landlordValues.bombMultiplier}
+                      onChange={(event) =>
+                        setLandlordValues((current) => ({
+                          ...current,
+                          bombMultiplier: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="stack-xs">
+                    <span>Landlord multiplier</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="6"
+                      value={landlordValues.landlordMultiplier}
+                      onChange={(event) =>
+                        setLandlordValues((current) => ({
+                          ...current,
+                          landlordMultiplier: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
                 </div>
                 {createRoundMutation.error ? (
                   <p className="form-error">{createRoundMutation.error.message}</p>

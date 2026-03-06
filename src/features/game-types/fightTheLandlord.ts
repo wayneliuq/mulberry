@@ -20,18 +20,11 @@ export type FightTheLandlordRoundInput = z.infer<
 >;
 
 function distributeEvenly(total: number, playerIds: string[]) {
-  const baseShare = Math.floor(total / playerIds.length);
-  let remainder = total % playerIds.length;
-
-  return playerIds.map((playerId) => {
-    const adjustment = remainder > 0 ? 1 : 0;
-    remainder = Math.max(0, remainder - 1);
-
-    return {
-      playerId,
-      amount: baseShare + adjustment,
-    };
-  });
+  const share = total / playerIds.length;
+  return playerIds.map((playerId) => ({
+    playerId,
+    amount: share,
+  }));
 }
 
 export function calculateFightTheLandlordRound(
@@ -100,7 +93,7 @@ export function calculateFightTheLandlordRound(
   return {
     entries,
     total,
-    isZeroSum: total === 0,
+    isZeroSum: Math.abs(total) < 0.01,
     summary: `${parsed.outcome === "won" ? "Landlord side won" : "Landlord side lost"} with ${parsed.bombMultiplier}x bombs and ${parsed.landlordMultiplier}x landlord multiplier.`,
   };
 }

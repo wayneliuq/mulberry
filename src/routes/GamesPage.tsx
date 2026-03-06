@@ -338,9 +338,6 @@ export function GamesPage() {
                 </p>
               </div>
               <div className="inline-actions">
-                <span className="pill">
-                  {game.status === "settled" ? "Settled" : "Open"}
-                </span>
                 <button
                   type="button"
                   className="icon-button"
