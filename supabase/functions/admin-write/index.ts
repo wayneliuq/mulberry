@@ -293,10 +293,17 @@ function minimizeTransfers(
   return transfers;
 }
 
+const RESERVED_DISPLAY_NAME = "Deleted Player";
+
 async function handleCreatePlayer(
   supabase: Awaited<ReturnType<typeof createVerifiedAdminClient>>["supabase"],
   action: Extract<AdminAction, { action: "create_player" }>,
 ) {
+  const name = action.displayName.trim();
+  if (name.toLowerCase() === RESERVED_DISPLAY_NAME.toLowerCase()) {
+    throw new Error(`"${RESERVED_DISPLAY_NAME}" is a reserved name.`);
+  }
+
   const familyId = await getOrCreateFamilyId(supabase, action.familyName);
 
   const { data, error } = await supabase
@@ -324,10 +331,15 @@ async function handleRenamePlayer(
   supabase: Awaited<ReturnType<typeof createVerifiedAdminClient>>["supabase"],
   action: Extract<AdminAction, { action: "rename_player" }>,
 ) {
+  const name = action.displayName.trim();
+  if (name.toLowerCase() === RESERVED_DISPLAY_NAME.toLowerCase()) {
+    throw new Error(`"${RESERVED_DISPLAY_NAME}" is a reserved name.`);
+  }
+
   const { data, error } = await supabase
     .from("players")
     .update({
-      display_name: action.displayName.trim(),
+      display_name: name,
     })
     .eq("id", action.playerId)
     .select("id, display_name, family_id")

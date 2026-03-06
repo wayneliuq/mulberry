@@ -31,6 +31,7 @@ type RawGamePlayer = {
     id: number;
     display_name: string;
     family_id: string | null;
+    is_active?: boolean;
   }> | null;
 };
 
@@ -66,6 +67,7 @@ type RawRoundEntry = {
   point_delta: number;
   players: Array<{
     display_name: string;
+    is_active?: boolean;
   }> | null;
 };
 
@@ -97,12 +99,12 @@ type RawTransfer = {
   from_player_id: number | null;
   to_player_id: number | null;
   from_player?:
-    | Array<{ display_name: string }>
-    | { display_name: string }
+    | Array<{ display_name: string; is_active?: boolean }>
+    | { display_name: string; is_active?: boolean }
     | null;
   to_player?:
-    | Array<{ display_name: string }>
-    | { display_name: string }
+    | Array<{ display_name: string; is_active?: boolean }>
+    | { display_name: string; is_active?: boolean }
     | null;
 };
 
@@ -111,6 +113,7 @@ type RawSettlementPlayer = {
   amount_cents: number;
   players: Array<{
     display_name: string;
+    is_active?: boolean;
   }> | null;
 };
 
@@ -192,12 +195,19 @@ export async function fetchGames() {
   }));
 }
 
+export const DELETED_PLAYER_DISPLAY_NAME = "Deleted Player";
+
 function getNestedDisplayName(
-  p: Array<{ display_name: string }> | { display_name: string } | null | undefined,
-): string | undefined {
-  if (!p) return undefined;
+  p:
+    | Array<{ display_name: string; is_active?: boolean }>
+    | { display_name: string; is_active?: boolean }
+    | null
+    | undefined,
+): string {
+  if (!p) return DELETED_PLAYER_DISPLAY_NAME;
   const obj = Array.isArray(p) ? p[0] : p;
-  return obj?.display_name;
+  if (!obj) return DELETED_PLAYER_DISPLAY_NAME;
+  return obj.is_active === false ? DELETED_PLAYER_DISPLAY_NAME : (obj.display_name ?? DELETED_PLAYER_DISPLAY_NAME);
 }
 
 async function fetchSettlement(gameId: string): Promise<SettlementSummary | null> {
@@ -222,12 +232,12 @@ async function fetchSettlement(gameId: string): Promise<SettlementSummary | null
       supabase
         .from("money_transfers")
         .select(
-          "id, amount_cents, family_label, from_player_id, to_player_id, from_player:players!money_transfers_from_player_id_fkey(display_name), to_player:players!money_transfers_to_player_id_fkey(display_name)",
+          "id, amount_cents, family_label, from_player_id, to_player_id, from_player:players!money_transfers_from_player_id_fkey(display_name, is_active), to_player:players!money_transfers_to_player_id_fkey(display_name, is_active)",
         )
         .eq("settlement_id", settlement.id),
       supabase
         .from("money_settlement_players")
-        .select("player_id, amount_cents, players(display_name)")
+        .select("player_id, amount_cents, players(display_name, is_active)")
         .eq("settlement_id", settlement.id),
     ]);
 
@@ -245,20 +255,44 @@ async function fetchSettlement(gameId: string): Promise<SettlementSummary | null
     totalsSnapshot.map((e) => [e.playerId, e.displayName]),
   );
 
+  const inactivePlayerIds = new Set<number>();
+  for (const t of transfersData ?? []) {
+    const tr = t as RawTransfer;
+    if (tr.from_player_id != null) {
+      const p = tr.from_player;
+      const obj = Array.isArray(p) ? p[0] : p;
+      if (obj?.is_active === false) inactivePlayerIds.add(tr.from_player_id);
+    }
+    if (tr.to_player_id != null) {
+      const p = tr.to_player;
+      const obj = Array.isArray(p) ? p[0] : p;
+      if (obj?.is_active === false) inactivePlayerIds.add(tr.to_player_id);
+    }
+  }
+  for (const impact of playerImpactsData ?? []) {
+    const imp = impact as RawSettlementPlayer;
+    const p = imp.players;
+    const obj = Array.isArray(p) ? p[0] : p;
+    if (obj?.is_active === false) inactivePlayerIds.add(imp.player_id);
+  }
+
   function formatUnitLabel(
     playerId: number | null,
     familyLabelPart: string | undefined,
-    joinedDisplayName: string | undefined,
+    joinedDisplayName: string,
   ): string {
     if (playerId != null) {
-      const name = joinedDisplayName ?? playerIdToName.get(playerId) ?? String(playerId);
-      if (name) return name;
+      return joinedDisplayName || playerIdToName.get(playerId) || String(playerId);
     }
     if (familyLabelPart) {
       const unit = groupedUnits.find((u) => u.label === familyLabelPart);
       if (unit && unit.playerIds.length > 1) {
         const names = unit.playerIds
-          .map((id) => playerIdToName.get(id) ?? String(id))
+          .map((id) =>
+            inactivePlayerIds.has(id)
+              ? DELETED_PLAYER_DISPLAY_NAME
+              : playerIdToName.get(id) ?? String(id),
+          )
           .join(", ");
         return names || familyLabelPart;
       }
@@ -288,8 +322,7 @@ async function fetchSettlement(gameId: string): Promise<SettlementSummary | null
     }),
     playerImpacts: (playerImpactsData ?? []).map((impact: RawSettlementPlayer) => ({
       playerId: impact.player_id,
-      displayName:
-        getNestedDisplayName(impact.players) ?? String(impact.player_id),
+      displayName: getNestedDisplayName(impact.players),
       amountCents: impact.amount_cents,
     })),
   };
@@ -311,7 +344,7 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
       .single(),
     supabase
       .from("game_players")
-      .select("id, player_id, join_order, is_locked, players(id, display_name, family_id)")
+      .select("id, player_id, join_order, is_locked, players(id, display_name, family_id, is_active)")
       .eq("game_id", gameId)
       .order("join_order", { ascending: true }),
     supabase
@@ -325,7 +358,7 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
       .order("round_number", { ascending: false }),
     supabase
       .from("round_entries")
-      .select("round_id, player_id, point_delta, players(display_name)")
+      .select("round_id, player_id, point_delta, players(display_name, is_active)")
       .eq("game_id", gameId),
     fetchSettlement(gameId),
   ]);
@@ -363,8 +396,7 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
 
   for (const entry of (roundEntriesResult.data ?? []) as RawRoundEntry[]) {
     const existingEntries = roundEntriesByRoundId.get(entry.round_id) ?? [];
-    const displayName =
-      getNestedDisplayName(entry.players) ?? String(entry.player_id);
+    const displayName = getNestedDisplayName(entry.players);
     existingEntries.push({
       playerId: entry.player_id,
       displayName,
@@ -386,10 +418,14 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
     players: ((gamePlayersResult.data ?? []) as RawGamePlayer[]).map((player) => {
       const p = player.players;
       const nested = Array.isArray(p) ? p[0] : p;
+      const displayName =
+        nested?.is_active === false
+          ? DELETED_PLAYER_DISPLAY_NAME
+          : (nested?.display_name ?? String(player.player_id));
       return {
         gamePlayerId: player.id,
         playerId: player.player_id,
-        displayName: nested?.display_name ?? String(player.player_id),
+        displayName,
         familyId: nested?.family_id ?? null,
         joinOrder: player.join_order,
         isLocked: player.is_locked,
@@ -430,7 +466,7 @@ export async function fetchLeaderboards(
     supabase
       .from("game_point_totals")
       .select("game_id, game_player_id, player_id, point_total"),
-    supabase.from("players").select("id, display_name, family_id"),
+    supabase.from("players").select("id, display_name, family_id").eq("is_active", true),
     supabase.from("families").select("id, name"),
   ]);
 
@@ -521,6 +557,7 @@ export async function fetchLeaderboards(
   }
 
   const allPlayers = (playersResult.data ?? []) as RawPlayer[];
+  const activePlayerIds = new Set(allPlayers.map((p) => p.id));
   const playerById = new Map(allPlayers.map((p) => [p.id, p]));
 
   const allPlayerIds = new Set<number>();
@@ -529,7 +566,8 @@ export async function fetchLeaderboards(
   for (const id of gameWinLossByPlayerId.keys()) allPlayerIds.add(id);
 
   const playerRows: PlayerLeaderboardRow[] = Array.from(allPlayerIds)
-    .map((playerId) => {
+    .filter((id) => activePlayerIds.has(id))
+    .map((playerId): PlayerLeaderboardRow => {
       const player = playerById.get(playerId);
       const points = pointsByPlayerId.get(playerId) ?? {
         totalPoints: 0,

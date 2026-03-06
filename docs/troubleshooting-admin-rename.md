@@ -1,6 +1,6 @@
-# Troubleshooting: Admin Rename Player (Edge Function non-2xx)
+# Troubleshooting: Admin Edge Functions (non-2xx)
 
-When "Rename player" in the Admin Console returns an error like "Edge Function returned a non-2xx status code", use this plan to isolate the cause.
+When Admin Console actions (rename player, delete player, etc.) return "Edge Function returned a non-2xx status code", use this plan to isolate the cause.
 
 ## 1. Inspect the actual error
 
@@ -63,3 +63,19 @@ When "Rename player" in the Admin Console returns an error like "Edge Function r
 | 500 + unique constraint | Duplicate display name | Choose a different name |
 | 500 + "row not found" | Player doesn't exist or inactive | Use valid player ID |
 | 500 + RLS / permission | Policy blocks update | Adjust RLS or use service role in function |
+
+---
+
+## Delete player
+
+For `delete_player`, follow the same steps above. Additional checks:
+
+- **Payload**: `action: "delete_player"`, `password`, `playerId` (positive integer).
+- **Player state**: Player must exist. Delete sets `is_active = false` (soft delete).
+- **curl test**:
+
+  ```bash
+  curl -X POST 'http://127.0.0.1:54321/functions/v1/admin-write' \
+    -H 'Content-Type: application/json' \
+    -d '{"action":"delete_player","password":"YOUR_ADMIN_PASSWORD","playerId":1}'
+  ```
