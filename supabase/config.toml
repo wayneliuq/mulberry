@@ -16,5 +16,8 @@ major_version = 17
 enabled = true
 port = 54323
 
-[functions]
+[functions.admin-login]
+verify_jwt = false
+
+[functions.admin-write]
 verify_jwt = false

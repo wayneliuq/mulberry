@@ -1,21 +1,20 @@
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { gameTypeOptions } from "../features/game-types";
-
-const leaderboardRows = [
-  {
-    name: "Player A",
-    points: 42,
-    roundRecord: "8-2",
-    gameRecord: "3-1",
-  },
-  {
-    name: "Player B",
-    points: -13,
-    roundRecord: "3-7",
-    gameRecord: "1-3",
-  },
-];
+import { fetchLeaderboards } from "../lib/api/read";
+import { formatMoneyCents } from "../lib/format";
 
 export function LeaderboardsPage() {
+  const [selectedGameType, setSelectedGameType] = useState<
+    "all" | "texas-holdem" | "fight-the-landlord"
+  >("all");
+  const leaderboardsQuery = useQuery({
+    queryKey: ["leaderboards", selectedGameType],
+    queryFn: () => fetchLeaderboards(selectedGameType),
+  });
+  const playerRows = leaderboardsQuery.data?.players ?? [];
+  const familyRows = leaderboardsQuery.data?.families ?? [];
+
   return (
     <section className="stack-lg">
       <article className="card stack-sm">
@@ -25,16 +24,40 @@ export function LeaderboardsPage() {
             <h2>Derived from saved history</h2>
           </div>
           <div className="filter-row" role="tablist" aria-label="Game filters">
-            <button type="button" className="filter-chip filter-chip-active">
+            <button
+              type="button"
+              className={
+                selectedGameType === "all"
+                  ? "filter-chip filter-chip-active"
+                  : "filter-chip"
+              }
+              onClick={() => setSelectedGameType("all")}
+            >
               All
             </button>
             {gameTypeOptions.map((option) => (
-              <button key={option.id} type="button" className="filter-chip">
+              <button
+                key={option.id}
+                type="button"
+                className={
+                  selectedGameType === option.id
+                    ? "filter-chip filter-chip-active"
+                    : "filter-chip"
+                }
+                onClick={() => setSelectedGameType(option.id)}
+              >
                 {option.name}
               </button>
             ))}
           </div>
         </div>
+
+        {leaderboardsQuery.isLoading ? (
+          <p className="muted">Loading leaderboards...</p>
+        ) : null}
+        {leaderboardsQuery.error ? (
+          <p className="form-error">{leaderboardsQuery.error.message}</p>
+        ) : null}
 
         <div className="table-shell">
           <table>
@@ -42,17 +65,23 @@ export function LeaderboardsPage() {
               <tr>
                 <th>Player</th>
                 <th>Pts</th>
+                <th>$</th>
                 <th>Rnd W-L</th>
                 <th>Game W-L</th>
               </tr>
             </thead>
             <tbody>
-              {leaderboardRows.map((row) => (
-                <tr key={row.name}>
-                  <td>{row.name}</td>
-                  <td>{row.points}</td>
-                  <td>{row.roundRecord}</td>
-                  <td>{row.gameRecord}</td>
+              {playerRows.map((row) => (
+                <tr key={row.playerId}>
+                  <td>{row.displayName}</td>
+                  <td>{row.totalPoints}</td>
+                  <td>{formatMoneyCents(row.totalMoneyCents)}</td>
+                  <td>
+                    {row.roundsWon}-{row.roundsLost}
+                  </td>
+                  <td>
+                    {row.gamesWon}-{row.gamesLost}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -64,15 +93,76 @@ export function LeaderboardsPage() {
         <div className="card-header">
           <div>
             <p className="card-eyebrow">Families</p>
-            <h2>Grouped totals preview</h2>
+            <h2>Grouped totals</h2>
           </div>
-          <span className="pill">Roadmap phase 4</span>
+          <span className="pill">{familyRows.length} families</span>
         </div>
 
-        <p className="muted">
-          This screen is wired for the eventual derived family leaderboard and
-          will stay read-only for public visitors.
-        </p>
+        {familyRows.length === 0 ? (
+          <p className="muted">
+            Families appear here once at least two players share the same family.
+          </p>
+        ) : (
+          <div className="table-shell">
+            <table>
+              <thead>
+                <tr>
+                  <th>Family</th>
+                  <th>Members</th>
+                  <th>Pts</th>
+                  <th>$</th>
+                  <th>Rnd W-L</th>
+                  <th>Game W-L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {familyRows.map((family) => (
+                  <tr key={family.familyId}>
+                    <td>{family.familyName}</td>
+                    <td>{family.memberNames.join(", ")}</td>
+                    <td>{family.totalPoints}</td>
+                    <td>{formatMoneyCents(family.totalMoneyCents)}</td>
+                    <td>
+                      {family.roundsWon}-{family.roundsLost}
+                    </td>
+                    <td>
+                      {family.gamesWon}-{family.gamesLost}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </article>
+
+      <article className="card stack-sm">
+        <div className="card-header">
+          <div>
+            <p className="card-eyebrow">Money</p>
+            <h2>Player money leaderboard</h2>
+          </div>
+          <span className="pill">Derived from settlements</span>
+        </div>
+
+        <ul className="list-reset stack-sm">
+          {playerRows.map((row) => (
+            <li key={`${row.playerId}-money`} className="list-item">
+              <strong>{row.displayName}</strong>
+              <span
+                className={
+                  row.totalMoneyCents > 0
+                    ? "score-positive"
+                    : row.totalMoneyCents < 0
+                      ? "score-negative"
+                      : "score-neutral"
+                }
+              >
+                {formatMoneyCents(row.totalMoneyCents)}
+              </span>
+            </li>
+          ))}
+        </ul>
       </article>
     </section>
   );

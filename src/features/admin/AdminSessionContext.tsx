@@ -7,11 +7,15 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { verifyAdminPassword } from "../../lib/api/admin";
 
 type AdminSessionContextValue = {
+  status: "checking" | "authenticated" | "unauthenticated";
   isAdmin: boolean;
   password: string | null;
-  login: (password: string) => void;
+  error: string | null;
+  isSubmitting: boolean;
+  login: (password: string) => Promise<boolean>;
   logout: () => void;
 };
 
@@ -26,33 +30,93 @@ type AdminSessionProviderProps = {
 export function AdminSessionProvider({
   children,
 }: AdminSessionProviderProps) {
+  const [status, setStatus] = useState<AdminSessionContextValue["status"]>(
+    "checking",
+  );
   const [password, setPassword] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     const storedPassword = window.localStorage.getItem(STORAGE_KEY);
-    if (storedPassword) {
-      setPassword(storedPassword);
+
+    if (!storedPassword) {
+      setStatus("unauthenticated");
+      return;
     }
+
+    let isMounted = true;
+
+    void (async () => {
+      try {
+        await verifyAdminPassword(storedPassword);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setPassword(storedPassword);
+        setStatus("authenticated");
+      } catch {
+        window.localStorage.removeItem(STORAGE_KEY);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setPassword(null);
+        setStatus("unauthenticated");
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  const login = useCallback((nextPassword: string) => {
-    window.localStorage.setItem(STORAGE_KEY, nextPassword);
-    setPassword(nextPassword);
+  const login = useCallback(async (nextPassword: string) => {
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      await verifyAdminPassword(nextPassword);
+      window.localStorage.setItem(STORAGE_KEY, nextPassword);
+      setPassword(nextPassword);
+      setStatus("authenticated");
+      return true;
+    } catch (loginError) {
+      window.localStorage.removeItem(STORAGE_KEY);
+      setPassword(null);
+      setStatus("unauthenticated");
+      setError(
+        loginError instanceof Error
+          ? loginError.message
+          : "Unable to verify admin password.",
+      );
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
   }, []);
 
   const logout = useCallback(() => {
     window.localStorage.removeItem(STORAGE_KEY);
     setPassword(null);
+    setError(null);
+    setStatus("unauthenticated");
   }, []);
 
   const value = useMemo<AdminSessionContextValue>(
     () => ({
-      isAdmin: Boolean(password),
+      status,
+      isAdmin: status === "authenticated" && Boolean(password),
       password,
+      error,
+      isSubmitting,
       login,
       logout,
     }),
-    [login, logout, password],
+    [error, isSubmitting, login, logout, password, status],
   );
 
   return (

@@ -1,15 +1,354 @@
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { useAdminSession } from "../features/admin/AdminSessionContext";
+import { calculateFightTheLandlordRound } from "../features/game-types/fightTheLandlord";
+import { calculateTexasHoldemRound } from "../features/game-types/texasHoldem";
+import { adminWrite } from "../lib/api/admin";
+import { fetchGameDetails, fetchPlayers } from "../lib/api/read";
+import { formatDateTime, formatMoneyCents } from "../lib/format";
 
-const activePlayers = [
-  { id: "p1", name: "Player A", total: 14, locked: false },
-  { id: "p2", name: "Player B", total: -5, locked: false },
-  { id: "p3", name: "Player C", total: -9, locked: true },
-];
+function sumPointTotals(values: number[]) {
+  return values.reduce((sum, value) => sum + value, 0);
+}
 
 export function GameViewPage() {
-  const { gameId = "game" } = useParams();
-  const { isAdmin } = useAdminSession();
+  const { gameId = "" } = useParams();
+  const queryClient = useQueryClient();
+  const { isAdmin, password } = useAdminSession();
+  const [showAddPlayers, setShowAddPlayers] = useState(false);
+  const [showGameSettings, setShowGameSettings] = useState(false);
+  const [showRoundForm, setShowRoundForm] = useState(false);
+  const [selectedPlayerIds, setSelectedPlayerIds] = useState<number[]>([]);
+  const [createPlayerValues, setCreatePlayerValues] = useState({
+    displayName: "",
+    familyName: "",
+  });
+  const [settingsValues, setSettingsValues] = useState({
+    displayName: "",
+    pointBasis: "1",
+    moneyPerPointCents: "20",
+  });
+  const [texasPointInputs, setTexasPointInputs] = useState<Record<number, string>>(
+    {},
+  );
+  const [landlordValues, setLandlordValues] = useState({
+    outcome: "won" as "won" | "lost",
+    landlordId: "",
+    landlordMultiplier: "1",
+    bombMultiplier: "1",
+    friendIds: [] as string[],
+  });
+
+  const gameQuery = useQuery({
+    queryKey: ["game", gameId],
+    queryFn: () => fetchGameDetails(gameId),
+    enabled: Boolean(gameId),
+  });
+  const playersQuery = useQuery({
+    queryKey: ["players"],
+    queryFn: fetchPlayers,
+  });
+
+  const game = gameQuery.data;
+  const allPlayers = playersQuery.data ?? [];
+  const currentGamePlayerIds = new Set(game?.players.map((player) => player.playerId) ?? []);
+  const availablePlayers = allPlayers.filter(
+    (player) => !currentGamePlayerIds.has(player.id),
+  );
+  const unlockedPlayers = game?.players.filter((player) => !player.isLocked) ?? [];
+
+  const invalidateGameData = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["games"] }),
+      queryClient.invalidateQueries({ queryKey: ["game", gameId] }),
+      queryClient.invalidateQueries({ queryKey: ["players"] }),
+      queryClient.invalidateQueries({ queryKey: ["leaderboards"] }),
+    ]);
+  };
+
+  const requireAdminPassword = () => {
+    if (!password) {
+      throw new Error("Admin session has expired. Please log in again.");
+    }
+
+    return password;
+  };
+
+  const createPlayerMutation = useMutation({
+    mutationFn: async () =>
+      adminWrite({
+        action: "create_player",
+        password: requireAdminPassword(),
+        displayName: createPlayerValues.displayName,
+        familyName: createPlayerValues.familyName || null,
+      }),
+    onSuccess: async () => {
+      setCreatePlayerValues({ displayName: "", familyName: "" });
+      await invalidateGameData();
+    },
+  });
+
+  const addPlayersMutation = useMutation({
+    mutationFn: async () =>
+      adminWrite({
+        action: "add_players_to_game",
+        password: requireAdminPassword(),
+        gameId,
+        playerIds: selectedPlayerIds,
+      }),
+    onSuccess: async () => {
+      setSelectedPlayerIds([]);
+      setShowAddPlayers(false);
+      await invalidateGameData();
+    },
+  });
+
+  const updateSettingsMutation = useMutation({
+    mutationFn: async () =>
+      adminWrite({
+        action: "update_game_settings",
+        password: requireAdminPassword(),
+        gameId,
+        displayName: settingsValues.displayName,
+        pointBasis: Number(settingsValues.pointBasis),
+        moneyPerPointCents: Number(settingsValues.moneyPerPointCents),
+      }),
+    onSuccess: async () => {
+      setShowGameSettings(false);
+      await invalidateGameData();
+    },
+  });
+
+  const togglePlayerLockMutation = useMutation({
+    mutationFn: async ({
+      gamePlayerId,
+      isLocked,
+    }: {
+      gamePlayerId: string;
+      isLocked: boolean;
+    }) =>
+      adminWrite({
+        action: "toggle_game_player_lock",
+        password: requireAdminPassword(),
+        gameId,
+        gamePlayerId,
+        isLocked,
+      }),
+    onSuccess: async () => {
+      await invalidateGameData();
+    },
+  });
+
+  const removeGamePlayerMutation = useMutation({
+    mutationFn: async (gamePlayerId: string) =>
+      adminWrite({
+        action: "remove_game_player",
+        password: requireAdminPassword(),
+        gameId,
+        gamePlayerId,
+      }),
+    onSuccess: async () => {
+      await invalidateGameData();
+    },
+  });
+
+  const createRoundMutation = useMutation({
+    mutationFn: async ({
+      entries,
+      summaryText,
+      metadata,
+    }: {
+      entries: Array<{ playerId: number; pointDelta: number }>;
+      summaryText: string;
+      metadata?: Record<string, unknown>;
+    }) =>
+      adminWrite({
+        action: "create_round",
+        password: requireAdminPassword(),
+        gameId,
+        gameTypeId: game?.gameTypeId,
+        entries,
+        summaryText,
+        metadata,
+      }),
+    onSuccess: async () => {
+      setShowRoundForm(false);
+      setTexasPointInputs({});
+      setLandlordValues({
+        outcome: "won",
+        landlordId: "",
+        landlordMultiplier: "1",
+        bombMultiplier: "1",
+        friendIds: [],
+      });
+      await invalidateGameData();
+    },
+  });
+
+  const deleteRoundMutation = useMutation({
+    mutationFn: async (roundId: string) =>
+      adminWrite({
+        action: "delete_round",
+        password: requireAdminPassword(),
+        gameId,
+        roundId,
+      }),
+    onSuccess: async () => {
+      await invalidateGameData();
+    },
+  });
+
+  const calculateSettlementMutation = useMutation({
+    mutationFn: async () =>
+      adminWrite<"calculate_settlement", { transfers: Array<{ fromUnitId: string; toUnitId: string; amountCents: number }> }>({
+        action: "calculate_settlement",
+        password: requireAdminPassword(),
+        gameId,
+      }),
+    onSuccess: async () => {
+      await invalidateGameData();
+    },
+  });
+
+  const undoSettlementMutation = useMutation({
+    mutationFn: async () =>
+      adminWrite({
+        action: "undo_settlement",
+        password: requireAdminPassword(),
+        gameId,
+      }),
+    onSuccess: async () => {
+      await invalidateGameData();
+    },
+  });
+
+  const totalPoints = useMemo(
+    () => sumPointTotals((game?.players ?? []).map((player) => player.total)),
+    [game?.players],
+  );
+
+  useEffect(() => {
+    if (!game || showGameSettings) {
+      return;
+    }
+
+    setSettingsValues({
+      displayName: game.displayName,
+      pointBasis: String(game.pointBasis),
+      moneyPerPointCents: String(game.moneyPerPointCents),
+    });
+  }, [game, showGameSettings]);
+
+  if (gameQuery.isLoading) {
+    return <section className="card stack-sm"><p className="muted">Loading game...</p></section>;
+  }
+
+  if (gameQuery.error || !game) {
+    return (
+      <section className="card stack-sm">
+        <p className="form-error">
+          {gameQuery.error?.message ?? "Unable to load this game."}
+        </p>
+        <Link to="/" className="secondary-button link-button">
+          Back to games
+        </Link>
+      </section>
+    );
+  }
+
+  async function handleTexasHoldemRoundSubmit() {
+    const entries = unlockedPlayers.map((player) => ({
+      playerId: player.playerId,
+      pointDelta: Number(texasPointInputs[player.playerId] ?? 0),
+    }));
+    const result = calculateTexasHoldemRound({ entries });
+
+    if (!result.isZeroSum) {
+      const shouldContinue = window.confirm(
+        `This round totals ${result.total}. Continue anyway?`,
+      );
+
+      if (!shouldContinue) {
+        return;
+      }
+    }
+
+    const summaryText = unlockedPlayers
+      .map((player) => {
+        const pointDelta = entries.find(
+          (entry) => entry.playerId === player.playerId,
+        )?.pointDelta ?? 0;
+
+        return `${player.displayName} ${pointDelta > 0 ? "+" : ""}${pointDelta}`;
+      })
+      .join(", ");
+
+    await createRoundMutation.mutateAsync({
+      entries,
+      summaryText,
+      metadata: {
+        mode: "texas-holdem",
+      },
+    });
+  }
+
+  async function handleFightTheLandlordRoundSubmit() {
+    if (!landlordValues.landlordId) {
+      return;
+    }
+
+    const currentGame = game;
+
+    if (!currentGame) {
+      return;
+    }
+
+    const result = calculateFightTheLandlordRound({
+      activePlayerIds: unlockedPlayers.map((player) => String(player.playerId)),
+      landlordId: landlordValues.landlordId,
+      landlordFriendIds: landlordValues.friendIds,
+      outcome: landlordValues.outcome,
+      pointBasis: currentGame.pointBasis,
+      bombMultiplier: Number(landlordValues.bombMultiplier),
+      landlordMultiplier: Number(landlordValues.landlordMultiplier),
+    });
+
+    const playerNameById = new Map(
+      unlockedPlayers.map((player) => [String(player.playerId), player.displayName]),
+    );
+    const entries = result.entries.map((entry) => ({
+      playerId: Number(entry.playerId),
+      pointDelta: entry.pointDelta,
+    }));
+    const summaryText = entries
+      .map((entry) => {
+        const displayName = playerNameById.get(String(entry.playerId)) ?? entry.playerId;
+        return `${displayName} ${entry.pointDelta > 0 ? "+" : ""}${entry.pointDelta}`;
+      })
+      .join(", ");
+
+    await createRoundMutation.mutateAsync({
+      entries,
+      summaryText,
+      metadata: {
+        mode: "fight-the-landlord",
+        outcome: landlordValues.outcome,
+        landlordId: Number(landlordValues.landlordId),
+        landlordFriendIds: landlordValues.friendIds.map((value) => Number(value)),
+        bombMultiplier: Number(landlordValues.bombMultiplier),
+        landlordMultiplier: Number(landlordValues.landlordMultiplier),
+      },
+    });
+  }
 
   return (
     <section className="stack-lg">
@@ -17,35 +356,398 @@ export function GameViewPage() {
         <Link to="/" className="secondary-button link-button">
           Back to games
         </Link>
-        <span className="pill">{isAdmin ? "Admin mode" : "Read only"}</span>
+        <span className="pill">
+          {game.status === "settled" ? "Settled" : isAdmin ? "Admin mode" : "Read only"}
+        </span>
       </div>
 
       <article className="card stack-sm">
         <div className="card-header">
           <div>
             <p className="card-eyebrow">Game view</p>
-            <h2>{gameId}</h2>
+            <h2>{game.displayName}</h2>
+            <p className="muted">
+              {game.gameTypeId} · point basis {game.pointBasis} ·{" "}
+              {formatMoneyCents(game.moneyPerPointCents)} per point
+            </p>
           </div>
           <div className="inline-actions">
-            <button type="button" className="secondary-button" disabled={!isAdmin}>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={!isAdmin || game.status === "settled"}
+              onClick={() => setShowRoundForm((current) => !current)}
+            >
               New round
             </button>
-            <button type="button" className="secondary-button" disabled={!isAdmin}>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={!isAdmin || game.status === "settled"}
+              onClick={() => setShowAddPlayers((current) => !current)}
+            >
               Add players
             </button>
-            <button type="button" className="secondary-button" disabled={!isAdmin}>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={!isAdmin || game.status === "settled"}
+              onClick={() => setShowGameSettings((current) => !current)}
+            >
               Game settings
             </button>
           </div>
         </div>
 
+        {showGameSettings ? (
+          <form
+            className="card-subsection stack-sm"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void updateSettingsMutation.mutateAsync();
+            }}
+          >
+            <label className="stack-xs">
+              <span>Display name</span>
+              <input
+                value={settingsValues.displayName}
+                onChange={(event) =>
+                  setSettingsValues((current) => ({
+                    ...current,
+                    displayName: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <div className="form-grid">
+              <label className="stack-xs">
+                <span>Point basis</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={settingsValues.pointBasis}
+                  onChange={(event) =>
+                    setSettingsValues((current) => ({
+                      ...current,
+                      pointBasis: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="stack-xs">
+                <span>Money per point (cents)</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="5"
+                  value={settingsValues.moneyPerPointCents}
+                  onChange={(event) =>
+                    setSettingsValues((current) => ({
+                      ...current,
+                      moneyPerPointCents: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+            </div>
+            {updateSettingsMutation.error ? (
+              <p className="form-error">{updateSettingsMutation.error.message}</p>
+            ) : null}
+            <div className="inline-actions">
+              <button type="submit" className="primary-button">
+                Save settings
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setShowGameSettings(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : null}
+
+        {showAddPlayers ? (
+          <div className="card-subsection stack-sm">
+            <div className="stack-sm">
+              <strong>Add existing players</strong>
+              {availablePlayers.length === 0 ? (
+                <p className="muted">All players are already in this game.</p>
+              ) : (
+                <div className="checkbox-list">
+                  {availablePlayers.map((player) => (
+                    <label key={player.id} className="checkbox-item">
+                      <input
+                        type="checkbox"
+                        checked={selectedPlayerIds.includes(player.id)}
+                        onChange={(event) =>
+                          setSelectedPlayerIds((current) =>
+                            event.target.checked
+                              ? [...current, player.id]
+                              : current.filter((value) => value !== player.id),
+                          )
+                        }
+                      />
+                      <span>{player.displayName}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              {addPlayersMutation.error ? (
+                <p className="form-error">{addPlayersMutation.error.message}</p>
+              ) : null}
+              <div className="inline-actions">
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={selectedPlayerIds.length === 0}
+                  onClick={() => void addPlayersMutation.mutateAsync()}
+                >
+                  Add selected players
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setShowAddPlayers(false)}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+
+            <form
+              className="stack-sm"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void createPlayerMutation.mutateAsync();
+              }}
+            >
+              <strong>Create player</strong>
+              <label className="stack-xs">
+                <span>Name</span>
+                <input
+                  value={createPlayerValues.displayName}
+                  onChange={(event) =>
+                    setCreatePlayerValues((current) => ({
+                      ...current,
+                      displayName: event.target.value,
+                    }))
+                  }
+                  placeholder="New player name"
+                />
+              </label>
+              <label className="stack-xs">
+                <span>Family name (optional)</span>
+                <input
+                  value={createPlayerValues.familyName}
+                  onChange={(event) =>
+                    setCreatePlayerValues((current) => ({
+                      ...current,
+                      familyName: event.target.value,
+                    }))
+                  }
+                  placeholder="Optional family"
+                />
+              </label>
+              {createPlayerMutation.error ? (
+                <p className="form-error">{createPlayerMutation.error.message}</p>
+              ) : null}
+              <button type="submit" className="secondary-button">
+                Create player
+              </button>
+            </form>
+          </div>
+        ) : null}
+
+        {showRoundForm ? (
+          <div className="card-subsection stack-sm">
+            <strong>
+              {game.gameTypeId === "texas-holdem"
+                ? "Texas Hold'em round"
+                : "Fight the Landlord round"}
+            </strong>
+
+            {unlockedPlayers.length < 2 ? (
+              <p className="muted">
+                Unlock at least two players before creating a round.
+              </p>
+            ) : game.gameTypeId === "texas-holdem" ? (
+              <form
+                className="stack-sm"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleTexasHoldemRoundSubmit();
+                }}
+              >
+                {unlockedPlayers.map((player) => (
+                  <label key={player.playerId} className="stack-xs">
+                    <span>{player.displayName}</span>
+                    <input
+                      type="number"
+                      step="1"
+                      value={texasPointInputs[player.playerId] ?? "0"}
+                      onChange={(event) =>
+                        setTexasPointInputs((current) => ({
+                          ...current,
+                          [player.playerId]: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                ))}
+                {createRoundMutation.error ? (
+                  <p className="form-error">{createRoundMutation.error.message}</p>
+                ) : null}
+                <div className="inline-actions">
+                  <button type="submit" className="primary-button">
+                    Save round
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setShowRoundForm(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form
+                className="stack-sm"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleFightTheLandlordRoundSubmit();
+                }}
+              >
+                <label className="stack-xs">
+                  <span>Outcome</span>
+                  <select
+                    value={landlordValues.outcome}
+                    onChange={(event) =>
+                      setLandlordValues((current) => ({
+                        ...current,
+                        outcome: event.target.value as "won" | "lost",
+                      }))
+                    }
+                  >
+                    <option value="won">Landlord side won</option>
+                    <option value="lost">Landlord side lost</option>
+                  </select>
+                </label>
+                <label className="stack-xs">
+                  <span>Landlord</span>
+                  <select
+                    value={landlordValues.landlordId}
+                    onChange={(event) =>
+                      setLandlordValues((current) => ({
+                        ...current,
+                        landlordId: event.target.value,
+                        friendIds: current.friendIds.filter(
+                          (value) => value !== event.target.value,
+                        ),
+                      }))
+                    }
+                  >
+                    <option value="">Select landlord</option>
+                    {unlockedPlayers.map((player) => (
+                      <option key={player.playerId} value={player.playerId}>
+                        {player.displayName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="form-grid">
+                  <label className="stack-xs">
+                    <span>Bomb multiplier</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={landlordValues.bombMultiplier}
+                      onChange={(event) =>
+                        setLandlordValues((current) => ({
+                          ...current,
+                          bombMultiplier: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="stack-xs">
+                    <span>Landlord multiplier</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="6"
+                      value={landlordValues.landlordMultiplier}
+                      onChange={(event) =>
+                        setLandlordValues((current) => ({
+                          ...current,
+                          landlordMultiplier: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+                <div className="stack-sm">
+                  <span>Landlord friends</span>
+                  <div className="checkbox-list">
+                    {unlockedPlayers
+                      .filter(
+                        (player) =>
+                          String(player.playerId) !== landlordValues.landlordId,
+                      )
+                      .map((player) => (
+                        <label key={player.playerId} className="checkbox-item">
+                          <input
+                            type="checkbox"
+                            checked={landlordValues.friendIds.includes(
+                              String(player.playerId),
+                            )}
+                            onChange={(event) =>
+                              setLandlordValues((current) => ({
+                                ...current,
+                                friendIds: event.target.checked
+                                  ? [...current.friendIds, String(player.playerId)]
+                                  : current.friendIds.filter(
+                                      (value) => value !== String(player.playerId),
+                                    ),
+                              }))
+                            }
+                          />
+                          <span>{player.displayName}</span>
+                        </label>
+                      ))}
+                  </div>
+                </div>
+                {createRoundMutation.error ? (
+                  <p className="form-error">{createRoundMutation.error.message}</p>
+                ) : null}
+                <div className="inline-actions">
+                  <button type="submit" className="primary-button">
+                    Save round
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setShowRoundForm(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        ) : null}
+
         <ul className="list-reset stack-sm">
-          {activePlayers.map((player) => (
-            <li key={player.id} className="list-item">
+          {game.players.map((player) => (
+            <li key={player.gamePlayerId} className="list-item">
               <div className="stack-xs">
-                <strong>{player.name}</strong>
+                <strong>{player.displayName}</strong>
                 <p className="muted">
-                  {player.locked ? "Locked for new rounds" : "Active"}
+                  {player.isLocked ? "Locked for new rounds" : "Active"}
                 </p>
               </div>
               <div className="inline-actions">
@@ -63,9 +765,33 @@ export function GameViewPage() {
                 <button
                   type="button"
                   className="icon-button"
-                  disabled={!isAdmin}
+                  disabled={!isAdmin || game.status === "settled"}
+                  onClick={() =>
+                    void togglePlayerLockMutation.mutateAsync({
+                      gamePlayerId: player.gamePlayerId,
+                      isLocked: !player.isLocked,
+                    })
+                  }
                 >
-                  {player.locked ? "Unlock" : "Lock"}
+                  {player.isLocked ? "Unlock" : "Lock"}
+                </button>
+                <button
+                  type="button"
+                  className="icon-button"
+                  disabled={!isAdmin || game.status === "settled"}
+                  onClick={() => {
+                    const shouldRemove = window.confirm(
+                      `Remove ${player.displayName} from this game?`,
+                    );
+
+                    if (!shouldRemove) {
+                      return;
+                    }
+
+                    void removeGamePlayerMutation.mutateAsync(player.gamePlayerId);
+                  }}
+                >
+                  Remove
                 </button>
               </div>
             </li>
@@ -73,12 +799,73 @@ export function GameViewPage() {
         </ul>
 
         <div className="inline-actions space-between">
-          <strong>Game total: 0</strong>
-          <button type="button" className="primary-button" disabled={!isAdmin}>
+          <strong>Game total: {totalPoints}</strong>
+          <button
+            type="button"
+            className="primary-button"
+            disabled={
+              !isAdmin ||
+              game.status === "settled" ||
+              game.moneyPerPointCents === 0 ||
+              game.players.length < 2
+            }
+            onClick={() => {
+              const shouldSettle = window.confirm(
+                "End this game and calculate settlement?",
+              );
+
+              if (!shouldSettle) {
+                return;
+              }
+
+              void calculateSettlementMutation.mutateAsync();
+            }}
+          >
             Calculate $
           </button>
         </div>
       </article>
+
+      {game.settlement ? (
+        <article className="card stack-sm">
+          <div className="card-header">
+            <div>
+              <p className="card-eyebrow">Settlement</p>
+              <h2>{formatDateTime(game.settlement.createdAt)}</h2>
+            </div>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={!isAdmin}
+              onClick={() => {
+                const shouldUndo = window.confirm(
+                  "Undo this settlement and reopen the game?",
+                );
+
+                if (!shouldUndo) {
+                  return;
+                }
+
+                void undoSettlementMutation.mutateAsync();
+              }}
+            >
+              Undo settlement
+            </button>
+          </div>
+          <ul className="list-reset stack-sm">
+            {game.settlement.transfers.map((transfer) => (
+              <li key={transfer.id} className="list-item">
+                <div className="stack-xs">
+                  <strong>
+                    {transfer.fromLabel} {"->"} {transfer.toLabel}
+                  </strong>
+                  <p className="muted">{formatMoneyCents(transfer.amountCents)}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </article>
+      ) : null}
 
       <article className="card stack-sm">
         <div className="card-header">
@@ -86,29 +873,42 @@ export function GameViewPage() {
             <p className="card-eyebrow">History</p>
             <h2>Most recent first</h2>
           </div>
-          <span className="pill">10 per page</span>
+          <span className="pill">{game.rounds.length} rounds</span>
         </div>
 
-        <ul className="list-reset stack-sm">
-          <li className="list-item">
-            <div className="stack-xs">
-              <strong>Round 4</strong>
-              <p className="muted">Player A +9, Player B -4, Player C -5</p>
-            </div>
-            <button type="button" className="icon-button" disabled={!isAdmin}>
-              Delete
-            </button>
-          </li>
-          <li className="list-item">
-            <div className="stack-xs">
-              <strong>Round 3</strong>
-              <p className="muted">Player B +5, Player A -3, Player C -2</p>
-            </div>
-            <button type="button" className="icon-button" disabled={!isAdmin}>
-              Delete
-            </button>
-          </li>
-        </ul>
+        {game.rounds.length === 0 ? (
+          <p className="muted">No rounds yet.</p>
+        ) : (
+          <ul className="list-reset stack-sm">
+            {game.rounds.map((round) => (
+              <li key={round.id} className="list-item">
+                <div className="stack-xs">
+                  <strong>Round {round.roundNumber}</strong>
+                  <p className="muted">{round.summaryText}</p>
+                  <p className="muted">{formatDateTime(round.createdAt)}</p>
+                </div>
+                <button
+                  type="button"
+                  className="icon-button"
+                  disabled={!isAdmin}
+                  onClick={() => {
+                    const shouldDelete = window.confirm(
+                      `Delete round ${round.roundNumber}?`,
+                    );
+
+                    if (!shouldDelete) {
+                      return;
+                    }
+
+                    void deleteRoundMutation.mutateAsync(round.id);
+                  }}
+                >
+                  Delete
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </article>
     </section>
   );

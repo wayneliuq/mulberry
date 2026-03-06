@@ -26,7 +26,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -86,6 +87,7 @@ a {
 .secondary-button,
 .icon-button,
 input,
+select,
 .filter-chip {
   min-height: 2.75rem;
   border-radius: 0.9rem;
@@ -206,6 +208,20 @@ input {
   color: #fff;
 }
 
+select {
+  width: 100%;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+}
+
+.card-subsection {
+  padding: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .list-reset {
   list-style: none;
   margin: 0;
@@ -270,6 +286,38 @@ td {
   font-weight: 700;
 }
 
+.form-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.checkbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.checkbox-item input {
+  width: auto;
+  min-height: 1rem;
+}
+
+.form-error {
+  margin: 0;
+  color: #ff9da9;
+}
+
+.align-end {
+  display: flex;
+  align-items: end;
+}
+
 @media (min-width: 720px) {
   .app-shell {
     padding: 1.5rem;
@@ -277,5 +325,9 @@ td {
 
   .card {
     padding: 1.25rem;
+  }
+
+  .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

@@ -92,8 +92,8 @@ export function calculateFightTheLandlordRound(
   );
 
   const entries = [...winnerEntries, ...loserEntries].sort((left, right) =>
-    parsed.activePlayerIds.indexOf(left.playerId) -
-    parsed.activePlayerIds.indexOf(right.playerId),
+    parsed.activePlayerIds.indexOf(String(left.playerId)) -
+    parsed.activePlayerIds.indexOf(String(right.playerId)),
   );
   const total = entries.reduce((sum, entry) => sum + entry.pointDelta, 0);
 

@@ -1,7 +1,7 @@
 export type GameTypeId = "texas-holdem" | "fight-the-landlord";
 
 export type PointEntry = {
-  playerId: string;
+  playerId: string | number;
   pointDelta: number;
 };
 
