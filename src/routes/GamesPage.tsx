@@ -32,6 +32,9 @@ export function GamesPage() {
   } =
     useAdminSession();
   const [passwordInput, setPasswordInput] = useState("");
+  const [selectedGameType, setSelectedGameType] = useState<
+    "all" | "texas-holdem" | "fight-the-landlord"
+  >("all");
   const [createFormOpen, setCreateFormOpen] = useState(false);
   const [createGameValues, setCreateGameValues] = useState({
     gameTypeId: "texas-holdem",
@@ -45,7 +48,11 @@ export function GamesPage() {
     queryFn: fetchGames,
   });
 
-  const recentGames = useMemo(() => gamesQuery.data ?? [], [gamesQuery.data]);
+  const recentGames = useMemo(() => {
+    const games = gamesQuery.data ?? [];
+    if (selectedGameType === "all") return games;
+    return games.filter((g) => g.gameTypeId === selectedGameType);
+  }, [gamesQuery.data, selectedGameType]);
 
   const createGameMutation = useMutation({
     mutationFn: async () => {
@@ -178,11 +185,31 @@ export function GamesPage() {
           </button>
         </div>
 
-        <div className="filter-row" aria-label="Supported game types">
+        <div className="filter-row" role="tablist" aria-label="Game type filters">
+          <button
+            type="button"
+            className={
+              selectedGameType === "all"
+                ? "filter-chip filter-chip-active"
+                : "filter-chip"
+            }
+            onClick={() => setSelectedGameType("all")}
+          >
+            All
+          </button>
           {gameTypeOptions.map((option) => (
-            <span key={option.id} className="pill">
+            <button
+              key={option.id}
+              type="button"
+              className={
+                selectedGameType === option.id
+                  ? "filter-chip filter-chip-active"
+                  : "filter-chip"
+              }
+              onClick={() => setSelectedGameType(option.id)}
+            >
               {option.name}
-            </span>
+            </button>
           ))}
         </div>
 
@@ -290,7 +317,11 @@ export function GamesPage() {
           <p className="form-error">{gamesQuery.error.message}</p>
         ) : null}
         {!gamesQuery.isLoading && recentGames.length === 0 ? (
-          <p className="muted">No games yet. Create the first one as admin.</p>
+          <p className="muted">
+            {selectedGameType === "all"
+              ? "No games yet. Create the first one as admin."
+              : "No games of this type."}
+          </p>
         ) : null}
 
         <ul className="list-reset stack-sm">
