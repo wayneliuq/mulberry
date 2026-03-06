@@ -86,7 +86,7 @@ const actionSchema = z.discriminatedUnion("action", [
       .array(
         z.object({
           playerId: z.number().int().positive(),
-          pointDelta: z.number(),
+          pointDelta: z.float64(),
         }),
       )
       .min(2),
