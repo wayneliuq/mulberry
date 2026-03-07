@@ -326,35 +326,43 @@ export function GamesPage() {
 
         <ul className="list-reset stack-sm">
           {recentGames.map((game) => (
-            <li key={game.id} className="list-item">
-              <div className="stack-xs">
-                <div className="inline-actions">
-                  <Link to={`/games/${game.id}`} className="game-link text-wrap-safe">
-                    {game.displayName}
-                  </Link>
-                  <span
-                    className={
-                      game.status === "settled"
-                        ? "pill pill-success"
-                        : "pill"
-                    }
-                  >
-                    {game.status === "settled" ? "Settled" : "Ongoing"}
-                  </span>
+            <li key={game.id} className="list-item game-row-tappable">
+              <Link
+                to={`/games/${game.id}`}
+                className="game-row-link"
+                aria-label={`Open ${game.displayName}`}
+              >
+                <div className="stack-xs">
+                  <div className="inline-actions">
+                    <span className="game-link text-wrap-safe">
+                      {game.displayName}
+                    </span>
+                    <span
+                      className={
+                        game.status === "settled"
+                          ? "pill pill-success"
+                          : "pill"
+                      }
+                    >
+                      {game.status === "settled" ? "Settled" : "Ongoing"}
+                    </span>
+                  </div>
+                  <p className="muted">
+                    {getGameTypeOption(game.gameTypeId)?.name ?? game.gameTypeId} ·{" "}
+                    {formatRelativeDate(game.updatedAt)} · {game.roundCount} rounds ·{" "}
+                    {game.playerCount} players
+                  </p>
                 </div>
-                <p className="muted">
-                  {getGameTypeOption(game.gameTypeId)?.name ?? game.gameTypeId} ·{" "}
-                  {formatRelativeDate(game.updatedAt)} · {game.roundCount} rounds ·{" "}
-                  {game.playerCount} players
-                </p>
-              </div>
-              <div className="inline-actions">
+              </Link>
+              <div className="inline-actions game-row-actions">
                 <button
                   type="button"
                   className="icon-button"
                   disabled={!isAdmin}
                   aria-label={`Delete ${game.displayName}`}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     const shouldDelete = window.confirm(
                       `Delete ${game.displayName}? This removes its history and leaderboard impact.`,
                     );

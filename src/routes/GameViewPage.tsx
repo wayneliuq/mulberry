@@ -1,4 +1,6 @@
 import {
+  type Dispatch,
+  type SetStateAction,
   useEffect,
   useMemo,
   useState,
@@ -51,6 +53,10 @@ export function GameViewPage() {
     bombMultiplier: "1",
     friendIds: [] as string[],
   });
+  const [ftlQuickFillMode, setFtlQuickFillMode] = useState(false);
+  const [ftlQuickFillInputs, setFtlQuickFillInputs] = useState<
+    Record<number, string>
+  >({});
 
   const clampToTwoDecimals = (value: number) =>
     Math.round(value * 100) / 100;
@@ -371,6 +377,58 @@ export function GameViewPage() {
     });
   }
 
+  async function handleFtlQuickFillSubmit() {
+    if (!game) return;
+    const entries = unlockedPlayers.map((player) => {
+      const raw = Number(ftlQuickFillInputs[player.playerId] ?? 0);
+      return {
+        playerId: player.playerId,
+        pointDelta: clampToTwoDecimals(raw),
+      };
+    });
+    let total = entries.reduce((sum, e) => sum + e.pointDelta, 0);
+    if (Math.abs(total) > 0.01) {
+      const zeroPlayers = entries.filter((e) => Math.abs(e.pointDelta) < 0.01);
+      if (zeroPlayers.length > 0) {
+        const share = -total / zeroPlayers.length;
+        for (const entry of entries) {
+          if (Math.abs(entry.pointDelta) < 0.01) {
+            entry.pointDelta = clampToTwoDecimals(share);
+          }
+        }
+      }
+    }
+    const summaryText = entries
+      .map(
+        (e) =>
+          `${unlockedPlayers.find((p) => p.playerId === e.playerId)?.displayName ?? e.playerId} ${e.pointDelta > 0 ? "+" : ""}${clampToTwoDecimals(e.pointDelta)}`,
+      )
+      .join(", ");
+    await createRoundMutation.mutateAsync({
+      entries,
+      summaryText,
+      metadata: {
+        mode: "fight-the-landlord",
+        quickFill: true,
+      },
+    });
+  }
+
+  const pointStep = game?.pointBasis ?? 1;
+
+  function adjustPointInput(
+    _current: Record<number, string>,
+    setter: Dispatch<SetStateAction<Record<number, string>>>,
+    playerId: number,
+    delta: number,
+  ) {
+    setter((prev) => {
+      const raw = Number(prev[playerId] ?? 0);
+      const next = clampToTwoDecimals(raw + delta);
+      return { ...prev, [playerId]: String(next) };
+    });
+  }
+
   return (
     <section className="stack-lg">
       <div className="inline-actions space-between">
@@ -613,17 +671,49 @@ export function GameViewPage() {
                 {sortedUnlockedPlayers.map((player) => (
                   <label key={player.playerId} className="stack-xs">
                     <span>{player.displayName}</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={texasPointInputs[player.playerId] ?? "0"}
-                      onChange={(event) =>
-                        setTexasPointInputs((current) => ({
-                          ...current,
-                          [player.playerId]: event.target.value,
-                        }))
-                      }
-                    />
+                    <div className="inline-actions point-input-row">
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label={`Decrease ${player.displayName} by ${pointStep}`}
+                        onClick={() =>
+                          adjustPointInput(
+                            texasPointInputs,
+                            setTexasPointInputs,
+                            player.playerId,
+                            -pointStep,
+                          )
+                        }
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={texasPointInputs[player.playerId] ?? "0"}
+                        onChange={(event) =>
+                          setTexasPointInputs((current) => ({
+                            ...current,
+                            [player.playerId]: event.target.value,
+                          }))
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label={`Increase ${player.displayName} by ${pointStep}`}
+                        onClick={() =>
+                          adjustPointInput(
+                            texasPointInputs,
+                            setTexasPointInputs,
+                            player.playerId,
+                            pointStep,
+                          )
+                        }
+                      >
+                        +
+                      </button>
+                    </div>
                   </label>
                 ))}
                 {createRoundMutation.error ? (
@@ -642,118 +732,65 @@ export function GameViewPage() {
                   </button>
                 </div>
               </form>
-            ) : (
+            ) : ftlQuickFillMode ? (
               <form
                 className="stack-sm"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  void handleFightTheLandlordRoundSubmit();
+                  void handleFtlQuickFillSubmit();
                 }}
               >
-                <label className="stack-xs">
-                  <span>Outcome</span>
-                  <select
-                    value={landlordValues.outcome}
-                    onChange={(event) =>
-                      setLandlordValues((current) => ({
-                        ...current,
-                        outcome: event.target.value as "won" | "lost",
-                      }))
-                    }
-                  >
-                    <option value="won">Landlord side won</option>
-                    <option value="lost">Landlord side lost</option>
-                  </select>
-                </label>
-                <label className="stack-xs">
-                  <span>Landlord</span>
-                  <select
-                    value={landlordValues.landlordId}
-                    onChange={(event) =>
-                      setLandlordValues((current) => ({
-                        ...current,
-                        landlordId: event.target.value,
-                        friendIds: current.friendIds.filter(
-                          (value) => value !== event.target.value,
-                        ),
-                      }))
-                    }
-                  >
-                    <option value="">Select landlord</option>
-                    {sortedUnlockedPlayers.map((player) => (
-                      <option key={player.playerId} value={player.playerId}>
-                        {player.displayName}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="stack-sm">
-                  <span>Landlord friends</span>
-                  <PlayerSortButtons
-                    sortMode={unlockedSort}
-                    onSortChange={setUnlockedSort}
-                  />
-                  <div className="checkbox-list player-list-two-col">
-                    {sortedUnlockedPlayers
-                      .filter(
-                        (player) =>
-                          String(player.playerId) !== landlordValues.landlordId,
-                      )
-                      .map((player) => (
-                        <label key={player.playerId} className="checkbox-item">
-                          <input
-                            type="checkbox"
-                            checked={landlordValues.friendIds.includes(
-                              String(player.playerId),
-                            )}
-                            onChange={(event) =>
-                              setLandlordValues((current) => ({
-                                ...current,
-                                friendIds: event.target.checked
-                                  ? [...current.friendIds, String(player.playerId)]
-                                  : current.friendIds.filter(
-                                      (value) => value !== String(player.playerId),
-                                    ),
-                              }))
-                            }
-                          />
-                          <span>{player.displayName}</span>
-                        </label>
-                      ))}
-                  </div>
-                </div>
-                <div className="form-grid">
-                  <label className="stack-xs">
-                    <span>Bomb multiplier</span>
-                    <input
-                      type="number"
-                      min="1"
-                      max="10"
-                      value={landlordValues.bombMultiplier}
-                      onChange={(event) =>
-                        setLandlordValues((current) => ({
-                          ...current,
-                          bombMultiplier: event.target.value,
-                        }))
-                      }
-                    />
+                <p className="muted">
+                  Enter points per player. If the total is not zero, the remainder is split among players with 0.
+                </p>
+                {sortedUnlockedPlayers.map((player) => (
+                  <label key={player.playerId} className="stack-xs">
+                    <span>{player.displayName}</span>
+                    <div className="inline-actions point-input-row">
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label={`Decrease ${player.displayName} by ${pointStep}`}
+                        onClick={() =>
+                          adjustPointInput(
+                            ftlQuickFillInputs,
+                            setFtlQuickFillInputs,
+                            player.playerId,
+                            -pointStep,
+                          )
+                        }
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={ftlQuickFillInputs[player.playerId] ?? "0"}
+                        onChange={(event) =>
+                          setFtlQuickFillInputs((current) => ({
+                            ...current,
+                            [player.playerId]: event.target.value,
+                          }))
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label={`Increase ${player.displayName} by ${pointStep}`}
+                        onClick={() =>
+                          adjustPointInput(
+                            ftlQuickFillInputs,
+                            setFtlQuickFillInputs,
+                            player.playerId,
+                            pointStep,
+                          )
+                        }
+                      >
+                        +
+                      </button>
+                    </div>
                   </label>
-                  <label className="stack-xs">
-                    <span>Landlord multiplier</span>
-                    <input
-                      type="number"
-                      min="1"
-                      max="6"
-                      value={landlordValues.landlordMultiplier}
-                      onChange={(event) =>
-                        setLandlordValues((current) => ({
-                          ...current,
-                          landlordMultiplier: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                </div>
+                ))}
                 {createRoundMutation.error ? (
                   <p className="form-error">{createRoundMutation.error.message}</p>
                 ) : null}
@@ -764,12 +801,158 @@ export function GameViewPage() {
                   <button
                     type="button"
                     className="secondary-button"
+                    onClick={() => setFtlQuickFillMode(false)}
+                  >
+                    Use multipliers
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
                     onClick={() => setShowRoundForm(false)}
                   >
                     Cancel
                   </button>
                 </div>
               </form>
+            ) : (
+              <>
+                <div className="inline-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setFtlQuickFillMode(true)}
+                  >
+                    Quick Fill
+                  </button>
+                </div>
+                <form
+                  className="stack-sm"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void handleFightTheLandlordRoundSubmit();
+                  }}
+                >
+                  <label className="stack-xs">
+                    <span>Outcome</span>
+                    <select
+                      value={landlordValues.outcome}
+                      onChange={(event) =>
+                        setLandlordValues((current) => ({
+                          ...current,
+                          outcome: event.target.value as "won" | "lost",
+                        }))
+                      }
+                    >
+                      <option value="won">Landlord side won</option>
+                      <option value="lost">Landlord side lost</option>
+                    </select>
+                  </label>
+                  <label className="stack-xs">
+                    <span>Landlord</span>
+                    <select
+                      value={landlordValues.landlordId}
+                      onChange={(event) =>
+                        setLandlordValues((current) => ({
+                          ...current,
+                          landlordId: event.target.value,
+                          friendIds: current.friendIds.filter(
+                            (value) => value !== event.target.value,
+                          ),
+                        }))
+                      }
+                    >
+                      <option value="">Select landlord</option>
+                      {sortedUnlockedPlayers.map((player) => (
+                        <option key={player.playerId} value={player.playerId}>
+                          {player.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="stack-sm">
+                    <span>Landlord friends</span>
+                    <PlayerSortButtons
+                      sortMode={unlockedSort}
+                      onSortChange={setUnlockedSort}
+                    />
+                    <div className="checkbox-list player-list-two-col">
+                      {sortedUnlockedPlayers
+                        .filter(
+                          (player) =>
+                            String(player.playerId) !== landlordValues.landlordId,
+                        )
+                        .map((player) => (
+                          <label key={player.playerId} className="checkbox-item">
+                            <input
+                              type="checkbox"
+                              checked={landlordValues.friendIds.includes(
+                                String(player.playerId),
+                              )}
+                              onChange={(event) =>
+                                setLandlordValues((current) => ({
+                                  ...current,
+                                  friendIds: event.target.checked
+                                    ? [...current.friendIds, String(player.playerId)]
+                                    : current.friendIds.filter(
+                                        (value) => value !== String(player.playerId),
+                                      ),
+                                }))
+                              }
+                            />
+                            <span>{player.displayName}</span>
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+                  <div className="form-grid">
+                    <label className="stack-xs">
+                      <span>Bomb multiplier</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={landlordValues.bombMultiplier}
+                        onChange={(event) =>
+                          setLandlordValues((current) => ({
+                            ...current,
+                            bombMultiplier: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="stack-xs">
+                      <span>Landlord multiplier</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="6"
+                        value={landlordValues.landlordMultiplier}
+                        onChange={(event) =>
+                          setLandlordValues((current) => ({
+                            ...current,
+                            landlordMultiplier: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  </div>
+                  {createRoundMutation.error ? (
+                    <p className="form-error">{createRoundMutation.error.message}</p>
+                  ) : null}
+                  <div className="inline-actions">
+                    <button type="submit" className="primary-button">
+                      Save round
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => setShowRoundForm(false)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </>
             )}
           </div>
         ) : null}
