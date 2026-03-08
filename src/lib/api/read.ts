@@ -365,7 +365,11 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
 
   const game = assertData(gameResult.data as RawGame | null, gameResult.error);
 
-  if (game.game_type_id !== "texas-holdem" && game.game_type_id !== "fight-the-landlord") {
+  if (
+    game.game_type_id !== "texas-holdem" &&
+    game.game_type_id !== "fight-the-landlord" &&
+    game.game_type_id !== "werewolves"
+  ) {
     throw new Error("Unsupported game type");
   }
 

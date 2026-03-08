@@ -49,7 +49,7 @@ function SortableTh({
 
 export function LeaderboardsPage() {
   const [selectedGameType, setSelectedGameType] = useState<
-    "all" | "texas-holdem" | "fight-the-landlord"
+    "all" | "texas-holdem" | "fight-the-landlord" | "werewolves"
   >("all");
   const [playerSort, setPlayerSort] = useState<{
     column: SortColumn;

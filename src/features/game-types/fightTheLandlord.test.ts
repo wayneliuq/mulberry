@@ -8,7 +8,8 @@ describe("calculateFightTheLandlordRound", () => {
       landlordFriendIds: ["friend"],
       outcome: "won",
       pointBasis: 2,
-      bombMultiplier: 3,
+      numBombs: 3,
+      gameMultiplier: 1,
       landlordMultiplier: 2,
     });
 
@@ -23,23 +24,25 @@ describe("calculateFightTheLandlordRound", () => {
     ]);
   });
 
-  it("distributes remainder by active player order", () => {
+  it("distributes loss evenly (decimal) when landlord loses", () => {
     const result = calculateFightTheLandlordRound({
       activePlayerIds: ["landlord", "p2", "p3", "p4"],
       landlordId: "landlord",
       landlordFriendIds: [],
       outcome: "lost",
       pointBasis: 5,
-      bombMultiplier: 1,
+      numBombs: 1,
+      gameMultiplier: 1,
       landlordMultiplier: 1,
     });
 
-    expect(result.entries).toEqual([
-      { playerId: "landlord", pointDelta: -5 },
-      { playerId: "p2", pointDelta: 2 },
-      { playerId: "p3", pointDelta: 2 },
-      { playerId: "p4", pointDelta: 1 },
-    ]);
-    expect(result.total).toBe(0);
+    expect(result.entries).toHaveLength(4);
+    expect(result.entries.find((e) => e.playerId === "landlord")?.pointDelta).toBe(-5);
+    const opponents = result.entries.filter((e) => e.playerId !== "landlord");
+    expect(opponents).toHaveLength(3);
+    opponents.forEach((e) => {
+      expect(e.pointDelta).toBeCloseTo(5 / 3);
+    });
+    expect(result.total).toBeCloseTo(0);
   });
 });

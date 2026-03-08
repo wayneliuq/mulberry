@@ -33,7 +33,7 @@ export function GamesPage() {
     useAdminSession();
   const [passwordInput, setPasswordInput] = useState("");
   const [selectedGameType, setSelectedGameType] = useState<
-    "all" | "texas-holdem" | "fight-the-landlord"
+    "all" | "texas-holdem" | "fight-the-landlord" | "werewolves"
   >("all");
   const [createFormOpen, setCreateFormOpen] = useState(false);
   const [createGameValues, setCreateGameValues] = useState({
@@ -66,7 +66,7 @@ export function GamesPage() {
       >({
         action: "create_game",
         password,
-        gameTypeId: createGameValues.gameTypeId as "texas-holdem" | "fight-the-landlord",
+        gameTypeId: createGameValues.gameTypeId as "texas-holdem" | "fight-the-landlord" | "werewolves",
         pointBasis: Number(createGameValues.pointBasis),
         moneyPerPointCents: Number(createGameValues.moneyPerPointCents),
         displayName: createGameValues.displayName.trim() || undefined,

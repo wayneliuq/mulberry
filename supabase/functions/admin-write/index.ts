@@ -38,7 +38,7 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("create_game"),
     password: z.string(),
-    gameTypeId: z.enum(["texas-holdem", "fight-the-landlord"]),
+    gameTypeId: z.enum(["texas-holdem", "fight-the-landlord", "werewolves"]),
     pointBasis: z.number().int().min(1),
     moneyPerPointCents: z.number().int().min(0),
     displayName: z.string().trim().optional(),
@@ -79,7 +79,7 @@ const actionSchema = z.discriminatedUnion("action", [
     action: z.literal("create_round"),
     password: z.string(),
     gameId: uuidSchema,
-    gameTypeId: z.enum(["texas-holdem", "fight-the-landlord"]),
+    gameTypeId: z.enum(["texas-holdem", "fight-the-landlord", "werewolves"]),
     summaryText: z.string().trim().min(1),
     metadata: z.record(z.string(), z.unknown()).optional(),
     entries: z
@@ -127,7 +127,7 @@ type GamePlayerRow = {
 
 type GameRow = {
   id: string;
-  game_type_id: "texas-holdem" | "fight-the-landlord";
+  game_type_id: "texas-holdem" | "fight-the-landlord" | "werewolves";
   display_name: string;
   point_basis: number;
   money_per_point_cents: number;
@@ -150,7 +150,9 @@ function formatDefaultGameName(gameTypeId: string) {
   const gameTypeName =
     gameTypeId === "fight-the-landlord"
       ? "Fight the Landlord"
-      : "Texas Hold'em";
+      : gameTypeId === "werewolves"
+        ? "Werewolves"
+        : "Texas Hold'em";
 
   return `${gameTypeName} on ${date}`;
 }
@@ -832,10 +834,6 @@ async function handleCalculateSettlement(
     throw new Error("Settlement already exists for this game.");
   }
 
-  if (game.money_per_point_cents === 0) {
-    throw new Error("This game does not have money settlement enabled.");
-  }
-
   const { data: totals, error: totalsError } = await supabase
     .from("game_point_totals")
     .select("game_id, game_player_id, player_id, point_total")
@@ -851,13 +849,17 @@ async function handleCalculateSettlement(
     throw new Error("Cannot settle a game with no players.");
   }
 
-  const totalPoints = typedTotals.reduce(
-    (sum, total) => sum + Number(total.point_total),
-    0,
-  );
+  const isZeroMoneySettlement = game.money_per_point_cents === 0;
 
-  if (Math.abs(totalPoints) > 0.01) {
-    throw new Error("Game totals must sum to zero before settlement.");
+  if (!isZeroMoneySettlement) {
+    const totalPoints = typedTotals.reduce(
+      (sum, total) => sum + Number(total.point_total),
+      0,
+    );
+
+    if (Math.abs(totalPoints) > 0.01) {
+      throw new Error("Game totals must sum to zero before settlement.");
+    }
   }
 
   const { data: players, error: playersError } = await supabase
@@ -887,84 +889,111 @@ async function handleCalculateSettlement(
     (families ?? []).map((family) => [family.id as string, family.name as string]),
   );
 
-  const moneyPerPoint = game.money_per_point_cents;
-  // Rule: round each amount to nearest cent; if sum of rounded ≠ 0, adjust the
-  // amounts with largest fractional error so total is exact to the cent.
-  const rawAmounts = typedTotals.map((row) => {
-    const pointTotal = Number(row.point_total);
-    const rawCents = pointTotal * moneyPerPoint;
-    return {
+  let perPlayerImpacts: Array<{
+    playerId: number;
+    amountCents: number;
+    displayName: string;
+    familyId: string | null;
+  }>;
+  let groupedUnits: Array<{
+    id: string;
+    label: string;
+    amountCents: number;
+    playerIds: number[];
+  }>;
+  let transfersForInsert: ReturnType<typeof minimizeTransfers> = [];
+  let groupedUnitsMapForTransfers: Map<
+    string,
+    { id: string; label: string; amountCents: number; playerIds: number[] }
+  > = new Map();
+
+  if (isZeroMoneySettlement) {
+    perPlayerImpacts = typedTotals.map((row) => ({
       playerId: row.player_id,
-      rawCents,
+      amountCents: 0,
       displayName: playerById.get(row.player_id)?.display_name ?? String(row.player_id),
       familyId: playerById.get(row.player_id)?.family_id ?? null,
-    };
-  });
-
-  const roundedCents = rawAmounts.map((r) => Math.round(r.rawCents));
-  let sumRounded = roundedCents.reduce((s, c) => s + c, 0);
-
-  if (sumRounded !== 0) {
-    const indexed = rawAmounts
-      .map((r, i) => ({
-        index: i,
-        rawCents: r.rawCents,
-        rounded: roundedCents[i],
-        fractionalError: Math.abs(r.rawCents - Math.round(r.rawCents)),
-      }))
-      .sort((a, b) => b.fractionalError - a.fractionalError);
-
-    for (const { index } of indexed) {
-      if (sumRounded === 0) break;
-      const adjust = sumRounded > 0 ? -1 : 1;
-      roundedCents[index] += adjust;
-      sumRounded += adjust;
-    }
-  }
-
-  const perPlayerImpacts = rawAmounts.map((r, i) => ({
-    playerId: r.playerId,
-    amountCents: roundedCents[i],
-    displayName: r.displayName,
-    familyId: r.familyId,
-  }));
-
-  const groupedUnitsMap = new Map<
-    string,
-    {
-      id: string;
-      label: string;
-      amountCents: number;
-      playerIds: number[];
-    }
-  >();
-
-  for (const playerImpact of perPlayerImpacts) {
-    const groupedKey = playerImpact.familyId
-      ? `family:${playerImpact.familyId}`
-      : `player:${playerImpact.playerId}`;
-    const existingUnit = groupedUnitsMap.get(groupedKey);
-
-    if (existingUnit) {
-      existingUnit.amountCents += playerImpact.amountCents;
-      existingUnit.playerIds.push(playerImpact.playerId);
-      continue;
-    }
-
-    groupedUnitsMap.set(groupedKey, {
-      id: groupedKey,
-      label: playerImpact.familyId
-        ? familyById.get(playerImpact.familyId) ?? `Family ${playerImpact.familyId}`
-        : playerImpact.displayName,
-      amountCents: playerImpact.amountCents,
-      playerIds: [playerImpact.playerId],
+    }));
+    groupedUnits = [];
+  } else {
+    const moneyPerPoint = game.money_per_point_cents;
+    const rawAmounts = typedTotals.map((row) => {
+      const pointTotal = Number(row.point_total);
+      const rawCents = pointTotal * moneyPerPoint;
+      return {
+        playerId: row.player_id,
+        rawCents,
+        displayName: playerById.get(row.player_id)?.display_name ?? String(row.player_id),
+        familyId: playerById.get(row.player_id)?.family_id ?? null,
+      };
     });
-  }
 
-  const groupedUnits = Array.from(groupedUnitsMap.values()).filter(
-    (unit) => unit.amountCents !== 0,
-  );
-  const transfers = minimizeTransfers(groupedUnits);
+    const roundedCents = rawAmounts.map((r) => Math.round(r.rawCents));
+    let sumRounded = roundedCents.reduce((s, c) => s + c, 0);
+
+    if (sumRounded !== 0) {
+      const indexed = rawAmounts
+        .map((r, i) => ({
+          index: i,
+          rawCents: r.rawCents,
+          rounded: roundedCents[i],
+          fractionalError: Math.abs(r.rawCents - Math.round(r.rawCents)),
+        }))
+        .sort((a, b) => b.fractionalError - a.fractionalError);
+
+      for (const { index } of indexed) {
+        if (sumRounded === 0) break;
+        const adjust = sumRounded > 0 ? -1 : 1;
+        roundedCents[index] += adjust;
+        sumRounded += adjust;
+      }
+    }
+
+    perPlayerImpacts = rawAmounts.map((r, i) => ({
+      playerId: r.playerId,
+      amountCents: roundedCents[i],
+      displayName: r.displayName,
+      familyId: r.familyId,
+    }));
+
+    const groupedUnitsMap = new Map<
+      string,
+      {
+        id: string;
+        label: string;
+        amountCents: number;
+        playerIds: number[];
+      }
+    >();
+
+    for (const playerImpact of perPlayerImpacts) {
+      const groupedKey = playerImpact.familyId
+        ? `family:${playerImpact.familyId}`
+        : `player:${playerImpact.playerId}`;
+      const existingUnit = groupedUnitsMap.get(groupedKey);
+
+      if (existingUnit) {
+        existingUnit.amountCents += playerImpact.amountCents;
+        existingUnit.playerIds.push(playerImpact.playerId);
+        continue;
+      }
+
+      groupedUnitsMap.set(groupedKey, {
+        id: groupedKey,
+        label: playerImpact.familyId
+          ? familyById.get(playerImpact.familyId) ?? `Family ${playerImpact.familyId}`
+          : playerImpact.displayName,
+        amountCents: playerImpact.amountCents,
+        playerIds: [playerImpact.playerId],
+      });
+    }
+
+    groupedUnits = Array.from(groupedUnitsMap.values()).filter(
+      (unit) => unit.amountCents !== 0,
+    );
+    transfersForInsert = minimizeTransfers(groupedUnits);
+    groupedUnitsMapForTransfers = groupedUnitsMap;
+  }
 
   const { data: settlement, error: settlementError } = await supabase
     .from("money_settlements")
@@ -996,27 +1025,27 @@ async function handleCalculateSettlement(
     throw new Error(playerImpactsError.message);
   }
 
-  const transferRows = transfers.map((transfer) => {
-    const fromUnit = groupedUnitsMap.get(transfer.fromUnitId);
-    const toUnit = groupedUnitsMap.get(transfer.toUnitId);
+  if (!isZeroMoneySettlement && transfersForInsert.length > 0) {
+    const transferRows = transfersForInsert.map((transfer) => {
+      const fromUnit = groupedUnitsMapForTransfers.get(transfer.fromUnitId);
+      const toUnit = groupedUnitsMapForTransfers.get(transfer.toUnitId);
 
-    if (!fromUnit || !toUnit) {
-      throw new Error("Settlement unit lookup failed.");
-    }
+      if (!fromUnit || !toUnit) {
+        throw new Error("Settlement unit lookup failed.");
+      }
 
-    return {
-      settlement_id: settlement.id,
-      from_player_id: fromUnit.playerIds.length === 1 ? fromUnit.playerIds[0] : null,
-      to_player_id: toUnit.playerIds.length === 1 ? toUnit.playerIds[0] : null,
-      family_label:
-        fromUnit.playerIds.length > 1 || toUnit.playerIds.length > 1
-          ? `${fromUnit.label} -> ${toUnit.label}`
-          : null,
-      amount_cents: transfer.amountCents,
-    };
-  });
+      return {
+        settlement_id: settlement.id,
+        from_player_id: fromUnit.playerIds.length === 1 ? fromUnit.playerIds[0] : null,
+        to_player_id: toUnit.playerIds.length === 1 ? toUnit.playerIds[0] : null,
+        family_label:
+          fromUnit.playerIds.length > 1 || toUnit.playerIds.length > 1
+            ? `${fromUnit.label} -> ${toUnit.label}`
+            : null,
+        amount_cents: transfer.amountCents,
+      };
+    });
 
-  if (transferRows.length > 0) {
     const { error: transfersError } = await supabase
       .from("money_transfers")
       .insert(transferRows);
@@ -1038,6 +1067,7 @@ async function handleCalculateSettlement(
     throw new Error(gameUpdateError.message);
   }
 
+  const transferCount = isZeroMoneySettlement ? 0 : transfersForInsert.length;
   await insertAuditLog(
     supabase,
     "calculate_settlement",
@@ -1045,14 +1075,14 @@ async function handleCalculateSettlement(
     settlement.id,
     {
       game_id: action.gameId,
-      transfers: transferRows.length,
+      transfers: transferCount,
     },
   );
 
   return jsonResponse({
     settlementId: settlement.id,
     groupedUnits,
-    transfers,
+    transfers: isZeroMoneySettlement ? [] : transfersForInsert,
     perPlayerImpacts,
   });
 }

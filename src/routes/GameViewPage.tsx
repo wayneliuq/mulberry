@@ -15,6 +15,11 @@ import { useAdminSession } from "../features/admin/AdminSessionContext";
 import { calculateFightTheLandlordRound } from "../features/game-types/fightTheLandlord";
 import { calculateTexasHoldemRound } from "../features/game-types/texasHoldem";
 import {
+  type WerewolfTeamId,
+  WEREWOLF_TEAMS,
+  calculateWerewolvesRound,
+} from "../features/game-types/werewolves";
+import {
   PlayerSortButtons,
   useSortedPlayers,
 } from "../features/players/SortablePlayerList";
@@ -49,14 +54,24 @@ export function GameViewPage() {
   const [landlordValues, setLandlordValues] = useState({
     outcome: "won" as "won" | "lost",
     landlordId: "",
-    landlordMultiplier: "1",
-    bombMultiplier: "1",
+    gameMultiplier: 1,
+    landlordMultiplier: 1,
+    numBombs: 0,
     friendIds: [] as string[],
   });
   const [ftlQuickFillMode, setFtlQuickFillMode] = useState(false);
   const [ftlQuickFillInputs, setFtlQuickFillInputs] = useState<
     Record<number, string>
   >({});
+  const [werewolfValues, setWerewolfValues] = useState<{
+    playerTeams: Record<number, WerewolfTeamId>;
+    survivedIds: number[];
+    winningTeamIds: WerewolfTeamId[];
+  }>({
+    playerTeams: {},
+    survivedIds: [],
+    winningTeamIds: [],
+  });
 
   const clampToTwoDecimals = (value: number) =>
     Math.round(value * 100) / 100;
@@ -206,9 +221,15 @@ export function GameViewPage() {
       setLandlordValues({
         outcome: "won",
         landlordId: "",
-        landlordMultiplier: "1",
-        bombMultiplier: "1",
+        gameMultiplier: 1,
+        landlordMultiplier: 1,
+        numBombs: 0,
         friendIds: [],
+      });
+      setWerewolfValues({
+        playerTeams: {},
+        survivedIds: [],
+        winningTeamIds: [],
       });
       await invalidateGameData();
     },
@@ -345,8 +366,9 @@ export function GameViewPage() {
       landlordFriendIds: landlordValues.friendIds,
       outcome: landlordValues.outcome,
       pointBasis: currentGame.pointBasis,
-      bombMultiplier: Number(landlordValues.bombMultiplier),
-      landlordMultiplier: Number(landlordValues.landlordMultiplier),
+      numBombs: landlordValues.numBombs,
+      gameMultiplier: landlordValues.gameMultiplier,
+      landlordMultiplier: landlordValues.landlordMultiplier,
     });
 
     const playerNameById = new Map(
@@ -371,8 +393,9 @@ export function GameViewPage() {
         outcome: landlordValues.outcome,
         landlordId: Number(landlordValues.landlordId),
         landlordFriendIds: landlordValues.friendIds.map((value) => Number(value)),
-        bombMultiplier: Number(landlordValues.bombMultiplier),
-        landlordMultiplier: Number(landlordValues.landlordMultiplier),
+        numBombs: landlordValues.numBombs,
+        gameMultiplier: landlordValues.gameMultiplier,
+        landlordMultiplier: landlordValues.landlordMultiplier,
       },
     });
   }
@@ -410,6 +433,44 @@ export function GameViewPage() {
       metadata: {
         mode: "fight-the-landlord",
         quickFill: true,
+      },
+    });
+  }
+
+  async function handleWerewolvesRoundSubmit() {
+    if (!game || unlockedPlayers.length < 3) return;
+    const activePlayerIds = unlockedPlayers.map((p) => String(p.playerId));
+    const playerAssignments = activePlayerIds.map((playerId) => ({
+      playerId,
+      team: (werewolfValues.playerTeams[Number(playerId)] ??
+        "villager") as WerewolfTeamId,
+    }));
+    const result = calculateWerewolvesRound({
+      activePlayerIds,
+      pointBasis: game.pointBasis,
+      playerAssignments,
+      survivedPlayerIds: werewolfValues.survivedIds.map(String),
+      winningTeamIds: werewolfValues.winningTeamIds,
+    });
+    const playerNameById = new Map(
+      unlockedPlayers.map((p) => [String(p.playerId), p.displayName]),
+    );
+    const entries = result.entries.map((entry) => ({
+      playerId: Number(entry.playerId),
+      pointDelta: entry.pointDelta,
+    }));
+    const summaryText = entries
+      .map(
+        (e) =>
+          `${playerNameById.get(String(e.playerId)) ?? e.playerId} ${e.pointDelta > 0 ? "+" : ""}${e.pointDelta}`,
+      )
+      .join(", ");
+    await createRoundMutation.mutateAsync({
+      entries,
+      summaryText,
+      metadata: {
+        mode: "werewolves",
+        winningTeamIds: werewolfValues.winningTeamIds,
       },
     });
   }
@@ -653,10 +714,17 @@ export function GameViewPage() {
             <strong>
               {game.gameTypeId === "texas-holdem"
                 ? "Texas Hold'em round"
-                : "Fight the Landlord round"}
+                : game.gameTypeId === "werewolves"
+                  ? "Werewolves round"
+                  : "Fight the Landlord round"}
             </strong>
 
-            {sortedUnlockedPlayers.length < 2 ? (
+            {game.gameTypeId === "werewolves" &&
+            sortedUnlockedPlayers.length < 3 ? (
+              <p className="muted">
+                Unlock at least three players before creating a round.
+              </p>
+            ) : sortedUnlockedPlayers.length < 2 ? (
               <p className="muted">
                 Unlock at least two players before creating a round.
               </p>
@@ -721,6 +789,122 @@ export function GameViewPage() {
                 ) : null}
                 <div className="inline-actions">
                   <button type="submit" className="primary-button">
+                    Save round
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setShowRoundForm(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : game.gameTypeId === "werewolves" ? (
+              <form
+                className="stack-sm"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleWerewolvesRoundSubmit();
+                }}
+              >
+                <p className="muted">
+                  Assign team per player, who survived, and which team(s) won.
+                </p>
+                <div className="stack-sm">
+                  <span>Winning team(s)</span>
+                  <div className="checkbox-list player-list-two-col">
+                    {WEREWOLF_TEAMS.map((teamId) => (
+                      <label key={teamId} className="checkbox-item">
+                        <input
+                          type="checkbox"
+                          checked={werewolfValues.winningTeamIds.includes(teamId)}
+                          onChange={(e) =>
+                            setWerewolfValues((c) => ({
+                              ...c,
+                              winningTeamIds: e.target.checked
+                                ? [...c.winningTeamIds, teamId]
+                                : c.winningTeamIds.filter((t) => t !== teamId),
+                            }))
+                          }
+                        />
+                        <span>
+                          {teamId.charAt(0).toUpperCase() + teamId.slice(1)}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="stack-sm">
+                  <span>Survived (alive at end)</span>
+                  <div className="checkbox-list player-list-two-col">
+                    {sortedUnlockedPlayers.map((player) => (
+                      <label key={player.playerId} className="checkbox-item">
+                        <input
+                          type="checkbox"
+                          checked={werewolfValues.survivedIds.includes(
+                            player.playerId,
+                          )}
+                          onChange={(e) =>
+                            setWerewolfValues((c) => ({
+                              ...c,
+                              survivedIds: e.target.checked
+                                ? [...c.survivedIds, player.playerId]
+                                : c.survivedIds.filter(
+                                    (id) => id !== player.playerId,
+                                  ),
+                            }))
+                          }
+                        />
+                        <span>{player.displayName}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="stack-sm">
+                  <span>Team per player</span>
+                  <div className="player-list-two-col">
+                    {sortedUnlockedPlayers.map((player) => (
+                      <label key={player.playerId} className="stack-xs">
+                        <span>{player.displayName}</span>
+                        <select
+                          value={
+                            werewolfValues.playerTeams[player.playerId] ??
+                            "villager"
+                          }
+                          onChange={(e) =>
+                            setWerewolfValues((c) => ({
+                              ...c,
+                              playerTeams: {
+                                ...c.playerTeams,
+                                [player.playerId]: e.target
+                                  .value as WerewolfTeamId,
+                              },
+                            }))
+                          }
+                        >
+                          {WEREWOLF_TEAMS.map((teamId) => (
+                            <option key={teamId} value={teamId}>
+                              {teamId.charAt(0).toUpperCase() +
+                                teamId.slice(1)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {createRoundMutation.error ? (
+                  <p className="form-error">
+                    {createRoundMutation.error.message}
+                  </p>
+                ) : null}
+                <div className="inline-actions">
+                  <button
+                    type="submit"
+                    className="primary-button"
+                    disabled={werewolfValues.winningTeamIds.length === 0}
+                  >
                     Save round
                   </button>
                   <button
@@ -904,38 +1088,144 @@ export function GameViewPage() {
                         ))}
                     </div>
                   </div>
-                  <div className="form-grid">
-                    <label className="stack-xs">
-                      <span>Bomb multiplier</span>
+                  <label className="stack-xs">
+                    <span>Game multiplier</span>
+                    <div className="inline-actions point-input-row">
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label="Decrease game multiplier"
+                        onClick={() =>
+                          setLandlordValues((c) => ({
+                            ...c,
+                            gameMultiplier: Math.max(1, c.gameMultiplier - 1),
+                          }))
+                        }
+                      >
+                        −
+                      </button>
                       <input
                         type="number"
                         min="1"
-                        max="10"
-                        value={landlordValues.bombMultiplier}
-                        onChange={(event) =>
-                          setLandlordValues((current) => ({
-                            ...current,
-                            bombMultiplier: event.target.value,
+                        value={landlordValues.gameMultiplier}
+                        onChange={(e) =>
+                          setLandlordValues((c) => ({
+                            ...c,
+                            gameMultiplier: Math.max(
+                              1,
+                              parseInt(e.target.value, 10) || 1,
+                            ),
                           }))
                         }
                       />
-                    </label>
-                    <label className="stack-xs">
-                      <span>Landlord multiplier</span>
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label="Increase game multiplier"
+                        onClick={() =>
+                          setLandlordValues((c) => ({
+                            ...c,
+                            gameMultiplier: c.gameMultiplier + 1,
+                          }))
+                        }
+                      >
+                        +
+                      </button>
+                    </div>
+                  </label>
+                  <label className="stack-xs">
+                    <span>Landlord multiplier</span>
+                    <div className="inline-actions point-input-row">
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label="Decrease landlord multiplier"
+                        onClick={() =>
+                          setLandlordValues((c) => ({
+                            ...c,
+                            landlordMultiplier: Math.max(
+                              1,
+                              c.landlordMultiplier - 1,
+                            ),
+                          }))
+                        }
+                      >
+                        −
+                      </button>
                       <input
                         type="number"
                         min="1"
-                        max="6"
                         value={landlordValues.landlordMultiplier}
-                        onChange={(event) =>
-                          setLandlordValues((current) => ({
-                            ...current,
-                            landlordMultiplier: event.target.value,
+                        onChange={(e) =>
+                          setLandlordValues((c) => ({
+                            ...c,
+                            landlordMultiplier: Math.max(
+                              1,
+                              parseInt(e.target.value, 10) || 1,
+                            ),
                           }))
                         }
                       />
-                    </label>
-                  </div>
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label="Increase landlord multiplier"
+                        onClick={() =>
+                          setLandlordValues((c) => ({
+                            ...c,
+                            landlordMultiplier: c.landlordMultiplier + 1,
+                          }))
+                        }
+                      >
+                        +
+                      </button>
+                    </div>
+                  </label>
+                  <label className="stack-xs">
+                    <span># of Bombs</span>
+                    <div className="inline-actions point-input-row">
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label="Decrease number of bombs"
+                        onClick={() =>
+                          setLandlordValues((c) => ({
+                            ...c,
+                            numBombs: Math.max(0, c.numBombs - 1),
+                          }))
+                        }
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        min="0"
+                        value={landlordValues.numBombs}
+                        onChange={(e) =>
+                          setLandlordValues((c) => ({
+                            ...c,
+                            numBombs: Math.max(
+                              0,
+                              parseInt(e.target.value, 10) || 0,
+                            ),
+                          }))
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label="Increase number of bombs"
+                        onClick={() =>
+                          setLandlordValues((c) => ({
+                            ...c,
+                            numBombs: c.numBombs + 1,
+                          }))
+                        }
+                      >
+                        +
+                      </button>
+                    </div>
+                  </label>
                   {createRoundMutation.error ? (
                     <p className="form-error">{createRoundMutation.error.message}</p>
                   ) : null}
@@ -1031,13 +1321,14 @@ export function GameViewPage() {
             disabled={
               !isAdmin ||
               game.status === "settled" ||
-              game.moneyPerPointCents === 0 ||
               game.players.length < 2
             }
             onClick={() => {
-              const shouldSettle = window.confirm(
-                "End this game and calculate settlement?",
-              );
+              const message =
+                game.moneyPerPointCents === 0
+                  ? "End this game and mark as settled? (No money to exchange.)"
+                  : "End this game and calculate settlement?";
+              const shouldSettle = window.confirm(message);
 
               if (!shouldSettle) {
                 return;

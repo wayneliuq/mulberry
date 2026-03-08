@@ -1,4 +1,4 @@
-export type GameTypeId = "texas-holdem" | "fight-the-landlord";
+export type GameTypeId = "texas-holdem" | "fight-the-landlord" | "werewolves";
 
 export type PointEntry = {
   playerId: string | number;

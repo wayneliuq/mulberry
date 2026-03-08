@@ -6,11 +6,16 @@ import {
   texasHoldemGameType,
   type TexasHoldemRoundInput,
 } from "./texasHoldem";
+import {
+  werewolvesGameType,
+  type WerewolvesRoundInput,
+} from "./werewolves";
 import type { GameTypeId } from "./types";
 
 export const gameTypes = [
   texasHoldemGameType,
   fightTheLandlordGameType,
+  werewolvesGameType,
 ] as const;
 
 export const gameTypeOptions = gameTypes.map((gameType) => ({
@@ -22,6 +27,7 @@ export const gameTypeOptions = gameTypes.map((gameType) => ({
 export type GameTypeRoundInputMap = {
   "texas-holdem": TexasHoldemRoundInput;
   "fight-the-landlord": FightTheLandlordRoundInput;
+  werewolves: WerewolvesRoundInput;
 };
 
 export function getGameTypeOption(gameTypeId: GameTypeId) {

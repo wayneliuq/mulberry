@@ -11,8 +11,9 @@ const fightTheLandlordSchema = z.object({
   landlordFriendIds: z.array(z.string().min(1)),
   outcome: z.enum(["won", "lost"]),
   pointBasis: z.int().positive(),
-  bombMultiplier: z.int().min(1).max(10),
-  landlordMultiplier: z.int().min(1).max(6),
+  numBombs: z.int().min(0),
+  gameMultiplier: z.int().min(1),
+  landlordMultiplier: z.int().min(1),
 });
 
 export type FightTheLandlordRoundInput = z.infer<
@@ -48,9 +49,10 @@ export function calculateFightTheLandlordRound(
     throw new Error("Fight the Landlord requires at least one opposing player.");
   }
 
+  const basePoints = parsed.pointBasis * parsed.numBombs;
   const landlordPoints =
-    parsed.pointBasis * parsed.bombMultiplier * parsed.landlordMultiplier;
-  const friendPoints = parsed.pointBasis * parsed.bombMultiplier;
+    basePoints * parsed.gameMultiplier * parsed.landlordMultiplier;
+  const friendPoints = basePoints * parsed.gameMultiplier;
 
   const winners = parsed.outcome === "won" ? landlordSide : opposingSide;
   const losers = parsed.outcome === "won" ? opposingSide : landlordSide;
@@ -94,7 +96,7 @@ export function calculateFightTheLandlordRound(
     entries,
     total,
     isZeroSum: Math.abs(total) < 0.01,
-    summary: `${parsed.outcome === "won" ? "Landlord side won" : "Landlord side lost"} with ${parsed.bombMultiplier}x bombs and ${parsed.landlordMultiplier}x landlord multiplier.`,
+    summary: `${parsed.outcome === "won" ? "Landlord side won" : "Landlord side lost"} with ${parsed.numBombs} bombs, ${parsed.gameMultiplier}x game, ${parsed.landlordMultiplier}x landlord.`,
   };
 }
 

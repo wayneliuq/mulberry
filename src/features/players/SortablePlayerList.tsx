@@ -1,8 +1,13 @@
 import { useMemo, useState } from "react";
 
-export type PlayerSortMode = "id" | "name-asc" | "name-desc";
+export type PlayerSortMode = "id" | "name-asc" | "name-desc" | "points-desc";
 
-export type PlayerLike = { id?: number; playerId?: number; displayName: string };
+export type PlayerLike = {
+  id?: number;
+  playerId?: number;
+  displayName: string;
+  total?: number;
+};
 
 function sortKey(p: PlayerLike): number {
   return p.id ?? p.playerId ?? 0;
@@ -27,6 +32,8 @@ export function useSortedPlayers<T extends PlayerLike>(
         return copy.sort((a, b) =>
           b.displayName.localeCompare(a.displayName, undefined, { sensitivity: "base" }),
         );
+      case "points-desc":
+        return copy.sort((a, b) => (b.total ?? 0) - (a.total ?? 0));
       default:
         return copy;
     }
@@ -68,6 +75,13 @@ export function PlayerSortButtons({
         onClick={() => onSortChange("name-desc")}
       >
         Z→A
+      </button>
+      <button
+        type="button"
+        className={sortMode === "points-desc" ? "pill pill-small" : "sort-btn"}
+        onClick={() => onSortChange("points-desc")}
+      >
+        By points
       </button>
     </div>
   );
