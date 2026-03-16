@@ -1087,7 +1087,7 @@ export function GameViewPage() {
                                   };
                                 })
                               }
-                              style={{ maxWidth: "3rem" }}
+                              style={{ width: "3.5rem", maxWidth: "3.5rem" }}
                             />
                             <button
                               type="button"
