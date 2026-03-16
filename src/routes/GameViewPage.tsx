@@ -53,11 +53,9 @@ export function GameViewPage() {
   );
   const [landlordValues, setLandlordValues] = useState({
     outcome: "won" as "won" | "lost",
-    landlordId: "",
     gameMultiplier: 1,
-    landlordMultiplier: 1,
     numBombs: 0,
-    friendIds: [] as string[],
+    selections: {} as Record<number, number>,
   });
   const [ftlQuickFillMode, setFtlQuickFillMode] = useState(false);
   const [ftlQuickFillInputs, setFtlQuickFillInputs] = useState<
@@ -220,11 +218,9 @@ export function GameViewPage() {
       setTexasPointInputs({});
       setLandlordValues({
         outcome: "won",
-        landlordId: "",
         gameMultiplier: 1,
-        landlordMultiplier: 1,
         numBombs: 0,
-        friendIds: [],
+        selections: {},
       });
       setWerewolfValues({
         playerTeams: {},
@@ -350,25 +346,35 @@ export function GameViewPage() {
   }
 
   async function handleFightTheLandlordRoundSubmit() {
-    if (!landlordValues.landlordId) {
-      return;
-    }
-
     const currentGame = game;
 
     if (!currentGame) {
       return;
     }
 
+    const activePlayerIds = unlockedPlayers.map((player) =>
+      String(player.playerId),
+    );
+    const landlordSideSelections: string[] = [];
+    for (const player of unlockedPlayers) {
+      const count = landlordValues.selections[player.playerId] ?? 0;
+      for (let i = 0; i < count; i += 1) {
+        landlordSideSelections.push(String(player.playerId));
+      }
+    }
+
+    if (landlordSideSelections.length === 0) {
+      window.alert("Select at least one landlord-side selection.");
+      return;
+    }
+
     const result = calculateFightTheLandlordRound({
-      activePlayerIds: unlockedPlayers.map((player) => String(player.playerId)),
-      landlordId: landlordValues.landlordId,
-      landlordFriendIds: landlordValues.friendIds,
+      activePlayerIds,
+      landlordSideSelections,
       outcome: landlordValues.outcome,
       pointBasis: currentGame.pointBasis,
       numBombs: landlordValues.numBombs,
       gameMultiplier: landlordValues.gameMultiplier,
-      landlordMultiplier: landlordValues.landlordMultiplier,
     });
 
     const playerNameById = new Map(
@@ -391,11 +397,9 @@ export function GameViewPage() {
       metadata: {
         mode: "fight-the-landlord",
         outcome: landlordValues.outcome,
-        landlordId: Number(landlordValues.landlordId),
-        landlordFriendIds: landlordValues.friendIds.map((value) => Number(value)),
+        landlordSideSelections: landlordSideSelections.map((id) => Number(id)),
         numBombs: landlordValues.numBombs,
         gameMultiplier: landlordValues.gameMultiplier,
-        landlordMultiplier: landlordValues.landlordMultiplier,
       },
     });
   }
@@ -1031,61 +1035,84 @@ export function GameViewPage() {
                       <option value="lost">Landlord side lost</option>
                     </select>
                   </label>
-                  <label className="stack-xs">
-                    <span>Landlord</span>
-                    <select
-                      value={landlordValues.landlordId}
-                      onChange={(event) =>
-                        setLandlordValues((current) => ({
-                          ...current,
-                          landlordId: event.target.value,
-                          friendIds: current.friendIds.filter(
-                            (value) => value !== event.target.value,
-                          ),
-                        }))
-                      }
-                    >
-                      <option value="">Select landlord</option>
-                      {sortedUnlockedPlayers.map((player) => (
-                        <option key={player.playerId} value={player.playerId}>
-                          {player.displayName}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
                   <div className="stack-sm">
-                    <span>Landlord friends</span>
+                    <span>Landlord side (selections per player)</span>
                     <PlayerSortButtons
                       sortMode={unlockedSort}
                       onSortChange={setUnlockedSort}
                     />
-                    <div className="checkbox-list player-list-two-col">
-                      {sortedUnlockedPlayers
-                        .filter(
-                          (player) =>
-                            String(player.playerId) !== landlordValues.landlordId,
-                        )
-                        .map((player) => (
-                          <label key={player.playerId} className="checkbox-item">
-                            <input
-                              type="checkbox"
-                              checked={landlordValues.friendIds.includes(
-                                String(player.playerId),
-                              )}
-                              onChange={(event) =>
-                                setLandlordValues((current) => ({
-                                  ...current,
-                                  friendIds: event.target.checked
-                                    ? [...current.friendIds, String(player.playerId)]
-                                    : current.friendIds.filter(
-                                        (value) => value !== String(player.playerId),
-                                      ),
-                                }))
+                    <div className="player-list-two-col">
+                      {sortedUnlockedPlayers.map((player) => (
+                        <label key={player.playerId} className="stack-xs">
+                          <span>{player.displayName}</span>
+                          <div className="inline-actions point-input-row">
+                            <button
+                              type="button"
+                              className="icon-button"
+                              aria-label={`Decrease landlord side selections for ${player.displayName}`}
+                              onClick={() =>
+                                setLandlordValues((c) => {
+                                  const current =
+                                    c.selections[player.playerId] ?? 0;
+                                  const next = Math.max(0, current - 1);
+                                  return {
+                                    ...c,
+                                    selections: {
+                                      ...c.selections,
+                                      [player.playerId]: next,
+                                    },
+                                  };
+                                })
                               }
+                            >
+                              −
+                            </button>
+                            <input
+                              type="number"
+                              min="0"
+                              max="9"
+                              value={landlordValues.selections[player.playerId] ?? 0}
+                              onChange={(e) =>
+                                setLandlordValues((c) => {
+                                  const raw = parseInt(e.target.value, 10);
+                                  const next = Number.isNaN(raw)
+                                    ? 0
+                                    : Math.min(9, Math.max(0, raw));
+                                  return {
+                                    ...c,
+                                    selections: {
+                                      ...c.selections,
+                                      [player.playerId]: next,
+                                    },
+                                  };
+                                })
+                              }
+                              style={{ maxWidth: "3rem" }}
                             />
-                            <span>{player.displayName}</span>
-                          </label>
-                        ))}
+                            <button
+                              type="button"
+                              className="icon-button"
+                              aria-label={`Increase landlord side selections for ${player.displayName}`}
+                              onClick={() =>
+                                setLandlordValues((c) => {
+                                  const current =
+                                    c.selections[player.playerId] ?? 0;
+                                  const next = Math.min(9, current + 1);
+                                  return {
+                                    ...c,
+                                    selections: {
+                                      ...c.selections,
+                                      [player.playerId]: next,
+                                    },
+                                  };
+                                })
+                              }
+                            >
+                              +
+                            </button>
+                          </div>
+                        </label>
+                      ))}
                     </div>
                   </div>
                   <label className="stack-xs">
@@ -1126,54 +1153,6 @@ export function GameViewPage() {
                           setLandlordValues((c) => ({
                             ...c,
                             gameMultiplier: c.gameMultiplier + 1,
-                          }))
-                        }
-                      >
-                        +
-                      </button>
-                    </div>
-                  </label>
-                  <label className="stack-xs">
-                    <span>Landlord multiplier</span>
-                    <div className="inline-actions point-input-row">
-                      <button
-                        type="button"
-                        className="icon-button"
-                        aria-label="Decrease landlord multiplier"
-                        onClick={() =>
-                          setLandlordValues((c) => ({
-                            ...c,
-                            landlordMultiplier: Math.max(
-                              1,
-                              c.landlordMultiplier - 1,
-                            ),
-                          }))
-                        }
-                      >
-                        −
-                      </button>
-                      <input
-                        type="number"
-                        min="1"
-                        value={landlordValues.landlordMultiplier}
-                        onChange={(e) =>
-                          setLandlordValues((c) => ({
-                            ...c,
-                            landlordMultiplier: Math.max(
-                              1,
-                              parseInt(e.target.value, 10) || 1,
-                            ),
-                          }))
-                        }
-                      />
-                      <button
-                        type="button"
-                        className="icon-button"
-                        aria-label="Increase landlord multiplier"
-                        onClick={() =>
-                          setLandlordValues((c) => ({
-                            ...c,
-                            landlordMultiplier: c.landlordMultiplier + 1,
                           }))
                         }
                       >

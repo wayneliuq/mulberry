@@ -1,7 +1,7 @@
 import { calculateWerewolvesRound } from "./werewolves";
 
 describe("calculateWerewolvesRound", () => {
-  it("allocates pool from losers to winners and is zero-sum", () => {
+  it("allocates the full pool from losers to winners and is zero-sum", () => {
     const result = calculateWerewolvesRound({
       activePlayerIds: ["p1", "p2", "p3", "p4"],
       pointBasis: 10,
@@ -27,7 +27,7 @@ describe("calculateWerewolvesRound", () => {
     expect(byPlayer.get("p4")).toBeLessThan(0);
 
     const pool = 4 * 10;
-    const totalTransfer = pool * (1 / 4);
+    const totalTransfer = pool;
     const totalWon =
       (byPlayer.get("p1") ?? 0) +
       (byPlayer.get("p2") ?? 0) +
@@ -37,7 +37,7 @@ describe("calculateWerewolvesRound", () => {
     expect(totalLost).toBeCloseTo(totalTransfer);
   });
 
-  it("applies alive bonus: +3 per survivor, deducted equally from dead", () => {
+  it("applies survival pool: pointBasis shared among survivors, funded by dead", () => {
     const result = calculateWerewolvesRound({
       activePlayerIds: ["a", "b", "c", "d"],
       pointBasis: 1,
@@ -69,11 +69,19 @@ describe("calculateWerewolvesRound", () => {
 
     const survived = ["a", "c"];
     const dead = ["b", "d"];
-    const survivedSum = survived.reduce((s, id) => s + (byPlayer.get(id) ?? 0), 0);
+    const survivedSum = survived.reduce(
+      (s, id) => s + (byPlayer.get(id) ?? 0),
+      0,
+    );
     const deadSum = dead.reduce((s, id) => s + (byPlayer.get(id) ?? 0), 0);
-    expect(survivedSum).toBeGreaterThan(2);
-    expect(deadSum).toBeLessThan(-2);
+
+    // Survival layer should be zero-sum on its own.
     expect(survivedSum + deadSum).toBeCloseTo(0);
+
+    // With pointBasis = 1 and 2 survivors, each survivor should gain ~0.5
+    // from the survival layer, and each dead player lose ~0.5.
+    expect(survivedSum).toBeCloseTo(0.5 * survived.length, 1);
+    expect(deadSum).toBeCloseTo(-0.5 * dead.length, 1);
   });
 
   it("rounds each player score to 1 decimal", () => {

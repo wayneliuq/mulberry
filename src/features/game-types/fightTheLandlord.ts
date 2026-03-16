@@ -7,96 +7,100 @@ import type {
 
 const fightTheLandlordSchema = z.object({
   activePlayerIds: z.array(z.string().min(1)).min(3),
-  landlordId: z.string().min(1),
-  landlordFriendIds: z.array(z.string().min(1)),
+  landlordSideSelections: z.array(z.string().min(1)).min(1),
   outcome: z.enum(["won", "lost"]),
   pointBasis: z.int().positive(),
   numBombs: z.int().min(0),
   gameMultiplier: z.int().min(1),
-  landlordMultiplier: z.int().min(1),
 });
 
 export type FightTheLandlordRoundInput = z.infer<
   typeof fightTheLandlordSchema
 >;
 
-function distributeEvenly(total: number, playerIds: string[]) {
-  const share = total / playerIds.length;
-  return playerIds.map((playerId) => ({
-    playerId,
-    amount: share,
-  }));
-}
-
 export function calculateFightTheLandlordRound(
   input: FightTheLandlordRoundInput,
 ): RoundCalculationResult {
   const parsed = fightTheLandlordSchema.parse(input);
-  const friendIds = Array.from(
-    new Set(
-      parsed.landlordFriendIds.filter(
-        (playerId) => playerId !== parsed.landlordId,
-      ),
-    ),
-  );
-  const landlordSide = [parsed.landlordId, ...friendIds];
-  const landlordSideSet = new Set(landlordSide);
-  const opposingSide = parsed.activePlayerIds.filter(
-    (playerId) => !landlordSideSet.has(playerId),
+
+  const { activePlayerIds, landlordSideSelections } = parsed;
+
+  // Build landlord-side membership and selection counts
+  const landlordSelectionCounts = new Map<string, number>();
+  for (const playerId of landlordSideSelections) {
+    landlordSelectionCounts.set(
+      playerId,
+      (landlordSelectionCounts.get(playerId) ?? 0) + 1,
+    );
+  }
+
+  const landlordSidePlayers = new Set(landlordSelectionCounts.keys());
+
+  const opposingSide = activePlayerIds.filter(
+    (playerId) => !landlordSidePlayers.has(playerId),
   );
 
   if (opposingSide.length === 0) {
     throw new Error("Fight the Landlord requires at least one opposing player.");
   }
 
-  const basePoints = parsed.pointBasis * parsed.numBombs;
+  const landlordPointsBase =
+    parsed.pointBasis * parsed.gameMultiplier * (parsed.numBombs + 1);
   const landlordPoints =
-    basePoints * parsed.gameMultiplier * parsed.landlordMultiplier;
-  const friendPoints = basePoints * parsed.gameMultiplier;
+    parsed.outcome === "won" ? landlordPointsBase : -landlordPointsBase;
 
-  const winners = parsed.outcome === "won" ? landlordSide : opposingSide;
-  const losers = parsed.outcome === "won" ? opposingSide : landlordSide;
+  const totalSelections = landlordSideSelections.length;
+  const totalLandlordSidePoints = landlordPoints * totalSelections;
 
-  const winnerEntries: PointEntry[] =
-    parsed.outcome === "won"
-      ? [
-          { playerId: parsed.landlordId, pointDelta: landlordPoints },
-          ...friendIds.map((playerId) => ({
-              playerId,
-              pointDelta: friendPoints,
-            })),
-        ]
-      : distributeEvenly(
-          landlordPoints + friendPoints * friendIds.length,
-          winners,
-        ).map((entry) => ({
-          playerId: entry.playerId,
-          pointDelta: entry.amount,
-        }));
+  const entriesByPlayer = new Map<string, number>();
+  for (const playerId of activePlayerIds) {
+    entriesByPlayer.set(playerId, 0);
+  }
 
-  const totalWinnerPoints = winnerEntries.reduce(
-    (sum, entry) => sum + entry.pointDelta,
-    0,
-  );
+  if (parsed.outcome === "won") {
+    // Landlord side gains, opposing side loses evenly.
+    for (const [playerId, count] of landlordSelectionCounts) {
+      const current = entriesByPlayer.get(playerId) ?? 0;
+      entriesByPlayer.set(playerId, current + landlordPoints * count);
+    }
 
-  const loserEntries = distributeEvenly(totalWinnerPoints, losers).map(
-    (entry) => ({
-      playerId: entry.playerId,
-      pointDelta: -entry.amount,
-    }),
-  );
+    const totalWinnerPoints = totalLandlordSidePoints;
+    const loserCount = opposingSide.length;
+    const lossPerLoser = totalWinnerPoints / loserCount;
 
-  const entries = [...winnerEntries, ...loserEntries].sort((left, right) =>
-    parsed.activePlayerIds.indexOf(String(left.playerId)) -
-    parsed.activePlayerIds.indexOf(String(right.playerId)),
-  );
+    for (const playerId of opposingSide) {
+      const current = entriesByPlayer.get(playerId) ?? 0;
+      entriesByPlayer.set(playerId, current - lossPerLoser);
+    }
+  } else {
+    // Landlord side loses, opposing side gains evenly.
+    for (const [playerId, count] of landlordSelectionCounts) {
+      const current = entriesByPlayer.get(playerId) ?? 0;
+      entriesByPlayer.set(playerId, current + landlordPoints * count);
+    }
+
+    const totalLoss = Math.abs(totalLandlordSidePoints);
+    const winnerCount = opposingSide.length;
+    const gainPerWinner = totalLoss / winnerCount;
+
+    for (const playerId of opposingSide) {
+      const current = entriesByPlayer.get(playerId) ?? 0;
+      entriesByPlayer.set(playerId, current + gainPerWinner);
+    }
+  }
+
+  const entries: PointEntry[] = activePlayerIds.map((playerId) => ({
+    playerId,
+    pointDelta: entriesByPlayer.get(playerId) ?? 0,
+  }));
+
   const total = entries.reduce((sum, entry) => sum + entry.pointDelta, 0);
 
   return {
     entries,
     total,
     isZeroSum: Math.abs(total) < 0.01,
-    summary: `${parsed.outcome === "won" ? "Landlord side won" : "Landlord side lost"} with ${parsed.numBombs} bombs, ${parsed.gameMultiplier}x game, ${parsed.landlordMultiplier}x landlord.`,
+    summary: `${parsed.outcome === "won" ? "Landlord side won" : "Landlord side lost"} with ${parsed.numBombs} bombs, ${parsed.gameMultiplier}x game, ${totalSelections} landlord-side selections.`,
   };
 }
 

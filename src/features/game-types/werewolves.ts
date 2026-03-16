@@ -66,7 +66,8 @@ export function calculateWerewolvesRound(
     entriesByPlayer.set(pid, 0);
   }
 
-  const totalTransfer = (pool * L) / T;
+  // Team outcome transfer: full pool moves from losers to winners
+  const totalTransfer = pool;
   const perWinner = totalTransfer / W;
   const perLoser = totalTransfer / L;
 
@@ -77,13 +78,15 @@ export function calculateWerewolvesRound(
     entriesByPlayer.set(pid, roundTo1Decimal(-perLoser));
   }
 
-  const aliveCount = parsed.activePlayerIds.filter((id) =>
-    survivedSet.has(id),
-  ).length;
+  const aliveCount = parsed.activePlayerIds.filter((id) => survivedSet.has(id))
+    .length;
   const deadCount = T - aliveCount;
   if (aliveCount > 0 && deadCount > 0) {
-    const bonusPerAlive = 3;
-    const deductionPerDead = (bonusPerAlive * aliveCount) / deadCount;
+    // Survival layer: fixed pool of pointBasis shared by survivors,
+    // funded evenly by dead players.
+    const totalAliveBonus = parsed.pointBasis;
+    const bonusPerAlive = totalAliveBonus / aliveCount;
+    const deductionPerDead = totalAliveBonus / deadCount;
     for (const pid of parsed.activePlayerIds) {
       const current = entriesByPlayer.get(pid) ?? 0;
       if (survivedSet.has(pid)) {
