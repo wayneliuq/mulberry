@@ -88,7 +88,6 @@ describe("calculateFightTheLandlordRound", () => {
 
   it("requires at least one landlord-side selection", () => {
     expect(() =>
-      // @ts-expect-error testing validation
       calculateFightTheLandlordRound({
         activePlayerIds: ["A", "B", "C"],
         landlordSideSelections: [],
