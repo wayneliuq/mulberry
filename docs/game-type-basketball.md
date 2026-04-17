@@ -1,6 +1,6 @@
-## Basketball (OpenSkill) – Points & Rounds
+## Basketball – Points & Rounds
 
-This document explains **how points are calculated** for the `Basketball (OpenSkill)` game type.
+This document explains **how points are calculated** for the **Basketball** game type (OpenSkill-backed rating).
 
 Each Mulberry **round** is one pickup game to a target score (for example 11 with 1s and 2s, or 21 with 2s and 3s). Players can be on different teams in different rounds; there is no bench—every **unlocked** player in the game is on **exactly one** of two teams for that round.
 

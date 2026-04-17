@@ -183,7 +183,7 @@ export function calculateBasketballRound(
 
 export const basketballGameType: GameTypeDefinition<BasketballRoundInput> = {
   id: "basketball",
-  name: "Basketball (OpenSkill)",
+  name: "Basketball",
   icon: "basketball",
   calculateRound: calculateBasketballRound,
 };
