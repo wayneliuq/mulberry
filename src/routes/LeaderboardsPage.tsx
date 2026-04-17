@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { gameTypeOptions } from "../features/game-types";
+import type { GameTypeId } from "../features/game-types/types";
 import { fetchLeaderboards } from "../lib/api/read";
 import { formatMoneyCents, formatPoints } from "../lib/format";
 import type {
@@ -48,9 +49,9 @@ function SortableTh({
 }
 
 export function LeaderboardsPage() {
-  const [selectedGameType, setSelectedGameType] = useState<
-    "all" | "texas-holdem" | "fight-the-landlord" | "werewolves"
-  >("all");
+  const [selectedGameType, setSelectedGameType] = useState<GameTypeId | "all">(
+    "all",
+  );
   const [playerSort, setPlayerSort] = useState<{
     column: SortColumn;
     dir: SortDir;

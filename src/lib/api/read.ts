@@ -368,7 +368,8 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
   if (
     game.game_type_id !== "texas-holdem" &&
     game.game_type_id !== "fight-the-landlord" &&
-    game.game_type_id !== "werewolves"
+    game.game_type_id !== "werewolves" &&
+    game.game_type_id !== "dixit"
   ) {
     throw new Error("Unsupported game type");
   }

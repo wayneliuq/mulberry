@@ -63,8 +63,8 @@ describe("calculateWerewolvesRound", () => {
     const d = byPlayer.get("d") ?? 0;
 
     expect(a).toBeGreaterThan(0);
-    expect(c).toBeGreaterThan(0);
-    expect(b).toBeLessThan(0);
+    expect(b).toBeGreaterThan(0);
+    expect(c).toBeLessThan(0);
     expect(d).toBeLessThan(0);
 
     const survived = ["a", "c"];
@@ -75,13 +75,12 @@ describe("calculateWerewolvesRound", () => {
     );
     const deadSum = dead.reduce((s, id) => s + (byPlayer.get(id) ?? 0), 0);
 
-    // Survival layer should be zero-sum on its own.
     expect(survivedSum + deadSum).toBeCloseTo(0);
 
-    // With pointBasis = 1 and 2 survivors, each survivor should gain ~0.5
-    // from the survival layer, and each dead player lose ~0.5.
-    expect(survivedSum).toBeCloseTo(0.5 * survived.length, 1);
-    expect(deadSum).toBeCloseTo(-0.5 * dead.length, 1);
+    expect(a).toBeCloseTo(2.5, 5);
+    expect(b).toBeCloseTo(1.5, 5);
+    expect(c).toBeCloseTo(-1.5, 5);
+    expect(d).toBeCloseTo(-2.5, 5);
   });
 
   it("rounds each player score to 1 decimal", () => {

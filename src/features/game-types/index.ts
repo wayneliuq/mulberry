@@ -1,3 +1,4 @@
+import { dixitGameType, type DixitRoundInput } from "./dixit";
 import {
   fightTheLandlordGameType,
   type FightTheLandlordRoundInput,
@@ -16,6 +17,7 @@ export const gameTypes = [
   texasHoldemGameType,
   fightTheLandlordGameType,
   werewolvesGameType,
+  dixitGameType,
 ] as const;
 
 export const gameTypeOptions = gameTypes.map((gameType) => ({
@@ -28,6 +30,7 @@ export type GameTypeRoundInputMap = {
   "texas-holdem": TexasHoldemRoundInput;
   "fight-the-landlord": FightTheLandlordRoundInput;
   werewolves: WerewolvesRoundInput;
+  dixit: DixitRoundInput;
 };
 
 export function getGameTypeOption(gameTypeId: GameTypeId) {

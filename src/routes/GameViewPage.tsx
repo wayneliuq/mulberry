@@ -12,7 +12,9 @@ import {
 } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { useAdminSession } from "../features/admin/AdminSessionContext";
+import { calculateDixitRound } from "../features/game-types/dixit";
 import { calculateFightTheLandlordRound } from "../features/game-types/fightTheLandlord";
+import { getGameTypeOption } from "../features/game-types";
 import { calculateTexasHoldemRound } from "../features/game-types/texasHoldem";
 import {
   type WerewolfTeamId,
@@ -49,6 +51,9 @@ export function GameViewPage() {
     moneyPerPointCents: "20",
   });
   const [texasPointInputs, setTexasPointInputs] = useState<Record<number, string>>(
+    {},
+  );
+  const [dixitPointInputs, setDixitPointInputs] = useState<Record<number, string>>(
     {},
   );
   const [landlordValues, setLandlordValues] = useState({
@@ -152,7 +157,10 @@ export function GameViewPage() {
         password: requireAdminPassword(),
         gameId,
         displayName: settingsValues.displayName,
-        pointBasis: Number(settingsValues.pointBasis),
+        pointBasis:
+          game?.gameTypeId === "dixit"
+            ? 1
+            : Number(settingsValues.pointBasis),
         moneyPerPointCents: Number(settingsValues.moneyPerPointCents),
       }),
     onSuccess: async () => {
@@ -216,6 +224,7 @@ export function GameViewPage() {
     onSuccess: async () => {
       setShowRoundForm(false);
       setTexasPointInputs({});
+      setDixitPointInputs({});
       setLandlordValues({
         outcome: "won",
         gameMultiplier: 1,
@@ -341,6 +350,41 @@ export function GameViewPage() {
       summaryText,
       metadata: {
         mode: "texas-holdem",
+      },
+    });
+  }
+
+  async function handleDixitRoundSubmit() {
+    const entries = unlockedPlayers.map((player) => ({
+      playerId: player.playerId,
+      pointDelta: clampToTwoDecimals(
+        Number(dixitPointInputs[player.playerId] ?? 0),
+      ),
+      joinOrder: player.joinOrder,
+    }));
+    const result = calculateDixitRound({ entries });
+    const outbound = result.entries.map((entry) => ({
+      playerId: Number(entry.playerId),
+      pointDelta: clampToTwoDecimals(entry.pointDelta),
+    }));
+    const byPlayerId = new Map(
+      outbound.map((entry) => [entry.playerId, entry.pointDelta]),
+    );
+    const summaryText = [...unlockedPlayers]
+      .sort((a, b) => a.joinOrder - b.joinOrder)
+      .map((player) => {
+        const pointDelta = byPlayerId.get(player.playerId) ?? 0;
+        const rounded = clampToTwoDecimals(pointDelta);
+        return `${player.displayName} ${rounded > 0 ? "+" : ""}${rounded}`;
+      })
+      .join(", ");
+
+    await createRoundMutation.mutateAsync({
+      entries: outbound,
+      summaryText,
+      metadata: {
+        mode: "dixit",
+        rawEntries: entries,
       },
     });
   }
@@ -479,7 +523,8 @@ export function GameViewPage() {
     });
   }
 
-  const pointStep = game?.pointBasis ?? 1;
+  const pointStep =
+    game?.gameTypeId === "dixit" ? 0.01 : (game?.pointBasis ?? 1);
 
   function adjustPointInput(
     _current: Record<number, string>,
@@ -511,7 +556,11 @@ export function GameViewPage() {
             <p className="card-eyebrow">Game view</p>
             <h2>{game.displayName}</h2>
             <p className="muted">
-              {game.gameTypeId} · point basis {game.pointBasis} ·{" "}
+              {getGameTypeOption(game.gameTypeId)?.name ?? game.gameTypeId}
+              {game.gameTypeId !== "dixit" ? (
+                <> · point basis {game.pointBasis}</>
+              ) : null}
+              {" · "}
               {formatMoneyCents(game.moneyPerPointCents)} per point
             </p>
           </div>
@@ -565,21 +614,23 @@ export function GameViewPage() {
               />
             </label>
             <div className="form-grid">
-              <label className="stack-xs">
-                <span>Point basis</span>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={settingsValues.pointBasis}
-                  onChange={(event) =>
-                    setSettingsValues((current) => ({
-                      ...current,
-                      pointBasis: event.target.value,
-                    }))
-                  }
-                />
-              </label>
+              {game.gameTypeId !== "dixit" ? (
+                <label className="stack-xs">
+                  <span>Point basis</span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={settingsValues.pointBasis}
+                    onChange={(event) =>
+                      setSettingsValues((current) => ({
+                        ...current,
+                        pointBasis: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              ) : null}
               <label className="stack-xs">
                 <span>Money per point (cents)</span>
                 <input
@@ -720,7 +771,9 @@ export function GameViewPage() {
                 ? "Texas Hold'em round"
                 : game.gameTypeId === "werewolves"
                   ? "Werewolves round"
-                  : "Fight the Landlord round"}
+                  : game.gameTypeId === "dixit"
+                    ? "Dixit round"
+                    : "Fight the Landlord round"}
             </strong>
 
             {game.gameTypeId === "werewolves" &&
@@ -778,6 +831,82 @@ export function GameViewPage() {
                           adjustPointInput(
                             texasPointInputs,
                             setTexasPointInputs,
+                            player.playerId,
+                            pointStep,
+                          )
+                        }
+                      >
+                        +
+                      </button>
+                    </div>
+                  </label>
+                ))}
+                {createRoundMutation.error ? (
+                  <p className="form-error">{createRoundMutation.error.message}</p>
+                ) : null}
+                <div className="inline-actions">
+                  <button type="submit" className="primary-button">
+                    Save round
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setShowRoundForm(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : game.gameTypeId === "dixit" ? (
+              <form
+                className="stack-sm"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleDixitRoundSubmit();
+                }}
+              >
+                <p className="muted">
+                  Enter raw scores; saved points are adjusted so the round sums to
+                  zero.
+                </p>
+                {sortedUnlockedPlayers.map((player) => (
+                  <label key={player.playerId} className="stack-xs">
+                    <span>{player.displayName}</span>
+                    <div className="inline-actions point-input-row">
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label={`Decrease ${player.displayName} by ${pointStep}`}
+                        onClick={() =>
+                          adjustPointInput(
+                            dixitPointInputs,
+                            setDixitPointInputs,
+                            player.playerId,
+                            -pointStep,
+                          )
+                        }
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={dixitPointInputs[player.playerId] ?? "0"}
+                        onChange={(event) =>
+                          setDixitPointInputs((current) => ({
+                            ...current,
+                            [player.playerId]: event.target.value,
+                          }))
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label={`Increase ${player.displayName} by ${pointStep}`}
+                        onClick={() =>
+                          adjustPointInput(
+                            dixitPointInputs,
+                            setDixitPointInputs,
                             player.playerId,
                             pointStep,
                           )

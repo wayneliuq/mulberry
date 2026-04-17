@@ -14,6 +14,7 @@ import {
 } from "@tanstack/react-query";
 import { useAdminSession } from "../features/admin/AdminSessionContext";
 import { gameTypeOptions, getGameTypeOption } from "../features/game-types";
+import type { GameTypeId } from "../features/game-types/types";
 import { adminWrite } from "../lib/api/admin";
 import { fetchGames } from "../lib/api/read";
 import { formatRelativeDate } from "../lib/format";
@@ -32,9 +33,9 @@ export function GamesPage() {
   } =
     useAdminSession();
   const [passwordInput, setPasswordInput] = useState("");
-  const [selectedGameType, setSelectedGameType] = useState<
-    "all" | "texas-holdem" | "fight-the-landlord" | "werewolves"
-  >("all");
+  const [selectedGameType, setSelectedGameType] = useState<GameTypeId | "all">(
+    "all",
+  );
   const [createFormOpen, setCreateFormOpen] = useState(false);
   const [createGameValues, setCreateGameValues] = useState({
     gameTypeId: "texas-holdem",
@@ -66,8 +67,11 @@ export function GamesPage() {
       >({
         action: "create_game",
         password,
-        gameTypeId: createGameValues.gameTypeId as "texas-holdem" | "fight-the-landlord" | "werewolves",
-        pointBasis: Number(createGameValues.pointBasis),
+        gameTypeId: createGameValues.gameTypeId as GameTypeId,
+        pointBasis:
+          createGameValues.gameTypeId === "dixit"
+            ? 1
+            : Number(createGameValues.pointBasis),
         moneyPerPointCents: Number(createGameValues.moneyPerPointCents),
         displayName: createGameValues.displayName.trim() || undefined,
       });
@@ -225,12 +229,14 @@ export function GamesPage() {
               <span>Game type</span>
               <select
                 value={createGameValues.gameTypeId}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const gameTypeId = event.target.value as GameTypeId;
                   setCreateGameValues((current) => ({
                     ...current,
-                    gameTypeId: event.target.value,
-                  }))
-                }
+                    gameTypeId,
+                    pointBasis: gameTypeId === "dixit" ? "1" : current.pointBasis,
+                  }));
+                }}
               >
                 {gameTypeOptions.map((option) => (
                   <option key={option.id} value={option.id}>
@@ -256,21 +262,23 @@ export function GamesPage() {
             </label>
 
             <div className="form-grid">
-              <label className="stack-xs">
-                <span>Point basis</span>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={createGameValues.pointBasis}
-                  onChange={(event) =>
-                    setCreateGameValues((current) => ({
-                      ...current,
-                      pointBasis: event.target.value,
-                    }))
-                  }
-                />
-              </label>
+              {createGameValues.gameTypeId !== "dixit" ? (
+                <label className="stack-xs">
+                  <span>Point basis</span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={createGameValues.pointBasis}
+                    onChange={(event) =>
+                      setCreateGameValues((current) => ({
+                        ...current,
+                        pointBasis: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              ) : null}
 
               <label className="stack-xs">
                 <span>Money per point (cents)</span>
