@@ -866,8 +866,9 @@ export function GameViewPage() {
                 }}
               >
                 <p className="muted">
-                  Enter raw scores; saved points are adjusted so the round sums to
-                  zero.
+                  Enter raw scores. Saved points remove the per-player mean, scale by
+                  (highest minus lowest raw score) divided by 10, then round so the
+                  round still sums to zero.
                 </p>
                 {sortedUnlockedPlayers.map((player) => (
                   <label key={player.playerId} className="stack-xs">

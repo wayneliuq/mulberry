@@ -21,7 +21,7 @@ describe("calculateDixitRound", () => {
     expect(result.isZeroSum).toBe(true);
   });
 
-  it("distributes a two-player imbalance", () => {
+  it("distributes a two-player imbalance and scales by (max−min)/10", () => {
     const result = calculateDixitRound({
       entries: [
         { playerId: 1, pointDelta: 1, joinOrder: 1 },
@@ -29,8 +29,8 @@ describe("calculateDixitRound", () => {
       ],
     });
     expectZeroSum(result.entries);
-    expect(result.entries.find((e) => e.playerId === 1)?.pointDelta).toBe(0.5);
-    expect(result.entries.find((e) => e.playerId === 2)?.pointDelta).toBe(-0.5);
+    expect(result.entries.find((e) => e.playerId === 1)?.pointDelta).toBe(0.05);
+    expect(result.entries.find((e) => e.playerId === 2)?.pointDelta).toBe(-0.05);
   });
 
   it("applies residual correction on lowest join order", () => {
@@ -61,6 +61,20 @@ describe("calculateDixitRound", () => {
     expect(result.entries.every((e) => e.pointDelta === 0)).toBe(true);
   });
 
+  it("uses raw score spread for the scale factor (differs from adjusted spread)", () => {
+    const result = calculateDixitRound({
+      entries: [
+        { playerId: 1, pointDelta: 5, joinOrder: 1 },
+        { playerId: 2, pointDelta: 0, joinOrder: 2 },
+        { playerId: 3, pointDelta: 0, joinOrder: 3 },
+      ],
+    });
+    expectZeroSum(result.entries);
+    expect(result.entries.find((e) => e.playerId === 1)?.pointDelta).toBe(1.66);
+    expect(result.entries.find((e) => e.playerId === 2)?.pointDelta).toBe(-0.83);
+    expect(result.entries.find((e) => e.playerId === 3)?.pointDelta).toBe(-0.83);
+  });
+
   it("handles a negative raw total", () => {
     const result = calculateDixitRound({
       entries: [
@@ -70,8 +84,8 @@ describe("calculateDixitRound", () => {
       ],
     });
     expectZeroSum(result.entries);
-    expect(result.entries.find((e) => e.playerId === 1)?.pointDelta).toBe(-2);
-    expect(result.entries.find((e) => e.playerId === 2)?.pointDelta).toBe(1);
-    expect(result.entries.find((e) => e.playerId === 3)?.pointDelta).toBe(1);
+    expect(result.entries.find((e) => e.playerId === 1)?.pointDelta).toBe(-0.6);
+    expect(result.entries.find((e) => e.playerId === 2)?.pointDelta).toBe(0.3);
+    expect(result.entries.find((e) => e.playerId === 3)?.pointDelta).toBe(0.3);
   });
 });

@@ -43,6 +43,11 @@ export function calculateDixitRound(
     pointDelta: round2(e.pointDelta),
   }));
 
+  const rawValues = rawClamped.map((e) => e.pointDelta);
+  const maxRaw = Math.max(...rawValues);
+  const minRaw = Math.min(...rawValues);
+  const correctionFactor = (maxRaw - minRaw) / 10;
+
   const S = rawClamped.reduce((sum, e) => sum + e.pointDelta, 0);
   const adjustment = S / n;
 
@@ -55,11 +60,18 @@ export function calculateDixitRound(
     i === 0 ? round2(d + fix) : d,
   );
 
-  const total = round2(adjusted.reduce((sum, d) => sum + d, 0));
+  const scaledRounded = adjusted.map((d) => round2(d * correctionFactor));
+  const sumScaled = round2(scaledRounded.reduce((sum, d) => sum + d, 0));
+  const fixScaled = round2(-sumScaled);
+  const finalDeltas = scaledRounded.map((d, i) =>
+    i === 0 ? round2(d + fixScaled) : d,
+  );
+
+  const total = round2(finalDeltas.reduce((sum, d) => sum + d, 0));
 
   const entries: PointEntry[] = rawClamped.map((e, i) => ({
     playerId: e.playerId,
-    pointDelta: adjusted[i]!,
+    pointDelta: finalDeltas[i]!,
   }));
 
   return {
