@@ -2,7 +2,8 @@ export type GameTypeId =
   | "texas-holdem"
   | "fight-the-landlord"
   | "werewolves"
-  | "dixit";
+  | "dixit"
+  | "basketball";
 
 export type PointEntry = {
   playerId: string | number;

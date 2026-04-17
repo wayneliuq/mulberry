@@ -69,7 +69,8 @@ export function GamesPage() {
         password,
         gameTypeId: createGameValues.gameTypeId as GameTypeId,
         pointBasis:
-          createGameValues.gameTypeId === "dixit"
+          createGameValues.gameTypeId === "dixit" ||
+          createGameValues.gameTypeId === "basketball"
             ? 1
             : Number(createGameValues.pointBasis),
         moneyPerPointCents: Number(createGameValues.moneyPerPointCents),
@@ -234,7 +235,10 @@ export function GamesPage() {
                   setCreateGameValues((current) => ({
                     ...current,
                     gameTypeId,
-                    pointBasis: gameTypeId === "dixit" ? "1" : current.pointBasis,
+                    pointBasis:
+                      gameTypeId === "dixit" || gameTypeId === "basketball"
+                        ? "1"
+                        : current.pointBasis,
                   }));
                 }}
               >
@@ -262,7 +266,8 @@ export function GamesPage() {
             </label>
 
             <div className="form-grid">
-              {createGameValues.gameTypeId !== "dixit" ? (
+              {createGameValues.gameTypeId !== "dixit" &&
+              createGameValues.gameTypeId !== "basketball" ? (
                 <label className="stack-xs">
                   <span>Point basis</span>
                   <input

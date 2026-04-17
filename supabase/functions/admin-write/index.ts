@@ -43,6 +43,7 @@ const actionSchema = z.discriminatedUnion("action", [
       "fight-the-landlord",
       "werewolves",
       "dixit",
+      "basketball",
     ]),
     pointBasis: z.number().int().min(1),
     moneyPerPointCents: z.number().int().min(0),
@@ -89,6 +90,7 @@ const actionSchema = z.discriminatedUnion("action", [
       "fight-the-landlord",
       "werewolves",
       "dixit",
+      "basketball",
     ]),
     summaryText: z.string().trim().min(1),
     metadata: z.record(z.string(), z.unknown()).optional(),
@@ -137,7 +139,12 @@ type GamePlayerRow = {
 
 type GameRow = {
   id: string;
-  game_type_id: "texas-holdem" | "fight-the-landlord" | "werewolves" | "dixit";
+  game_type_id:
+    | "texas-holdem"
+    | "fight-the-landlord"
+    | "werewolves"
+    | "dixit"
+    | "basketball";
   display_name: string;
   point_basis: number;
   money_per_point_cents: number;
@@ -164,7 +171,9 @@ function formatDefaultGameName(gameTypeId: string) {
         ? "Werewolves"
         : gameTypeId === "dixit"
           ? "Dixit"
-          : "Texas Hold'em";
+          : gameTypeId === "basketball"
+            ? "Basketball"
+            : "Texas Hold'em";
 
   return `${gameTypeName} on ${date}`;
 }
@@ -432,7 +441,9 @@ async function handleCreateGame(
     action.displayName?.trim() || formatDefaultGameName(action.gameTypeId);
 
   const pointBasis =
-    action.gameTypeId === "dixit" ? 1 : action.pointBasis;
+    action.gameTypeId === "dixit" || action.gameTypeId === "basketball"
+      ? 1
+      : action.pointBasis;
 
   const { data, error } = await supabase
     .from("games")
@@ -529,7 +540,10 @@ async function handleUpdateGameSettings(
     throw new Error("Cannot edit settings after settlement. Undo settlement first.");
   }
 
-  const pointBasis = game.game_type_id === "dixit" ? 1 : action.pointBasis;
+  const pointBasis =
+    game.game_type_id === "dixit" || game.game_type_id === "basketball"
+      ? 1
+      : action.pointBasis;
 
   const { data, error } = await supabase
     .from("games")

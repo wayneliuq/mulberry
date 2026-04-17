@@ -54,6 +54,8 @@ export type RoundSummary = {
   roundNumber: number;
   createdAt: string;
   summaryText: string;
+  /** Stored on each round for reproducible game-type calculations (e.g. basketball rosters). */
+  settingsSnapshot?: Record<string, unknown>;
   entries: RoundEntrySummary[];
 };
 

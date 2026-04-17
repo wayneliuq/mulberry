@@ -48,9 +48,9 @@ Let:
 
 The **pool** for the round is:
 
-\[
+
 \text{pool} = T \times \text{pointBasis}
-\]
+
 
 This pool drives the amount transferred from losers to winners.
 
@@ -65,20 +65,17 @@ Let:
 
 The total value that transfers based on team outcome is:
 
-\[
+
 \text{totalTransfer} = \text{pool}
-\]
+
 
 From this, the **per-player base amounts** are:
 
 - For each winner:
-
   \[
   \text{baseWinner} = \frac{\text{totalTransfer}}{W}
   \]
-
 - For each loser:
-
   \[
   \text{baseLoser} = \frac{\text{totalTransfer}}{L}
   \]
@@ -106,11 +103,9 @@ If both `aliveCount > 0` and `deadCount > 0`, a survival layer is applied:
 - Define a **survival pool** based on the scoring parameter:
   - `totalAliveBonus = pointBasis`.
 - The per-survivor bonus is:
-
   \[
   \text{bonusPerAlive} = \frac{\text{totalAliveBonus}}{\text{aliveCount}}
   \]
-
 - This is funded entirely by the dead players:
   - `deductionPerDead = totalAliveBonus / deadCount`
 
@@ -140,11 +135,9 @@ we have a provisional set of entries:
 The engine then:
 
 - Computes the total:
-
   \[
   \text{total} = \sum\_{\text{players}} \text{pointDelta}
   \]
-
 - If `|total| > 0.01` and there is at least one entry:
   - Adjusts the **first** player in `activePlayerIds` by subtracting this residual:
     - New value is re-rounded to **1 decimal place**.

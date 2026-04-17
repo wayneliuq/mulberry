@@ -47,9 +47,7 @@ From the game settings and round details:
 
 - Define:
 
-  \[
-  \text{landlordPoints} = \text{pointBasis} \times \text{gameMultiplier} \times (\text{numBombs} + 1)
-  \]
+\text{landlordPoints} = \text{pointBasis} \times \text{gameMultiplier} \times (\text{numBombs} + 1)
 
 - Sign convention:
   - If `outcome = "won"`, `landlordPoints` is treated as **positive** (gains for landlord-side players).
@@ -62,13 +60,11 @@ These are the **raw per-selection amounts** applied to landlord-side players.
 Let:
 
 - `S` = total number of selections in the landlord side  
-  (i.e. `S = landlordSideSelections.length`).
+(i.e. `S = landlordSideSelections.length`).
 
 Total points at stake for the landlord side, if they win or lose, is:
 
-\[
 \text{totalLandlordSidePoints} = \text{landlordPoints} \times S
-\]
 
 This quantity is what ultimately transfers between the landlord side and the opposing side (including sign).
 
@@ -88,16 +84,12 @@ For each landlord-side player `p`:
 - Let `count(p)` be the number of times `p` appears in `landlordSideSelections`.
 - Player `p` receives:
 
-\[
 \text{pointDelta}(p) = \text{landlordPoints} \times \text{count}(p)
-\]
 
 Total winner points:
 
-\[
 \text{totalWinnerPoints}
   = \text{landlordPoints} \times S
-\]
 
 #### Loser entries
 
@@ -106,9 +98,7 @@ The **opposing side** shares the loss **evenly**:
 - Let `L` = number of opposing players.
 - Each opposing player `q` gets:
 
-\[
 \text{pointDelta}(q) = -\frac{\text{totalWinnerPoints}}{L}
-\]
 
 All point deltas are stored as decimals (up to 2 decimal places in practice).
 
@@ -128,15 +118,11 @@ For each landlord-side player `p`:
 - Let `count(p)` be the number of times `p` appears in `landlordSideSelections`.
 - Since `landlordPoints` is negative in this case, player `p` receives:
 
-\[
 \text{pointDelta}(p) = \text{landlordPoints} \times \text{count}(p)
-\]
 
 The sum of all landlord-side deltas is:
 
-\[
 \text{totalLandlordSidePoints} = \text{landlordPoints} \times S
-\]
 
 This value will be **negative**, representing the total amount they collectively lose.
 
@@ -147,9 +133,7 @@ The **entire** landlord-side loss in absolute value is paid out evenly to winner
 - Let `W` = number of opposing players.
 - Each opposing player `q` gets:
 
-\[
 \text{pointDelta}(q) = +\frac{|\text{totalLandlordSidePoints}|}{W}
-\]
 
 Again, values are stored as decimals with up to two decimal places.
 
@@ -162,9 +146,7 @@ After all entries are computed:
 - Entries are **sorted** to follow the order of `activePlayerIds`.
 - The round total is:
 
-\[
-\text{total} = \sum\_{\text{entries}} \text{pointDelta}
-\]
+\text{total} = \sum{\text{entries}} \text{pointDelta}
 
 - The implementation treats the round as **zero-sum** if:
   - `Math.abs(total) < 0.01`
@@ -186,4 +168,3 @@ This allows for minor floating-point rounding differences while still enforcing 
   - The opposing side shares the total gain equally.
 
 This structure keeps every round **fair, symmetric, and zero-sum**, while making a player’s exposure proportional to how many times they are selected into the landlord side.
-

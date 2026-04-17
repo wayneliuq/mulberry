@@ -59,6 +59,7 @@ type RawRound = {
   round_number: number;
   summary_text: string | null;
   created_at: string;
+  settings_snapshot: Record<string, unknown> | null;
 };
 
 type RawRoundEntry = {
@@ -353,7 +354,7 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
       .eq("game_id", gameId),
     supabase
       .from("rounds")
-      .select("id, round_number, summary_text, created_at")
+      .select("id, round_number, summary_text, created_at, settings_snapshot")
       .eq("game_id", gameId)
       .order("round_number", { ascending: false }),
     supabase
@@ -369,7 +370,8 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
     game.game_type_id !== "texas-holdem" &&
     game.game_type_id !== "fight-the-landlord" &&
     game.game_type_id !== "werewolves" &&
-    game.game_type_id !== "dixit"
+    game.game_type_id !== "dixit" &&
+    game.game_type_id !== "basketball"
   ) {
     throw new Error("Unsupported game type");
   }
@@ -442,6 +444,7 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
       roundNumber: round.round_number,
       createdAt: round.created_at,
       summaryText: round.summary_text ?? `Round ${round.round_number}`,
+      settingsSnapshot: round.settings_snapshot ?? undefined,
       entries:
         roundEntriesByRoundId
           .get(round.id)

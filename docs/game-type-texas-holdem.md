@@ -36,9 +36,7 @@ There is **no additional computation** or redistribution layer beyond what is en
 
 - The round total is:
 
-  \[
-  \text{roundTotal} = \sum\_{\text{players } p} \text{delta}(p)
-  \]
+\text{roundTotal} = \sum{\text{players } p} \text{delta}(p)
 
 - The game engine reports:
   - `total = roundTotal`
@@ -78,4 +76,3 @@ Texas Hold'em is appropriate when:
 - You want the scoring system to **record**, not **derive**, point transfers.
 
 If you want automatic redistribution logic (e.g. landlord vs. peasants, or team- and survival-based scoring), use a more specialized game type such as **Fight the Landlord (SE)** or **Werewolves**.
-

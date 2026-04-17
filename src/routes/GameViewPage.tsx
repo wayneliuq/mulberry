@@ -22,6 +22,11 @@ import {
   calculateWerewolvesRound,
 } from "../features/game-types/werewolves";
 import {
+  DEFAULT_BASKETBALL_LEDGER_SCALE,
+  calculateBasketballRound,
+  priorBasketballMatchesFromRoundSnapshots,
+} from "../features/game-types/basketball";
+import {
   PlayerSortButtons,
   useSortedPlayers,
 } from "../features/players/SortablePlayerList";
@@ -75,6 +80,13 @@ export function GameViewPage() {
     survivedIds: [],
     winningTeamIds: [],
   });
+  const [basketballTeamByPlayerId, setBasketballTeamByPlayerId] = useState<
+    Record<number, "A" | "B">
+  >({});
+  const [basketballScores, setBasketballScores] = useState({
+    teamA: "",
+    teamB: "",
+  });
 
   const clampToTwoDecimals = (value: number) =>
     Math.round(value * 100) / 100;
@@ -103,6 +115,45 @@ export function GameViewPage() {
     useSortedPlayers(game?.players ?? [], "id");
   const [sortedUnlockedPlayers, unlockedSort, setUnlockedSort] =
     useSortedPlayers(unlockedPlayers);
+
+  const basketballRosterKey = useMemo(
+    () =>
+      [...sortedUnlockedPlayers.map((player) => player.playerId)].sort(
+        (a, b) => a - b,
+      ).join(","),
+    [sortedUnlockedPlayers],
+  );
+
+  useEffect(() => {
+    if (!game || game.gameTypeId !== "basketball" || !showRoundForm) {
+      return;
+    }
+
+    if (sortedUnlockedPlayers.length < 2) {
+      return;
+    }
+
+    const ids = sortedUnlockedPlayers.map((player) => player.playerId);
+    setBasketballTeamByPlayerId((prev) => {
+      const prevIds = Object.keys(prev).map(Number);
+      const sameRoster =
+        prevIds.length === ids.length && ids.every((id) => prevIds.includes(id));
+
+      if (sameRoster) {
+        return prev;
+      }
+
+      const mid = Math.ceil(ids.length / 2);
+      const next: Record<number, "A" | "B"> = {};
+      ids.slice(0, mid).forEach((id) => {
+        next[id] = "A";
+      });
+      ids.slice(mid).forEach((id) => {
+        next[id] = "B";
+      });
+      return next;
+    });
+  }, [game?.gameTypeId, showRoundForm, sortedUnlockedPlayers, basketballRosterKey]);
 
   const invalidateGameData = async () => {
     await Promise.all([
@@ -158,7 +209,7 @@ export function GameViewPage() {
         gameId,
         displayName: settingsValues.displayName,
         pointBasis:
-          game?.gameTypeId === "dixit"
+          game?.gameTypeId === "dixit" || game?.gameTypeId === "basketball"
             ? 1
             : Number(settingsValues.pointBasis),
         moneyPerPointCents: Number(settingsValues.moneyPerPointCents),
@@ -523,8 +574,88 @@ export function GameViewPage() {
     });
   }
 
+  async function handleBasketballRoundSubmit() {
+    if (!game) {
+      return;
+    }
+
+    const teamA = sortedUnlockedPlayers
+      .filter((player) => basketballTeamByPlayerId[player.playerId] === "A")
+      .map((player) => player.playerId);
+    const teamB = sortedUnlockedPlayers
+      .filter((player) => basketballTeamByPlayerId[player.playerId] === "B")
+      .map((player) => player.playerId);
+
+    if (teamA.length < 1 || teamB.length < 1) {
+      window.alert("Put at least one unlocked player on each team.");
+      return;
+    }
+
+    const scoreTeamA = Number(basketballScores.teamA);
+    const scoreTeamB = Number(basketballScores.teamB);
+
+    if (
+      !Number.isFinite(scoreTeamA) ||
+      !Number.isFinite(scoreTeamB) ||
+      !Number.isInteger(scoreTeamA) ||
+      !Number.isInteger(scoreTeamB) ||
+      scoreTeamA < 0 ||
+      scoreTeamB < 0
+    ) {
+      window.alert("Enter non-negative integer scores for both teams.");
+      return;
+    }
+
+    const priorRounds = priorBasketballMatchesFromRoundSnapshots(game.rounds);
+    const result = calculateBasketballRound({
+      priorRounds,
+      match: {
+        teamAPlayerIds: teamA,
+        teamBPlayerIds: teamB,
+        scoreTeamA,
+        scoreTeamB,
+      },
+    });
+
+    const entries = result.entries.map((entry) => ({
+      playerId: Number(entry.playerId),
+      pointDelta: clampToTwoDecimals(entry.pointDelta),
+    }));
+
+    const playerNameById = new Map(
+      sortedUnlockedPlayers.map((player) => [
+        player.playerId,
+        player.displayName,
+      ]),
+    );
+    const summaryText = entries
+      .map((entry) => {
+        const displayName =
+          playerNameById.get(entry.playerId) ?? entry.playerId;
+        const rounded = clampToTwoDecimals(entry.pointDelta);
+        return `${displayName} ${rounded > 0 ? "+" : ""}${rounded}`;
+      })
+      .join(", ");
+
+    await createRoundMutation.mutateAsync({
+      entries,
+      summaryText,
+      metadata: {
+        mode: "basketball",
+        teamAPlayerIds: teamA,
+        teamBPlayerIds: teamB,
+        scoreTeamA,
+        scoreTeamB,
+        basketballLedgerScale: DEFAULT_BASKETBALL_LEDGER_SCALE,
+      },
+    });
+    setBasketballScores({ teamA: "", teamB: "" });
+  }
+
   const pointStep =
-    game?.gameTypeId === "dixit" ? 0.01 : (game?.pointBasis ?? 1);
+    game?.gameTypeId === "dixit" || game?.gameTypeId === "basketball"
+      ? 0.01
+      : (game?.pointBasis ?? 1);
 
   function adjustPointInput(
     _current: Record<number, string>,
@@ -557,7 +688,7 @@ export function GameViewPage() {
             <h2>{game.displayName}</h2>
             <p className="muted">
               {getGameTypeOption(game.gameTypeId)?.name ?? game.gameTypeId}
-              {game.gameTypeId !== "dixit" ? (
+              {game.gameTypeId !== "dixit" && game.gameTypeId !== "basketball" ? (
                 <> · point basis {game.pointBasis}</>
               ) : null}
               {" · "}
@@ -614,7 +745,7 @@ export function GameViewPage() {
               />
             </label>
             <div className="form-grid">
-              {game.gameTypeId !== "dixit" ? (
+              {game.gameTypeId !== "dixit" && game.gameTypeId !== "basketball" ? (
                 <label className="stack-xs">
                   <span>Point basis</span>
                   <input
@@ -773,7 +904,9 @@ export function GameViewPage() {
                   ? "Werewolves round"
                   : game.gameTypeId === "dixit"
                     ? "Dixit round"
-                    : "Fight the Landlord round"}
+                    : game.gameTypeId === "basketball"
+                      ? "Basketball round"
+                      : "Fight the Landlord round"}
             </strong>
 
             {game.gameTypeId === "werewolves" &&
@@ -1039,6 +1172,94 @@ export function GameViewPage() {
                     className="primary-button"
                     disabled={werewolfValues.winningTeamIds.length === 0}
                   >
+                    Save round
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setShowRoundForm(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : game.gameTypeId === "basketball" ? (
+              <form
+                className="stack-sm"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleBasketballRoundSubmit();
+                }}
+              >
+                <p className="muted">
+                  Assign every unlocked player to team A or B, then enter the final
+                  score for this game. Point basis stays 1; OpenSkill ordinal changes
+                  are scaled by a fixed ledger factor (currently {DEFAULT_BASKETBALL_LEDGER_SCALE})
+                  so a typical 11‑point game moves each player on the order of ~10–20
+                  points, then mean‑centered so the round sums to exactly zero.
+                </p>
+                <div className="form-grid">
+                  <label className="stack-xs">
+                    <span>Team A score</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={basketballScores.teamA}
+                      onChange={(event) =>
+                        setBasketballScores((current) => ({
+                          ...current,
+                          teamA: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="stack-xs">
+                    <span>Team B score</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={basketballScores.teamB}
+                      onChange={(event) =>
+                        setBasketballScores((current) => ({
+                          ...current,
+                          teamB: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+                <div className="stack-sm">
+                  <PlayerSortButtons
+                    sortMode={unlockedSort}
+                    onSortChange={setUnlockedSort}
+                  />
+                  <div className="player-list-two-col">
+                    {sortedUnlockedPlayers.map((player) => (
+                      <label key={player.playerId} className="stack-xs">
+                        <span>{player.displayName}</span>
+                        <select
+                          value={basketballTeamByPlayerId[player.playerId] ?? "A"}
+                          onChange={(event) =>
+                            setBasketballTeamByPlayerId((current) => ({
+                              ...current,
+                              [player.playerId]: event.target.value as "A" | "B",
+                            }))
+                          }
+                        >
+                          <option value="A">Team A</option>
+                          <option value="B">Team B</option>
+                        </select>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {createRoundMutation.error ? (
+                  <p className="form-error">{createRoundMutation.error.message}</p>
+                ) : null}
+                <div className="inline-actions">
+                  <button type="submit" className="primary-button">
                     Save round
                   </button>
                   <button
