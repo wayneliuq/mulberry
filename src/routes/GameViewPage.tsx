@@ -53,7 +53,7 @@ export function GameViewPage() {
   const [settingsValues, setSettingsValues] = useState({
     displayName: "",
     pointBasis: "1",
-    moneyPerPointCents: "20",
+    moneyPerPointCents: "0",
   });
   const [texasPointInputs, setTexasPointInputs] = useState<Record<number, string>>(
     {},
@@ -1667,7 +1667,7 @@ export function GameViewPage() {
               void calculateSettlementMutation.mutateAsync();
             }}
           >
-            Calculate $
+            Settle
           </button>
         </div>
       </article>

@@ -40,7 +40,7 @@ export function GamesPage() {
   const [createGameValues, setCreateGameValues] = useState({
     gameTypeId: "texas-holdem",
     pointBasis: "1",
-    moneyPerPointCents: "20",
+    moneyPerPointCents: "0",
     displayName: "",
   });
 
@@ -87,7 +87,7 @@ export function GamesPage() {
       setCreateGameValues({
         gameTypeId: "texas-holdem",
         pointBasis: "1",
-        moneyPerPointCents: "20",
+        moneyPerPointCents: "0",
         displayName: "",
       });
       navigate(`/games/${response.game.id}`);
