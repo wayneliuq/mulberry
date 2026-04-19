@@ -103,7 +103,9 @@ export function LeaderboardsPage() {
   }, [rawPlayerRows, playerSort]);
 
   const familyRows = useMemo(() => {
-    const rows = [...rawFamilyRows];
+    const rows = rawFamilyRows.filter(
+      (row) => row.roundsWon + row.roundsLost > 0,
+    );
     const dir = familySort.dir === "asc" ? 1 : -1;
     rows.sort((a, b) => {
       let cmp = 0;
