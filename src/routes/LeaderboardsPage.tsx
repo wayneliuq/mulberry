@@ -14,9 +14,7 @@ type SortColumn =
   | "totalPoints"
   | "totalMoneyCents"
   | "roundsWon"
-  | "roundsWonPct"
-  | "gamesWon"
-  | "gamesWonPct";
+  | "roundsWonPct";
 type SortDir = "asc" | "desc";
 
 function SortableTh({
@@ -96,17 +94,6 @@ export function LeaderboardsPage() {
           cmp = pctA - pctB;
           break;
         }
-        case "gamesWon":
-          cmp = a.gamesWon - b.gamesWon;
-          break;
-        case "gamesWonPct": {
-          const totalA = a.gamesWon + a.gamesLost;
-          const totalB = b.gamesWon + b.gamesLost;
-          const pctA = totalA > 0 ? a.gamesWon / totalA : 0;
-          const pctB = totalB > 0 ? b.gamesWon / totalB : 0;
-          cmp = pctA - pctB;
-          break;
-        }
         default:
           break;
       }
@@ -143,17 +130,6 @@ export function LeaderboardsPage() {
           cmp = pctA - pctB;
           break;
         }
-        case "gamesWon":
-          cmp = a.gamesWon - b.gamesWon;
-          break;
-        case "gamesWonPct": {
-          const totalA = a.gamesWon + a.gamesLost;
-          const totalB = b.gamesWon + b.gamesLost;
-          const pctA = totalA > 0 ? a.gamesWon / totalA : 0;
-          const pctB = totalB > 0 ? b.gamesWon / totalB : 0;
-          cmp = pctA - pctB;
-          break;
-        }
         default:
           break;
       }
@@ -182,12 +158,6 @@ export function LeaderboardsPage() {
     const total = row.roundsWon + row.roundsLost;
     if (total === 0) return "—";
     return `${Math.round((row.roundsWon / total) * 100)}%`;
-  }
-
-  function formatGameWonPct(row: PlayerLeaderboardRow | FamilyLeaderboardRow) {
-    const total = row.gamesWon + row.gamesLost;
-    if (total === 0) return "—";
-    return `${Math.round((row.gamesWon / total) * 100)}%`;
   }
 
   return (
@@ -272,20 +242,6 @@ export function LeaderboardsPage() {
                   sortDir={playerSort.dir}
                   onSort={handlePlayerSort}
                 />
-                <SortableTh
-                  label="Game W-L"
-                  column="gamesWon"
-                  sortColumn={playerSort.column}
-                  sortDir={playerSort.dir}
-                  onSort={handlePlayerSort}
-                />
-                <SortableTh
-                  label="Game W-L (%)"
-                  column="gamesWonPct"
-                  sortColumn={playerSort.column}
-                  sortDir={playerSort.dir}
-                  onSort={handlePlayerSort}
-                />
               </tr>
             </thead>
             <tbody>
@@ -298,10 +254,6 @@ export function LeaderboardsPage() {
                     {row.roundsWon}-{row.roundsLost}
                   </td>
                   <td>{formatRndWonPct(row)}</td>
-                  <td>
-                    {row.gamesWon}-{row.gamesLost}
-                  </td>
-                  <td>{formatGameWonPct(row)}</td>
                 </tr>
               ))}
             </tbody>
@@ -362,20 +314,6 @@ export function LeaderboardsPage() {
                     sortDir={familySort.dir}
                     onSort={handleFamilySort}
                   />
-                  <SortableTh
-                    label="Game W-L"
-                    column="gamesWon"
-                    sortColumn={familySort.column}
-                    sortDir={familySort.dir}
-                    onSort={handleFamilySort}
-                  />
-                  <SortableTh
-                    label="Game W-L (%)"
-                    column="gamesWonPct"
-                    sortColumn={familySort.column}
-                    sortDir={familySort.dir}
-                    onSort={handleFamilySort}
-                  />
                 </tr>
               </thead>
               <tbody>
@@ -389,10 +327,6 @@ export function LeaderboardsPage() {
                       {family.roundsWon}-{family.roundsLost}
                     </td>
                     <td>{formatRndWonPct(family)}</td>
-                    <td>
-                      {family.gamesWon}-{family.gamesLost}
-                    </td>
-                    <td>{formatGameWonPct(family)}</td>
                   </tr>
                 ))}
               </tbody>
