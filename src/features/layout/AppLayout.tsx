@@ -11,7 +11,8 @@ export function AppLayout() {
     <div className="app-shell">
       <header className="app-header">
         <div>
-          <p className="eyebrow">Mulberry</p>
+          <p className="eyebrow">Friendly competition</p>
+          <h1 className="app-title">Mulberry</h1>
           <p className="subtitle">
             Mobile-first scorekeeping, history, leaderboards, and settlements.
           </p>

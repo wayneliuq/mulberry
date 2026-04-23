@@ -1474,7 +1474,7 @@ export function GameViewPage() {
                                   };
                                 })
                               }
-                              style={{ width: "3.5rem", maxWidth: "3.5rem" }}
+                              className="input-landlord-count"
                             />
                             <button
                               type="button"
