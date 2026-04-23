@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { gameTypeOptions } from "../features/game-types";
 import type { GameTypeId } from "../features/game-types/types";
@@ -9,6 +9,8 @@ import type {
   PlayerLeaderboardRow,
 } from "../lib/api/types";
 
+const SHOW_MONEY_STORAGE_KEY = "mulberry.leaderboards.show-money";
+
 type SortColumn =
   | "displayName"
   | "totalPoints"
@@ -16,6 +18,44 @@ type SortColumn =
   | "roundsWon"
   | "roundsWonPct";
 type SortDir = "asc" | "desc";
+
+function readShowMoneyFromStorage(): boolean {
+  try {
+    return window.localStorage.getItem(SHOW_MONEY_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function writeShowMoneyToStorage(value: boolean) {
+  try {
+    if (value) {
+      window.localStorage.setItem(SHOW_MONEY_STORAGE_KEY, "true");
+    } else {
+      window.localStorage.removeItem(SHOW_MONEY_STORAGE_KEY);
+    }
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+/** Competition ranking by totalPoints descending (1, 2, 2, 4). */
+function buildPointsRankMap<T extends { totalPoints: number }>(
+  rows: T[],
+  getKey: (row: T) => string,
+): Map<string, number> {
+  const sorted = [...rows].sort((a, b) => b.totalPoints - a.totalPoints);
+  const map = new Map<string, number>();
+  let rank = 1;
+  for (let i = 0; i < sorted.length; i++) {
+    const row = sorted[i]!;
+    if (i > 0 && row.totalPoints !== sorted[i - 1]!.totalPoints) {
+      rank = i + 1;
+    }
+    map.set(getKey(row), rank);
+  }
+  return map;
+}
 
 function SortableTh({
   label,
@@ -50,6 +90,7 @@ export function LeaderboardsPage() {
   const [selectedGameType, setSelectedGameType] = useState<GameTypeId | "all">(
     "all",
   );
+  const [showMoney, setShowMoney] = useState(readShowMoneyFromStorage);
   const [playerSort, setPlayerSort] = useState<{
     column: SortColumn;
     dir: SortDir;
@@ -59,12 +100,38 @@ export function LeaderboardsPage() {
     dir: SortDir;
   }>({ column: "totalPoints", dir: "desc" });
 
+  const handleShowMoneyChange = useCallback(
+    (next: boolean) => {
+      setShowMoney(next);
+      writeShowMoneyToStorage(next);
+    },
+    [],
+  );
+
   const leaderboardsQuery = useQuery({
     queryKey: ["leaderboards", selectedGameType],
     queryFn: () => fetchLeaderboards(selectedGameType),
   });
   const rawPlayerRows = leaderboardsQuery.data?.players ?? [];
   const rawFamilyRows = leaderboardsQuery.data?.families ?? [];
+
+  const familiesWithRounds = useMemo(
+    () =>
+      rawFamilyRows.filter((row) => row.roundsWon + row.roundsLost > 0),
+    [rawFamilyRows],
+  );
+
+  const playerPointsRankById = useMemo(
+    () =>
+      buildPointsRankMap(rawPlayerRows, (row) => String(row.playerId)),
+    [rawPlayerRows],
+  );
+
+  const familyPointsRankById = useMemo(
+    () =>
+      buildPointsRankMap(familiesWithRounds, (row) => row.familyId),
+    [familiesWithRounds],
+  );
 
   const playerRows = useMemo(() => {
     const rows = [...rawPlayerRows];
@@ -103,9 +170,7 @@ export function LeaderboardsPage() {
   }, [rawPlayerRows, playerSort]);
 
   const familyRows = useMemo(() => {
-    const rows = rawFamilyRows.filter(
-      (row) => row.roundsWon + row.roundsLost > 0,
-    );
+    const rows = [...familiesWithRounds];
     const dir = familySort.dir === "asc" ? 1 : -1;
     rows.sort((a, b) => {
       let cmp = 0;
@@ -138,7 +203,7 @@ export function LeaderboardsPage() {
       return cmp * dir;
     });
     return rows;
-  }, [rawFamilyRows, familySort]);
+  }, [familiesWithRounds, familySort]);
 
   function handlePlayerSort(column: SortColumn) {
     setPlayerSort((prev) => ({
@@ -169,32 +234,44 @@ export function LeaderboardsPage() {
           <div>
             <p className="card-eyebrow">Leaderboards</p>
           </div>
-          <div className="filter-row" role="tablist" aria-label="Game filters">
-            <button
-              type="button"
-              className={
-                selectedGameType === "all"
-                  ? "filter-chip filter-chip-active"
-                  : "filter-chip"
-              }
-              onClick={() => setSelectedGameType("all")}
-            >
-              All
-            </button>
-            {gameTypeOptions.map((option) => (
+          <div className="stack-xs leaderboard-header-controls">
+            <div className="filter-row" role="tablist" aria-label="Game filters">
               <button
-                key={option.id}
                 type="button"
                 className={
-                  selectedGameType === option.id
+                  selectedGameType === "all"
                     ? "filter-chip filter-chip-active"
                     : "filter-chip"
                 }
-                onClick={() => setSelectedGameType(option.id)}
+                onClick={() => setSelectedGameType("all")}
               >
-                {option.name}
+                All
               </button>
-            ))}
+              {gameTypeOptions.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={
+                    selectedGameType === option.id
+                      ? "filter-chip filter-chip-active"
+                      : "filter-chip"
+                  }
+                  onClick={() => setSelectedGameType(option.id)}
+                >
+                  {option.name}
+                </button>
+              ))}
+            </div>
+            <label className="leaderboard-show-money">
+              <input
+                type="checkbox"
+                checked={showMoney}
+                onChange={(event) =>
+                  handleShowMoneyChange(event.target.checked)
+                }
+              />
+              <span>Show $</span>
+            </label>
           </div>
         </div>
 
@@ -209,6 +286,9 @@ export function LeaderboardsPage() {
           <table>
             <thead>
               <tr>
+                <th scope="col" className="th-rank">
+                  #
+                </th>
                 <SortableTh
                   label="Player"
                   column="displayName"
@@ -223,13 +303,15 @@ export function LeaderboardsPage() {
                   sortDir={playerSort.dir}
                   onSort={handlePlayerSort}
                 />
-                <SortableTh
-                  label="$"
-                  column="totalMoneyCents"
-                  sortColumn={playerSort.column}
-                  sortDir={playerSort.dir}
-                  onSort={handlePlayerSort}
-                />
+                {showMoney ? (
+                  <SortableTh
+                    label="$"
+                    column="totalMoneyCents"
+                    sortColumn={playerSort.column}
+                    sortDir={playerSort.dir}
+                    onSort={handlePlayerSort}
+                  />
+                ) : null}
                 <SortableTh
                   label="Rnd W-L"
                   column="roundsWon"
@@ -249,9 +331,14 @@ export function LeaderboardsPage() {
             <tbody>
               {playerRows.map((row) => (
                 <tr key={row.playerId}>
+                  <td className="td-rank">
+                    {playerPointsRankById.get(String(row.playerId)) ?? "—"}
+                  </td>
                   <td className="text-wrap-safe">{row.displayName}</td>
                   <td>{formatPoints(row.totalPoints)}</td>
-                  <td>{formatMoneyCents(row.totalMoneyCents)}</td>
+                  {showMoney ? (
+                    <td>{formatMoneyCents(row.totalMoneyCents)}</td>
+                  ) : null}
                   <td>
                     {row.roundsWon}-{row.roundsLost}
                   </td>
@@ -280,6 +367,9 @@ export function LeaderboardsPage() {
             <table>
               <thead>
                 <tr>
+                  <th scope="col" className="th-rank">
+                    #
+                  </th>
                   <SortableTh
                     label="Family"
                     column="displayName"
@@ -295,13 +385,15 @@ export function LeaderboardsPage() {
                     sortDir={familySort.dir}
                     onSort={handleFamilySort}
                   />
-                  <SortableTh
-                    label="$"
-                    column="totalMoneyCents"
-                    sortColumn={familySort.column}
-                    sortDir={familySort.dir}
-                    onSort={handleFamilySort}
-                  />
+                  {showMoney ? (
+                    <SortableTh
+                      label="$"
+                      column="totalMoneyCents"
+                      sortColumn={familySort.column}
+                      sortDir={familySort.dir}
+                      onSort={handleFamilySort}
+                    />
+                  ) : null}
                   <SortableTh
                     label="Rnd W-L"
                     column="roundsWon"
@@ -321,10 +413,15 @@ export function LeaderboardsPage() {
               <tbody>
                 {familyRows.map((family) => (
                   <tr key={family.familyId}>
+                    <td className="td-rank">
+                      {familyPointsRankById.get(family.familyId) ?? "—"}
+                    </td>
                     <td className="text-wrap-safe">{family.familyName}</td>
                     <td>{family.memberNames.join(", ")}</td>
                     <td>{formatPoints(family.totalPoints)}</td>
-                    <td>{formatMoneyCents(family.totalMoneyCents)}</td>
+                    {showMoney ? (
+                      <td>{formatMoneyCents(family.totalMoneyCents)}</td>
+                    ) : null}
                     <td>
                       {family.roundsWon}-{family.roundsLost}
                     </td>

@@ -158,6 +158,42 @@ select,
   flex-wrap: wrap;
 }
 
+.leaderboard-header-controls {
+  align-items: flex-end;
+  gap: 0.65rem;
+}
+
+.leaderboard-show-money {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  color: #c9bdd9;
+  cursor: pointer;
+  user-select: none;
+}
+
+.leaderboard-show-money input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #b26bff;
+}
+
+.th-rank,
+.td-rank {
+  width: 2.25rem;
+  max-width: 2.75rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #b8a8cc;
+  font-size: 0.9rem;
+}
+
+.th-rank {
+  font-weight: 600;
+  color: #dfd1f0;
+}
+
 .primary-button,
 .secondary-button,
 .icon-button,
