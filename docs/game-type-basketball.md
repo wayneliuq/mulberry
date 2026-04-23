@@ -2,7 +2,7 @@
 
 This document explains **how points are calculated** for the **Basketball** game type (OpenSkill-backed rating).
 
-Each Mulberry **round** is one pickup game to a target score (for example 11 with 1s and 2s, or 21 with 2s and 3s). Players can be on different teams in different rounds; there is no bench—every **unlocked** player in the game is on **exactly one** of two teams for that round.
+Each Mulberry **round** is one pickup game to a target score (for example 11 with 1s and 2s, or 21 with 2s and 3s). Players can be on different teams in different rounds; each round can also bench players.
 
 ---
 
@@ -26,7 +26,8 @@ Validation rules:
 
 - The two teams are **disjoint**.
 - Each team has **at least one** player.
-- **Every unlocked player** in the game appears in **exactly one** team list for that round (enforced by the round-entry shape in Mulberry).
+- Team lists include only players who participated in that round.
+- Unlocked players not listed on either team are treated as **not playing** for that round and are excluded from round entries/point calculation.
 
 ---
 
@@ -35,8 +36,8 @@ Validation rules:
 Skill is tracked with **openskill.js** (default prior: `mu = 25`, `sigma ≈ 8.33` per player).
 
 1. Start with an empty rating map.
-2. For each **prior** basketball round in this game, in **ascending `round_number`**, apply one two‑team update with  
-   `rate([teamA, teamB], { score: [scoreTeamA, scoreTeamB] })`.
+2. For each **prior** basketball round in this game, in **ascending `round_number`**, apply one two‑team update with
+  `rate([teamA, teamB], { score: [scoreTeamA, scoreTeamB] })`.
 3. For the **new** round, record each participant’s **ordinal** before the update (`ordinal = mu − 3·sigma`, same as `openskill.ordinal`).
 4. Apply the same `rate` call for the new match and read ordinals **after** the update.
 

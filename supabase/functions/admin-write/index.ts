@@ -734,17 +734,82 @@ async function handleCreateRound(
     throw new Error("Round entries must not repeat players.");
   }
 
-  if (unlockedGamePlayers.length !== action.entries.length) {
-    throw new Error(
-      "Round entries must include every unlocked player in the game exactly once.",
-    );
-  }
+  const unlockedPlayerIds = new Set(
+    unlockedGamePlayers.map((gamePlayer) => gamePlayer.player_id),
+  );
 
-  for (const gamePlayer of unlockedGamePlayers) {
-    if (!uniqueEntryPlayerIds.has(gamePlayer.player_id)) {
+  if (action.gameTypeId === "basketball") {
+    for (const entryPlayerId of uniqueEntryPlayerIds) {
+      if (!unlockedPlayerIds.has(entryPlayerId)) {
+        throw new Error("Round entry references a non-participating player.");
+      }
+    }
+
+    const metadata = action.metadata as Record<string, unknown> | undefined;
+    const teamAPlayerIdsRaw = metadata?.teamAPlayerIds;
+    const teamBPlayerIdsRaw = metadata?.teamBPlayerIds;
+
+    const teamAPlayerIds = Array.isArray(teamAPlayerIdsRaw)
+      ? teamAPlayerIdsRaw
+      : [];
+    const teamBPlayerIds = Array.isArray(teamBPlayerIdsRaw)
+      ? teamBPlayerIdsRaw
+      : [];
+
+    if (teamAPlayerIds.length < 1 || teamBPlayerIds.length < 1) {
+      throw new Error("Basketball rounds require at least one player on each team.");
+    }
+
+    const teamASet = new Set<number>();
+    const teamBSet = new Set<number>();
+
+    for (const id of teamAPlayerIds) {
+      if (!Number.isInteger(id)) {
+        throw new Error("Basketball team metadata must use integer player ids.");
+      }
+      if (!unlockedPlayerIds.has(id as number)) {
+        throw new Error("Basketball team metadata references a locked or missing player.");
+      }
+      teamASet.add(id as number);
+    }
+
+    for (const id of teamBPlayerIds) {
+      if (!Number.isInteger(id)) {
+        throw new Error("Basketball team metadata must use integer player ids.");
+      }
+      if (!unlockedPlayerIds.has(id as number)) {
+        throw new Error("Basketball team metadata references a locked or missing player.");
+      }
+      teamBSet.add(id as number);
+    }
+
+    for (const id of teamASet) {
+      if (teamBSet.has(id)) {
+        throw new Error("Basketball team metadata cannot place one player on both teams.");
+      }
+    }
+
+    const roster = new Set<number>([...teamASet, ...teamBSet]);
+    if (roster.size !== uniqueEntryPlayerIds.size) {
+      throw new Error("Basketball entries must match team assignments exactly.");
+    }
+    for (const id of roster) {
+      if (!uniqueEntryPlayerIds.has(id)) {
+        throw new Error("Basketball entries must match team assignments exactly.");
+      }
+    }
+  } else {
+    if (unlockedGamePlayers.length !== action.entries.length) {
       throw new Error(
         "Round entries must include every unlocked player in the game exactly once.",
       );
+    }
+    for (const gamePlayer of unlockedGamePlayers) {
+      if (!uniqueEntryPlayerIds.has(gamePlayer.player_id)) {
+        throw new Error(
+          "Round entries must include every unlocked player in the game exactly once.",
+        );
+      }
     }
   }
 

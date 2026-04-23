@@ -81,7 +81,7 @@ export function GameViewPage() {
     winningTeamIds: [],
   });
   const [basketballTeamByPlayerId, setBasketballTeamByPlayerId] = useState<
-    Record<number, "A" | "B">
+    Record<number, "none" | "A" | "B">
   >({});
   const [basketballScores, setBasketballScores] = useState({
     teamA: "",
@@ -129,31 +129,20 @@ export function GameViewPage() {
       return;
     }
 
-    if (sortedUnlockedPlayers.length < 2) {
+    const ids = basketballRosterKey
+      ? basketballRosterKey.split(",").map((id) => Number(id))
+      : [];
+
+    if (ids.length < 2) {
       return;
     }
 
-    const ids = sortedUnlockedPlayers.map((player) => player.playerId);
-    setBasketballTeamByPlayerId((prev) => {
-      const prevIds = Object.keys(prev).map(Number);
-      const sameRoster =
-        prevIds.length === ids.length && ids.every((id) => prevIds.includes(id));
-
-      if (sameRoster) {
-        return prev;
-      }
-
-      const mid = Math.ceil(ids.length / 2);
-      const next: Record<number, "A" | "B"> = {};
-      ids.slice(0, mid).forEach((id) => {
-        next[id] = "A";
-      });
-      ids.slice(mid).forEach((id) => {
-        next[id] = "B";
-      });
-      return next;
+    const next: Record<number, "none" | "A" | "B"> = {};
+    ids.forEach((id) => {
+      next[id] = "none";
     });
-  }, [game?.gameTypeId, showRoundForm, sortedUnlockedPlayers, basketballRosterKey]);
+    setBasketballTeamByPlayerId(next);
+  }, [game?.gameTypeId, showRoundForm, basketballRosterKey]);
 
   const invalidateGameData = async () => {
     await Promise.all([
@@ -1192,8 +1181,9 @@ export function GameViewPage() {
                 }}
               >
                 <p className="muted">
-                  Assign every unlocked player to team A or B, then enter the final
-                  score for this game. Point basis stays 1; OpenSkill ordinal changes
+                  Assign only participating players to team A or B (leave others as
+                  none), then enter the final score for this game. Point basis stays 1;
+                  OpenSkill ordinal changes
                   are scaled by a fixed ledger factor (currently {DEFAULT_BASKETBALL_LEDGER_SCALE})
                   so a typical 11‑point game moves each player on the order of ~10–20
                   points, then mean‑centered so the round sums to exactly zero.
@@ -1240,14 +1230,15 @@ export function GameViewPage() {
                       <label key={player.playerId} className="stack-xs">
                         <span>{player.displayName}</span>
                         <select
-                          value={basketballTeamByPlayerId[player.playerId] ?? "A"}
+                          value={basketballTeamByPlayerId[player.playerId] ?? "none"}
                           onChange={(event) =>
                             setBasketballTeamByPlayerId((current) => ({
                               ...current,
-                              [player.playerId]: event.target.value as "A" | "B",
+                              [player.playerId]: event.target.value as "none" | "A" | "B",
                             }))
                           }
                         >
+                          <option value="none">None</option>
                           <option value="A">Team A</option>
                           <option value="B">Team B</option>
                         </select>
