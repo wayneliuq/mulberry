@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { gameTypeOptions } from "../features/game-types";
 import type { GameTypeId } from "../features/game-types/types";
+import { IconGlyph } from "../features/ui/IconGlyph";
 import { fetchLeaderboards } from "../lib/api/read";
 import { formatMoneyCents, formatPoints } from "../lib/format";
 import type {
@@ -230,7 +231,7 @@ export function LeaderboardsPage() {
   return (
     <section className="stack-lg">
       <article className="card stack-sm">
-        <div className="card-header">
+        <div className="card-header leaderboard-card-header">
           <div>
             <p className="card-eyebrow">Leaderboards</p>
           </div>
@@ -240,12 +241,13 @@ export function LeaderboardsPage() {
                 type="button"
                 className={
                   selectedGameType === "all"
-                    ? "filter-chip filter-chip-active"
-                    : "filter-chip"
+                    ? "filter-toggle filter-toggle-active"
+                    : "filter-toggle"
                 }
                 onClick={() => setSelectedGameType("all")}
               >
-                All
+                <IconGlyph name="all" className="filter-toggle-icon" />
+                <span className="filter-toggle-label">All</span>
               </button>
               {gameTypeOptions.map((option) => (
                 <button
@@ -253,12 +255,13 @@ export function LeaderboardsPage() {
                   type="button"
                   className={
                     selectedGameType === option.id
-                      ? "filter-chip filter-chip-active"
-                      : "filter-chip"
+                      ? "filter-toggle filter-toggle-active"
+                      : "filter-toggle"
                   }
                   onClick={() => setSelectedGameType(option.id)}
                 >
-                  {option.name}
+                  <IconGlyph name={option.icon} className="filter-toggle-icon" />
+                  <span className="filter-toggle-label">{option.name}</span>
                 </button>
               ))}
             </div>
@@ -417,7 +420,9 @@ export function LeaderboardsPage() {
                       {familyPointsRankById.get(family.familyId) ?? "—"}
                     </td>
                     <td className="text-wrap-safe">{family.familyName}</td>
-                    <td>{family.memberNames.join(", ")}</td>
+                    <td className="text-wrap-safe members-cell-clamp">
+                      {family.memberNames.join(", ")}
+                    </td>
                     <td>{formatPoints(family.totalPoints)}</td>
                     {showMoney ? (
                       <td>{formatMoneyCents(family.totalMoneyCents)}</td>

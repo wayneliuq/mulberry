@@ -33,6 +33,7 @@ import {
   PlayerSortButtons,
   useSortedPlayers,
 } from "../features/players/SortablePlayerList";
+import { IconGlyph } from "../features/ui/IconGlyph";
 import { adminWrite } from "../lib/api/admin";
 import { fetchGameDetails, fetchPlayers } from "../lib/api/read";
 import { formatDateTime, formatMoneyCents, formatPoints } from "../lib/format";
@@ -1623,15 +1624,13 @@ export function GameViewPage() {
           {sortedGamePlayers.map((player) => {
             const formattedTotal = formatPoints(player.total);
             return (
-              <li key={player.gamePlayerId} className="list-item">
+              <li
+                key={player.gamePlayerId}
+                className={player.isLocked ? "list-item player-list-item-locked" : "list-item"}
+              >
                 <div className="stack-xs">
                   <strong className="text-wrap-safe">{player.displayName}</strong>
-                  <p className="muted">
-                    {player.isLocked ? "Locked for new rounds" : "Active"}
-                  </p>
-                </div>
-                <div className="inline-actions">
-                  <span
+                  <p
                     className={
                       player.total > 0
                         ? "score-positive"
@@ -1641,39 +1640,49 @@ export function GameViewPage() {
                     }
                   >
                     {player.total > 0 ? `+${formattedTotal}` : formattedTotal}
-                  </span>
-                <button
-                  type="button"
-                  className="icon-button"
-                  disabled={!isAdmin || game.status === "settled"}
-                  onClick={() =>
-                    void togglePlayerLockMutation.mutateAsync({
-                      gamePlayerId: player.gamePlayerId,
-                      isLocked: !player.isLocked,
-                    })
-                  }
-                >
-                  {player.isLocked ? "Unlock" : "Lock"}
-                </button>
-                <button
-                  type="button"
-                  className="icon-button"
-                  disabled={!isAdmin || game.status === "settled"}
-                  onClick={() => {
-                    const shouldRemove = window.confirm(
-                      `Remove ${player.displayName} from this game?`,
-                    );
+                  </p>
+                </div>
+                <div className="inline-actions player-row-actions">
+                  <div className="icon-actions-stack">
+                    <button
+                      type="button"
+                      className={
+                        player.isLocked
+                          ? "icon-button icon-button-sm icon-button-active"
+                          : "icon-button icon-button-sm"
+                      }
+                      disabled={!isAdmin || game.status === "settled"}
+                      aria-label={`${player.isLocked ? "Unlock" : "Lock"} ${player.displayName}`}
+                      onClick={() =>
+                        void togglePlayerLockMutation.mutateAsync({
+                          gamePlayerId: player.gamePlayerId,
+                          isLocked: !player.isLocked,
+                        })
+                      }
+                    >
+                      <IconGlyph name={player.isLocked ? "unlock" : "lock"} />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-button icon-button-sm"
+                      disabled={!isAdmin || game.status === "settled"}
+                      aria-label={`Delete ${player.displayName} from this game`}
+                      onClick={() => {
+                        const shouldRemove = window.confirm(
+                          `Remove ${player.displayName} from this game?`,
+                        );
 
-                    if (!shouldRemove) {
-                      return;
-                    }
+                        if (!shouldRemove) {
+                          return;
+                        }
 
-                    void removeGamePlayerMutation.mutateAsync(player.gamePlayerId);
-                  }}
-                >
-                  Remove
-                </button>
-              </div>
+                        void removeGamePlayerMutation.mutateAsync(player.gamePlayerId);
+                      }}
+                    >
+                      <IconGlyph name="trash" />
+                    </button>
+                  </div>
+                </div>
             </li>
             );
           })}
@@ -1776,13 +1785,14 @@ export function GameViewPage() {
                       </>
                     ) : null}
                   </strong>
-                  <p className="muted">{round.summaryText}</p>
+                  <p className="muted round-summary-clamp">{round.summaryText}</p>
                   <p className="muted">{formatDateTime(round.createdAt)}</p>
                 </div>
                 <button
                   type="button"
                   className="icon-button"
                   disabled={!isAdmin}
+                  aria-label={`Delete round ${round.roundNumber}`}
                   onClick={() => {
                     const shouldDelete = window.confirm(
                       `Delete round ${round.roundNumber}?`,
@@ -1795,7 +1805,7 @@ export function GameViewPage() {
                     void deleteRoundMutation.mutateAsync(round.id);
                   }}
                 >
-                  Delete
+                  <IconGlyph name="trash" />
                 </button>
               </li>
             ))}

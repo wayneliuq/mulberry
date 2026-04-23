@@ -5,6 +5,8 @@ export type GameTypeId =
   | "dixit"
   | "basketball";
 
+export type GameTypeIconId = "cards" | "meeple" | "basketball";
+
 export type PointEntry = {
   playerId: string | number;
   pointDelta: number;
@@ -20,6 +22,6 @@ export type RoundCalculationResult = {
 export type GameTypeDefinition<TInput> = {
   id: GameTypeId;
   name: string;
-  icon: string;
+  icon: GameTypeIconId;
   calculateRound: (input: TInput) => RoundCalculationResult;
 };

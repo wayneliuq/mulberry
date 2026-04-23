@@ -15,6 +15,7 @@ import {
 import { useAdminSession } from "../features/admin/AdminSessionContext";
 import { gameTypeOptions, getGameTypeOption } from "../features/game-types";
 import type { GameTypeId } from "../features/game-types/types";
+import { IconGlyph } from "../features/ui/IconGlyph";
 import { adminWrite } from "../lib/api/admin";
 import { fetchGames } from "../lib/api/read";
 import { formatRelativeDate } from "../lib/format";
@@ -195,12 +196,13 @@ export function GamesPage() {
             type="button"
             className={
               selectedGameType === "all"
-                ? "filter-chip filter-chip-active"
-                : "filter-chip"
+                ? "filter-toggle filter-toggle-active"
+                : "filter-toggle"
             }
             onClick={() => setSelectedGameType("all")}
           >
-            All
+            <IconGlyph name="all" className="filter-toggle-icon" />
+            <span className="filter-toggle-label">All</span>
           </button>
           {gameTypeOptions.map((option) => (
             <button
@@ -208,12 +210,13 @@ export function GamesPage() {
               type="button"
               className={
                 selectedGameType === option.id
-                  ? "filter-chip filter-chip-active"
-                  : "filter-chip"
+                  ? "filter-toggle filter-toggle-active"
+                  : "filter-toggle"
               }
               onClick={() => setSelectedGameType(option.id)}
             >
-              {option.name}
+              <IconGlyph name={option.icon} className="filter-toggle-icon" />
+              <span className="filter-toggle-label">{option.name}</span>
             </button>
           ))}
         </div>
@@ -387,7 +390,7 @@ export function GamesPage() {
                     void deleteGameMutation.mutateAsync(game.id);
                   }}
                 >
-                  Delete
+                  <IconGlyph name="trash" />
                 </button>
               </div>
             </li>
