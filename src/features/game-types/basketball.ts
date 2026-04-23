@@ -1,4 +1,4 @@
-import { ordinal, rate, rating } from "openskill";
+import { ordinal, predictWin, rate, rating } from "openskill";
 import { z } from "zod";
 import type {
   GameTypeDefinition,
@@ -122,16 +122,70 @@ export function priorBasketballMatchesFromRoundSnapshots(
     .filter((m): m is BasketballMatchInput => m !== null);
 }
 
+/**
+ * Basketball rounds strictly before `beforeRoundNumber`, parsed and ordered for replay.
+ */
+export function priorBasketballMatchesStrictlyBeforeRound(
+  rounds: Array<{
+    roundNumber: number;
+    settingsSnapshot?: Record<string, unknown>;
+  }>,
+  beforeRoundNumber: number,
+): BasketballMatchInput[] {
+  return priorBasketballMatchesFromRoundSnapshots(
+    rounds.filter((r) => r.roundNumber < beforeRoundNumber),
+  );
+}
+
+function replayPriorsIntoRatings(
+  priorRoundsChronological: BasketballMatchInput[],
+): Map<number, OpenSkillRating> {
+  const ratings = new Map<number, OpenSkillRating>();
+  for (const prior of priorRoundsChronological) {
+    applyMatchToRatings(ratings, prior);
+  }
+  return ratings;
+}
+
+/**
+ * Pre-match win probabilities for Team A vs Team B using OpenSkill `predictWin`,
+ * after replaying `priorRoundsChronological` in order (same priors as scoring).
+ */
+export function predictBasketballMatchWinProbabilities(
+  priorRoundsChronological: BasketballMatchInput[],
+  match: BasketballMatchInput,
+): { teamAWinProb: number; teamBWinProb: number } | null {
+  const parsedMatch = matchSchema.safeParse(match);
+  if (!parsedMatch.success) {
+    return null;
+  }
+  const ratings = replayPriorsIntoRatings(priorRoundsChronological);
+  const teamA = parsedMatch.data.teamAPlayerIds.map(
+    (id) => ratings.get(id) ?? rating(),
+  );
+  const teamB = parsedMatch.data.teamBPlayerIds.map(
+    (id) => ratings.get(id) ?? rating(),
+  );
+  const probs = predictWin([teamA, teamB]);
+  const teamAWinProb = probs[0];
+  const teamBWinProb = probs[1];
+  if (
+    typeof teamAWinProb !== "number" ||
+    typeof teamBWinProb !== "number" ||
+    !Number.isFinite(teamAWinProb) ||
+    !Number.isFinite(teamBWinProb)
+  ) {
+    return null;
+  }
+  return { teamAWinProb, teamBWinProb };
+}
+
 export function calculateBasketballRound(
   input: BasketballRoundInput,
 ): RoundCalculationResult {
   const parsed = basketballRoundSchema.parse(input);
   const ledgerScale = parsed.ledgerScale ?? DEFAULT_BASKETBALL_LEDGER_SCALE;
-  const ratings = new Map<number, OpenSkillRating>();
-
-  for (const prior of parsed.priorRounds) {
-    applyMatchToRatings(ratings, prior);
-  }
+  const ratings = replayPriorsIntoRatings(parsed.priorRounds);
 
   const participantIds = [
     ...parsed.match.teamAPlayerIds,

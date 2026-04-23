@@ -24,7 +24,10 @@ import {
 import {
   DEFAULT_BASKETBALL_LEDGER_SCALE,
   calculateBasketballRound,
+  parseBasketballMatchFromRoundSnapshot,
+  predictBasketballMatchWinProbabilities,
   priorBasketballMatchesFromRoundSnapshots,
+  priorBasketballMatchesStrictlyBeforeRound,
 } from "../features/game-types/basketball";
 import {
   PlayerSortButtons,
@@ -321,6 +324,48 @@ export function GameViewPage() {
     () => sumPointTotals((game?.players ?? []).map((player) => player.total)),
     [game?.players],
   );
+
+  const basketballRoundPredictionSuffixByRoundId = useMemo(() => {
+    const g = gameQuery.data;
+    if (!g || g.gameTypeId !== "basketball") {
+      return new Map<string, string>();
+    }
+    const nameByPlayerId = new Map(
+      g.players.map((player) => [player.playerId, player.displayName]),
+    );
+    const map = new Map<string, string>();
+    for (const round of g.rounds) {
+      const match = parseBasketballMatchFromRoundSnapshot(round.settingsSnapshot);
+      if (!match) {
+        continue;
+      }
+      const priors = priorBasketballMatchesStrictlyBeforeRound(
+        g.rounds,
+        round.roundNumber,
+      );
+      const probs = predictBasketballMatchWinProbabilities(priors, match);
+      if (!probs) {
+        continue;
+      }
+      const pctA = Math.round(probs.teamAWinProb * 100);
+      const pctB = Math.round(probs.teamBWinProb * 100);
+      let fragment: string;
+      if (match.scoreTeamA > match.scoreTeamB) {
+        fragment = `winning team's predicted win rate ${pctA}%`;
+      } else if (match.scoreTeamB > match.scoreTeamA) {
+        fragment = `winning team's predicted win rate ${pctB}%`;
+      } else {
+        const firstA = match.teamAPlayerIds[0];
+        const name =
+          firstA !== undefined
+            ? (nameByPlayerId.get(firstA) ?? String(firstA))
+            : "Team A";
+        fragment = `${name}'s team predicted win rate ${pctA}%`;
+      }
+      map.set(round.id, fragment);
+    }
+    return map;
+  }, [gameQuery.data]);
 
   useEffect(() => {
     if (!game || showGameSettings) {
@@ -1720,7 +1765,17 @@ export function GameViewPage() {
             {game.rounds.map((round) => (
               <li key={round.id} className="list-item">
                 <div className="stack-xs">
-                  <strong>Round {round.roundNumber}</strong>
+                  <strong>
+                    Round {round.roundNumber}
+                    {basketballRoundPredictionSuffixByRoundId.get(round.id) ? (
+                      <>
+                        {", "}
+                        <span className="muted">
+                          {basketballRoundPredictionSuffixByRoundId.get(round.id)}
+                        </span>
+                      </>
+                    ) : null}
+                  </strong>
                   <p className="muted">{round.summaryText}</p>
                   <p className="muted">{formatDateTime(round.createdAt)}</p>
                 </div>

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   calculateBasketballRound,
   parseBasketballMatchFromRoundSnapshot,
+  predictBasketballMatchWinProbabilities,
   priorBasketballMatchesFromRoundSnapshots,
+  priorBasketballMatchesStrictlyBeforeRound,
 } from "./basketball";
 
 describe("calculateBasketballRound", () => {
@@ -161,5 +163,75 @@ describe("priorBasketballMatchesFromRoundSnapshots", () => {
     expect(prior).toHaveLength(2);
     expect(prior[0]!.teamAPlayerIds).toEqual([2]);
     expect(prior[1]!.teamAPlayerIds).toEqual([1]);
+  });
+});
+
+describe("priorBasketballMatchesStrictlyBeforeRound", () => {
+  it("includes only rounds with smaller round numbers", () => {
+    const meta = (teamA: number[], teamB: number[]) => ({
+      mode: "basketball" as const,
+      teamAPlayerIds: teamA,
+      teamBPlayerIds: teamB,
+      scoreTeamA: 11,
+      scoreTeamB: 0,
+    });
+    const rounds = [
+      { roundNumber: 1, settingsSnapshot: { metadata: meta([1], [2]) } },
+      { roundNumber: 2, settingsSnapshot: { metadata: meta([1], [2]) } },
+      { roundNumber: 3, settingsSnapshot: { metadata: meta([1], [2]) } },
+    ];
+    const prior = priorBasketballMatchesStrictlyBeforeRound(rounds, 3);
+    expect(prior).toHaveLength(2);
+    expect(prior[0]!.teamAPlayerIds).toEqual([1]);
+    expect(prior[1]!.teamAPlayerIds).toEqual([1]);
+  });
+});
+
+describe("predictBasketballMatchWinProbabilities", () => {
+  const symmetricMatch = {
+    teamAPlayerIds: [1, 2],
+    teamBPlayerIds: [3, 4],
+    scoreTeamA: 11,
+    scoreTeamB: 7,
+  };
+
+  it("returns probabilities in [0, 1] that sum to ~1", () => {
+    const p = predictBasketballMatchWinProbabilities([], symmetricMatch);
+    expect(p).not.toBeNull();
+    expect(p!.teamAWinProb).toBeGreaterThanOrEqual(0);
+    expect(p!.teamAWinProb).toBeLessThanOrEqual(1);
+    expect(p!.teamBWinProb).toBeGreaterThanOrEqual(0);
+    expect(p!.teamBWinProb).toBeLessThanOrEqual(1);
+    expect(p!.teamAWinProb + p!.teamBWinProb).toBeCloseTo(1, 5);
+  });
+
+  it("changes when priors include a decisive prior round", () => {
+    const noPrior = predictBasketballMatchWinProbabilities([], symmetricMatch);
+    const withPrior = predictBasketballMatchWinProbabilities(
+      [
+        {
+          teamAPlayerIds: [1, 2],
+          teamBPlayerIds: [3, 4],
+          scoreTeamA: 21,
+          scoreTeamB: 0,
+        },
+      ],
+      symmetricMatch,
+    );
+    expect(noPrior!.teamAWinProb).not.toBeCloseTo(withPrior!.teamAWinProb, 2);
+  });
+
+  it("returns null for invalid match input", () => {
+    expect(
+      predictBasketballMatchWinProbabilities(
+        [],
+        {
+          teamAPlayerIds: [],
+          teamBPlayerIds: [1],
+          scoreTeamA: 0,
+          scoreTeamB: 0,
+        },
+      ),
+    ).toBeNull();
   });
 });
