@@ -19,8 +19,15 @@ export function formatMoneyCents(amountCents: number) {
 }
 
 export function formatPoints(value: number) {
+  if (Math.abs(value) > 100) {
+    return new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(Math.round(value));
+  }
+
   return new Intl.NumberFormat(undefined, {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 1,
   }).format(value);
 }
