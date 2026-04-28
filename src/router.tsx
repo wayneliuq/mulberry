@@ -22,6 +22,10 @@ export const appRoutes: RouteObject[] = [
         element: <LeaderboardsPage />,
       },
       {
+        path: "leaderboards/:gameTypeId",
+        element: <LeaderboardsPage />,
+      },
+      {
         path: "admin",
         element: <AdminConsolePage />,
       },

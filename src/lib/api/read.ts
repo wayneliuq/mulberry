@@ -56,6 +56,7 @@ type RawGamePointTotal = {
 
 type RawRound = {
   id: string;
+  game_id: string;
   round_number: number;
   summary_text: string | null;
   created_at: string;
@@ -354,7 +355,7 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
       .eq("game_id", gameId),
     supabase
       .from("rounds")
-      .select("id, round_number, summary_text, created_at, settings_snapshot")
+      .select("id, game_id, round_number, summary_text, created_at, settings_snapshot")
       .eq("game_id", gameId)
       .order("round_number", { ascending: false }),
     supabase
@@ -452,6 +453,35 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
     })),
     settlement,
   };
+}
+
+export type BasketballRoundHistoryRow = {
+  roundId: string;
+  gameId: string;
+  roundNumber: number;
+  createdAt: string;
+  settingsSnapshot?: Record<string, unknown>;
+};
+
+export async function fetchBasketballRoundHistory(): Promise<BasketballRoundHistoryRow[]> {
+  const { data, error } = await supabase
+    .from("rounds")
+    .select("id, game_id, round_number, created_at, settings_snapshot")
+    .eq("game_type_id", "basketball")
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as RawRound[]).map((round) => ({
+    roundId: round.id,
+    gameId: round.game_id,
+    roundNumber: round.round_number,
+    createdAt: round.created_at,
+    settingsSnapshot: round.settings_snapshot ?? undefined,
+  }));
 }
 
 type RawRoundEntryRow = {

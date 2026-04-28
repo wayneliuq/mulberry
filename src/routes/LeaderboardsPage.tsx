@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate, useParams } from "react-router-dom";
 import { gameTypeOptions } from "../features/game-types";
 import type { GameTypeId } from "../features/game-types/types";
 import { IconGlyph } from "../features/ui/IconGlyph";
@@ -88,9 +89,15 @@ function SortableTh({
 }
 
 export function LeaderboardsPage() {
-  const [selectedGameType, setSelectedGameType] = useState<GameTypeId | "all">(
-    "all",
-  );
+  const { gameTypeId: gameTypeParam } = useParams<{ gameTypeId?: string }>();
+  const navigate = useNavigate();
+  const selectedGameType = useMemo<GameTypeId | "all">(() => {
+    if (!gameTypeParam || gameTypeParam === "all") {
+      return "all";
+    }
+    const valid = gameTypeOptions.some((option) => option.id === gameTypeParam);
+    return valid ? (gameTypeParam as GameTypeId) : "all";
+  }, [gameTypeParam]);
   const [showMoney, setShowMoney] = useState(readShowMoneyFromStorage);
   const [playerSort, setPlayerSort] = useState<{
     column: SortColumn;
@@ -107,6 +114,23 @@ export function LeaderboardsPage() {
       writeShowMoneyToStorage(next);
     },
     [],
+  );
+
+  useEffect(() => {
+    if (!gameTypeParam || gameTypeParam === "all") {
+      return;
+    }
+    const valid = gameTypeOptions.some((option) => option.id === gameTypeParam);
+    if (!valid) {
+      navigate("/leaderboards", { replace: true });
+    }
+  }, [gameTypeParam, navigate]);
+
+  const navigateToFilter = useCallback(
+    (gameType: GameTypeId | "all") => {
+      navigate(gameType === "all" ? "/leaderboards" : `/leaderboards/${gameType}`);
+    },
+    [navigate],
   );
 
   const leaderboardsQuery = useQuery({
@@ -244,7 +268,7 @@ export function LeaderboardsPage() {
                     ? "filter-toggle filter-toggle-active"
                     : "filter-toggle"
                 }
-                onClick={() => setSelectedGameType("all")}
+                onClick={() => navigateToFilter("all")}
               >
                 <IconGlyph name="all" className="filter-toggle-icon" />
                 <span className="filter-toggle-label">All</span>
@@ -258,7 +282,7 @@ export function LeaderboardsPage() {
                       ? "filter-toggle filter-toggle-active"
                       : "filter-toggle"
                   }
-                  onClick={() => setSelectedGameType(option.id)}
+                  onClick={() => navigateToFilter(option.id)}
                 >
                   <IconGlyph name={option.icon} className="filter-toggle-icon" />
                   <span className="filter-toggle-label">{option.name}</span>

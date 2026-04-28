@@ -26,8 +26,6 @@ import {
   calculateBasketballRound,
   parseBasketballMatchFromRoundSnapshot,
   predictBasketballMatchWinProbabilities,
-  priorBasketballMatchesFromRoundSnapshots,
-  priorBasketballMatchesStrictlyBeforeRound,
 } from "../features/game-types/basketball";
 import {
   PlayerSortButtons,
@@ -35,7 +33,11 @@ import {
 } from "../features/players/SortablePlayerList";
 import { IconGlyph } from "../features/ui/IconGlyph";
 import { adminWrite } from "../lib/api/admin";
-import { fetchGameDetails, fetchPlayers } from "../lib/api/read";
+import {
+  fetchBasketballRoundHistory,
+  fetchGameDetails,
+  fetchPlayers,
+} from "../lib/api/read";
 import { formatDateTime, formatMoneyCents, formatPoints } from "../lib/format";
 
 function sumPointTotals(values: number[]) {
@@ -104,6 +106,11 @@ export function GameViewPage() {
     queryKey: ["players"],
     queryFn: fetchPlayers,
   });
+  const basketballHistoryQuery = useQuery({
+    queryKey: ["basketball-round-history"],
+    queryFn: fetchBasketballRoundHistory,
+    enabled: gameQuery.data?.gameTypeId === "basketball",
+  });
 
   const game = gameQuery.data;
   const allPlayers = playersQuery.data ?? [];
@@ -152,6 +159,7 @@ export function GameViewPage() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["games"] }),
       queryClient.invalidateQueries({ queryKey: ["game", gameId] }),
+      queryClient.invalidateQueries({ queryKey: ["basketball-round-history"] }),
       queryClient.invalidateQueries({ queryKey: ["players"] }),
       queryClient.invalidateQueries({ queryKey: ["leaderboards"] }),
     ]);
@@ -331,6 +339,17 @@ export function GameViewPage() {
     if (!g || g.gameTypeId !== "basketball") {
       return new Map<string, string>();
     }
+    const globalHistory = basketballHistoryQuery.data ?? [];
+    const parsedGlobal = globalHistory
+      .map((row) => ({
+        roundId: row.roundId,
+        match: parseBasketballMatchFromRoundSnapshot(row.settingsSnapshot),
+      }))
+      .filter(
+        (row): row is { roundId: string; match: NonNullable<typeof row.match> } =>
+          row.match !== null,
+      );
+
     const nameByPlayerId = new Map(
       g.players.map((player) => [player.playerId, player.displayName]),
     );
@@ -340,10 +359,11 @@ export function GameViewPage() {
       if (!match) {
         continue;
       }
-      const priors = priorBasketballMatchesStrictlyBeforeRound(
-        g.rounds,
-        round.roundNumber,
-      );
+      const index = parsedGlobal.findIndex((r) => r.roundId === round.id);
+      if (index < 0) {
+        continue;
+      }
+      const priors = parsedGlobal.slice(0, index).map((r) => r.match);
       const probs = predictBasketballMatchWinProbabilities(priors, match);
       if (!probs) {
         continue;
@@ -366,7 +386,7 @@ export function GameViewPage() {
       map.set(round.id, fragment);
     }
     return map;
-  }, [gameQuery.data]);
+  }, [basketballHistoryQuery.data, gameQuery.data]);
 
   useEffect(() => {
     if (!game || showGameSettings) {
@@ -641,7 +661,14 @@ export function GameViewPage() {
       return;
     }
 
-    const priorRounds = priorBasketballMatchesFromRoundSnapshots(game.rounds);
+    if (basketballHistoryQuery.isLoading) {
+      window.alert("Basketball history is still loading. Please try again.");
+      return;
+    }
+
+    const priorRounds = (basketballHistoryQuery.data ?? [])
+      .map((row) => parseBasketballMatchFromRoundSnapshot(row.settingsSnapshot))
+      .filter((m): m is NonNullable<typeof m> => m !== null);
     const result = calculateBasketballRound({
       priorRounds,
       match: {
