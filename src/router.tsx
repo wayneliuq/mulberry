@@ -4,6 +4,7 @@ import {
 } from "react-router-dom";
 import { AppLayout } from "./features/layout/AppLayout";
 import { AdminConsolePage } from "./routes/AdminConsolePage";
+import { DashboardsPage } from "./routes/DashboardsPage";
 import { GameViewPage } from "./routes/GameViewPage";
 import { GamesPage } from "./routes/GamesPage";
 import { LeaderboardsPage } from "./routes/LeaderboardsPage";
@@ -24,6 +25,10 @@ export const appRoutes: RouteObject[] = [
       {
         path: "leaderboards/:gameTypeId",
         element: <LeaderboardsPage />,
+      },
+      {
+        path: "dashboards",
+        element: <DashboardsPage />,
       },
       {
         path: "admin",

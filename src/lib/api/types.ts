@@ -120,3 +120,32 @@ export type LeaderboardData = {
   players: PlayerLeaderboardRow[];
   families: FamilyLeaderboardRow[];
 };
+
+export type BasketballDashboardPlayer = {
+  id: number;
+  displayName: string;
+  familyId: string | null;
+};
+
+export type BasketballDashboardRound = {
+  roundId: string;
+  gameId: string;
+  roundNumber: number;
+  createdAt: string;
+  teamAPlayerIds: number[];
+  teamBPlayerIds: number[];
+  scoreTeamA: number;
+  scoreTeamB: number;
+};
+
+export type BasketballDashboardRoundEntry = {
+  roundId: string;
+  playerId: number;
+  pointDelta: number;
+};
+
+export type BasketballDashboardData = {
+  players: BasketballDashboardPlayer[];
+  rounds: BasketballDashboardRound[];
+  roundEntries: BasketballDashboardRoundEntry[];
+};

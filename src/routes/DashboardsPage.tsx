@@ -1,0 +1,183 @@
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
+import { buildBasketballDashboardMetricsFromData } from "../features/dashboards/basketball/compute";
+import type {
+  DashboardMetricSection,
+  DashboardMetricSplitSection,
+} from "../features/dashboards/basketball/types";
+import { MetricCard } from "../features/dashboards/components/MetricCard";
+import { RankedTable } from "../features/dashboards/components/RankedTable";
+import { fetchBasketballDashboardData } from "../lib/api/read";
+
+function findSplitSection(
+  sections: DashboardMetricSplitSection[],
+  id: string,
+): DashboardMetricSplitSection | undefined {
+  return sections.find((section) => section.id === id);
+}
+
+function findSection(
+  sections: DashboardMetricSection[],
+  id: string,
+): DashboardMetricSection | undefined {
+  return sections.find((section) => section.id === id);
+}
+
+export function DashboardsPage() {
+  const dashboardQuery = useQuery({
+    queryKey: ["dashboards", "basketball"],
+    queryFn: fetchBasketballDashboardData,
+  });
+
+  const metrics = useMemo(() => {
+    if (!dashboardQuery.data) return null;
+    return buildBasketballDashboardMetricsFromData(dashboardQuery.data);
+  }, [dashboardQuery.data]);
+
+  const sectionOrder = useMemo(
+    () => [
+      "combos",
+      "clutch",
+      "rivalry",
+      "carry",
+      "consistency",
+      "upset",
+      "trios",
+      "families",
+      "balanced",
+    ],
+    [],
+  );
+
+  const highlightItems = useMemo(() => {
+    if (!metrics) return [];
+    const combo = findSplitSection(metrics.splitSections, "combos")?.positiveRows[0];
+    const clutch = findSplitSection(metrics.splitSections, "clutch")?.positiveRows[0];
+    const upset = findSection(metrics.sections, "upset")?.rows[0];
+    const balanced = findSection(metrics.sections, "balanced")?.rows[0];
+    return [
+      combo ? { label: "Best combo", value: combo.label, detail: combo.valueLabel } : null,
+      clutch ? { label: "Clutch leader", value: clutch.label, detail: clutch.valueLabel } : null,
+      upset ? { label: "Upset machine", value: upset.label, detail: upset.valueLabel } : null,
+      balanced
+        ? { label: "Balanced teammate", value: balanced.label, detail: balanced.valueLabel }
+        : null,
+    ].filter((item): item is { label: string; value: string; detail: string } => item !== null);
+  }, [metrics]);
+
+  if (dashboardQuery.isLoading) {
+    return (
+      <section className="stack-lg">
+        <div className="inline-actions space-between">
+          <Link to="/leaderboards" className="secondary-button link-button">
+            Back to leaderboards
+          </Link>
+        </div>
+        <article className="card stack-sm">
+          <p className="card-eyebrow">Dashboards</p>
+          <h2>Basketball analytics</h2>
+          <p className="muted">Loading basketball dashboards...</p>
+        </article>
+      </section>
+    );
+  }
+
+  if (dashboardQuery.isError || !metrics) {
+    return (
+      <section className="stack-lg">
+        <div className="inline-actions space-between">
+          <Link to="/leaderboards" className="secondary-button link-button">
+            Back to leaderboards
+          </Link>
+        </div>
+        <article className="card stack-sm">
+          <p className="card-eyebrow">Dashboards</p>
+          <h2>Basketball analytics</h2>
+          <p className="form-error">
+            {dashboardQuery.error instanceof Error
+              ? dashboardQuery.error.message
+              : "Unable to load dashboard data."}
+          </p>
+        </article>
+      </section>
+    );
+  }
+
+  const splitSectionsById = new Map(
+    metrics.splitSections.map((section) => [section.id, section]),
+  );
+  const sectionsById = new Map(metrics.sections.map((section) => [section.id, section]));
+
+  return (
+    <section className="stack-lg">
+      <div className="inline-actions space-between">
+        <Link to="/leaderboards" className="secondary-button link-button">
+          Back to leaderboards
+        </Link>
+        <span className="pill">
+          {metrics.diagnostics.eligibleRounds} rounds analyzed
+        </span>
+      </div>
+
+      <article className="card stack-sm">
+        <p className="card-eyebrow">Dashboards</p>
+        <h2>Basketball analytics</h2>
+        <p className="muted">
+          Mobile-friendly, sample-aware stats built from round snapshots and player deltas.
+        </p>
+        <div className="dashboard-highlights">
+          {highlightItems.map((item) => (
+            <div key={item.label} className="dashboard-highlight-item">
+              <p className="dashboard-highlight-label">{item.label}</p>
+              <p className="dashboard-highlight-value">{item.value}</p>
+              <p className="dashboard-highlight-detail">{item.detail}</p>
+            </div>
+          ))}
+        </div>
+      </article>
+
+      <article className="card stack-sm">
+        <p className="card-eyebrow">Jump to section</p>
+        <div className="inline-actions">
+          {sectionOrder.map((id) => (
+            <a key={id} className="filter-chip" href={`#dashboard-${id}`}>
+              {id}
+            </a>
+          ))}
+        </div>
+      </article>
+
+      {sectionOrder.map((id) => {
+        const splitSection = splitSectionsById.get(id);
+        if (splitSection) {
+          return (
+            <MetricCard key={id} id={`dashboard-${id}`} title={splitSection.title}>
+              <p className="muted">{splitSection.explanation}</p>
+              <details className="dashboard-details" open>
+                <summary>{splitSection.positiveTitle}</summary>
+                <RankedTable rows={splitSection.positiveRows} valueHeader="Lift" />
+              </details>
+              <details className="dashboard-details" open>
+                <summary>{splitSection.negativeTitle}</summary>
+                <RankedTable rows={splitSection.negativeRows} valueHeader="Lift" />
+              </details>
+            </MetricCard>
+          );
+        }
+
+        const section = sectionsById.get(id);
+        if (!section) return null;
+        return (
+          <MetricCard key={id} id={`dashboard-${id}`} title={section.title}>
+            <p className="muted">{section.explanation}</p>
+            <details className="dashboard-details" open>
+              <summary>Ranked results</summary>
+              <RankedTable rows={section.rows} />
+            </details>
+          </MetricCard>
+        );
+      })}
+    </section>
+  );
+}

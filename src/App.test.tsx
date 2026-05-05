@@ -12,12 +12,14 @@ const {
   fetchPlayersMock,
   fetchGameDetailsMock,
   fetchLeaderboardsMock,
+  fetchBasketballDashboardDataMock,
 } = vi.hoisted(() => ({
   verifyAdminPasswordMock: vi.fn(),
   fetchGamesMock: vi.fn(),
   fetchPlayersMock: vi.fn(),
   fetchGameDetailsMock: vi.fn(),
   fetchLeaderboardsMock: vi.fn(),
+  fetchBasketballDashboardDataMock: vi.fn(),
 }));
 
 vi.mock("./lib/api/admin", () => ({
@@ -30,6 +32,7 @@ vi.mock("./lib/api/read", () => ({
   fetchPlayers: fetchPlayersMock,
   fetchGameDetails: fetchGameDetailsMock,
   fetchLeaderboards: fetchLeaderboardsMock,
+  fetchBasketballDashboardData: fetchBasketballDashboardDataMock,
 }));
 
 function renderApp(initialEntries = ["/"]) {
@@ -61,6 +64,11 @@ describe("app shell", () => {
       players: [],
       families: [],
     });
+    fetchBasketballDashboardDataMock.mockResolvedValue({
+      players: [],
+      rounds: [],
+      roundEntries: [],
+    });
   });
 
   it("shows the primary navigation", () => {
@@ -70,6 +78,7 @@ describe("app shell", () => {
     expect(
       screen.getByRole("link", { name: "Leaderboards" }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Dashboards" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Admin" })).toBeInTheDocument();
   });
 

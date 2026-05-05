@@ -239,7 +239,7 @@ select:focus-visible {
 
 .tab-nav {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-sm);
   margin: var(--space-lg) 0 var(--space-xl);
 }
@@ -870,6 +870,75 @@ tbody tr:last-child td {
   overflow: hidden;
 }
 
+.dashboard-card {
+  scroll-margin-top: 1rem;
+}
+
+.dashboard-constraint {
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-inner);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 65%, transparent);
+  background: color-mix(in srgb, var(--surface-2) 55%, transparent);
+}
+
+.dashboard-constraint-line {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--text-body);
+}
+
+.dashboard-highlights {
+  display: grid;
+  gap: var(--space-sm);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dashboard-highlight-item {
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
+  background: color-mix(in srgb, var(--surface-3) 60%, transparent);
+}
+
+.dashboard-highlight-label,
+.dashboard-highlight-value,
+.dashboard-highlight-detail {
+  margin: 0;
+}
+
+.dashboard-highlight-label {
+  color: var(--text-muted);
+  font-size: var(--font-size-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.dashboard-highlight-value {
+  color: var(--text-strong);
+  font-weight: 700;
+  margin-top: 0.2rem;
+}
+
+.dashboard-highlight-detail {
+  color: var(--accent-cyan);
+  font-size: var(--font-size-small);
+  margin-top: 0.15rem;
+}
+
+.dashboard-details {
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
+  border-radius: var(--radius-inner);
+  padding: 0.45rem 0.6rem 0.6rem;
+  background: color-mix(in srgb, var(--surface-2) 50%, transparent);
+}
+
+.dashboard-details > summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--text-strong);
+  margin-bottom: 0.5rem;
+}
+
 .align-end {
   display: flex;
   align-items: end;
@@ -920,5 +989,9 @@ tbody tr:last-child td {
 
   .members-cell-clamp {
     -webkit-line-clamp: 2;
+  }
+
+  .dashboard-highlights {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }

@@ -3,6 +3,7 @@ import { NavLink, Outlet } from "react-router-dom";
 const navigationItems = [
   { label: "Games", to: "/" },
   { label: "Leaderboards", to: "/leaderboards" },
+  { label: "Dashboards", to: "/dashboards" },
   { label: "Admin", to: "/admin" },
 ];
 

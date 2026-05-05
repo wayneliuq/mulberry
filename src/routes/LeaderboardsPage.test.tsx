@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
 import { fetchLeaderboards } from "../lib/api/read";
 import type { LeaderboardData } from "../lib/api/types";
@@ -20,7 +21,9 @@ function renderLeaderboards() {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <LeaderboardsPage />
+      <MemoryRouter>
+        <LeaderboardsPage />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }

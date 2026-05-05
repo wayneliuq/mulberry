@@ -1,6 +1,9 @@
 import type { GameTypeId } from "../../features/game-types/types";
 import { supabase } from "../supabase/client";
 import type {
+  BasketballDashboardData,
+  BasketballDashboardRound,
+  BasketballDashboardRoundEntry,
   FamilyLeaderboardRow,
   GameDetails,
   GameSummary,
@@ -71,6 +74,12 @@ type RawRoundEntry = {
     display_name: string;
     is_active?: boolean;
   }> | null;
+};
+
+type RawRoundEntryMetric = {
+  round_id: string;
+  player_id: number;
+  point_delta: number;
 };
 
 type GroupedUnit = {
@@ -482,6 +491,122 @@ export async function fetchBasketballRoundHistory(): Promise<BasketballRoundHist
     createdAt: round.created_at,
     settingsSnapshot: round.settings_snapshot ?? undefined,
   }));
+}
+
+function isIntegerArray(value: unknown): value is number[] {
+  return Array.isArray(value) && value.every((item) => Number.isInteger(item));
+}
+
+function parseBasketballRound(
+  round: RawRound,
+): BasketballDashboardRound | null {
+  const snapshot = round.settings_snapshot;
+  if (!snapshot || typeof snapshot !== "object") {
+    return null;
+  }
+  const metadata = (snapshot as Record<string, unknown>).metadata;
+  if (!metadata || typeof metadata !== "object") {
+    return null;
+  }
+  const mode = (metadata as Record<string, unknown>).mode;
+  if (mode !== "basketball") {
+    return null;
+  }
+  const teamAPlayerIds = (metadata as Record<string, unknown>).teamAPlayerIds;
+  const teamBPlayerIds = (metadata as Record<string, unknown>).teamBPlayerIds;
+  const scoreTeamA = (metadata as Record<string, unknown>).scoreTeamA;
+  const scoreTeamB = (metadata as Record<string, unknown>).scoreTeamB;
+  if (
+    !isIntegerArray(teamAPlayerIds) ||
+    !isIntegerArray(teamBPlayerIds) ||
+    teamAPlayerIds.length < 1 ||
+    teamBPlayerIds.length < 1 ||
+    !Number.isInteger(scoreTeamA) ||
+    !Number.isInteger(scoreTeamB) ||
+    (scoreTeamA as number) < 0 ||
+    (scoreTeamB as number) < 0
+  ) {
+    return null;
+  }
+  const teamASet = new Set<number>(teamAPlayerIds);
+  const teamBSet = new Set<number>(teamBPlayerIds);
+  if (teamASet.size !== teamAPlayerIds.length || teamBSet.size !== teamBPlayerIds.length) {
+    return null;
+  }
+  for (const playerId of teamASet) {
+    if (teamBSet.has(playerId)) {
+      return null;
+    }
+  }
+  return {
+    roundId: round.id,
+    gameId: round.game_id,
+    roundNumber: round.round_number,
+    createdAt: round.created_at,
+    teamAPlayerIds,
+    teamBPlayerIds,
+    scoreTeamA: scoreTeamA as number,
+    scoreTeamB: scoreTeamB as number,
+  };
+}
+
+export async function fetchBasketballDashboardData(): Promise<BasketballDashboardData> {
+  const [roundsResult, entriesResult, playersResult] = await Promise.all([
+    supabase
+      .from("rounds")
+      .select("id, game_id, round_number, created_at, settings_snapshot")
+      .eq("game_type_id", "basketball")
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true }),
+    supabase
+      .from("round_entries")
+      .select("round_id, player_id, point_delta"),
+    supabase
+      .from("players")
+      .select("id, display_name, family_id")
+      .eq("is_active", true),
+  ]);
+
+  if (roundsResult.error) {
+    throw new Error(roundsResult.error.message);
+  }
+  if (entriesResult.error) {
+    throw new Error(entriesResult.error.message);
+  }
+  if (playersResult.error) {
+    throw new Error(playersResult.error.message);
+  }
+
+  const rounds = ((roundsResult.data ?? []) as RawRound[])
+    .map(parseBasketballRound)
+    .filter((round): round is BasketballDashboardRound => round !== null);
+  const roundIdSet = new Set(rounds.map((round) => round.roundId));
+
+  const roundEntries = ((entriesResult.data ?? []) as RawRoundEntryMetric[])
+    .filter((entry) => roundIdSet.has(entry.round_id))
+    .map<BasketballDashboardRoundEntry>((entry) => ({
+      roundId: entry.round_id,
+      playerId: entry.player_id,
+      pointDelta: entry.point_delta,
+    }));
+
+  const players = ((playersResult.data ?? []) as RawPlayer[])
+    .map((player) => ({
+      id: player.id,
+      displayName: player.display_name,
+      familyId: player.family_id,
+    }))
+    .sort((left, right) =>
+      left.displayName.localeCompare(right.displayName, undefined, {
+        sensitivity: "base",
+      }),
+    );
+
+  return {
+    players,
+    rounds,
+    roundEntries,
+  };
 }
 
 type RawRoundEntryRow = {
