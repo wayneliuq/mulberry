@@ -286,7 +286,9 @@ function computeComboSections(
       title: "Homegrown Families / Factions",
       positiveTitle: "Most frequently same-team pairs",
       negativeTitle: "No secondary ranking",
-      positiveRows: topRows(familyRows, TOP_N.family).map(({ sharedRounds, ...row }) => row),
+      positiveRows: familyRows
+        .slice(0, TOP_N.family)
+        .map(({ sharedRounds, ...row }) => row),
       negativeRows: [],
       ...METRIC_META.families,
     },

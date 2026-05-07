@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { BasketballDashboardData } from "../../../lib/api/types";
 
 const { predictMock } = vi.hoisted(() => ({
-  predictMock: vi.fn(() => ({ teamAWinProb: 0.35, teamBWinProb: 0.65 })),
+  predictMock: vi.fn((priors: unknown[]) => {
+    void priors;
+    return { teamAWinProb: 0.35, teamBWinProb: 0.65 };
+  }),
 }));
 
 const observedPriorLengths: number[] = [];
@@ -38,7 +41,7 @@ describe("upset section probability source", () => {
   it("uses the current rolling skill context for upset checks", () => {
     observedPriorLengths.length = 0;
     predictMock.mockClear();
-    predictMock.mockImplementation((priors) => {
+    predictMock.mockImplementation((priors: unknown[]) => {
       observedPriorLengths.push(priors.length);
       return { teamAWinProb: 0.35, teamBWinProb: 0.65 };
     });
