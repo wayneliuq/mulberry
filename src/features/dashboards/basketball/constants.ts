@@ -8,12 +8,12 @@ export const PAIR_MIN_APART = 8;
 export const CLUTCH_MARGIN = 2;
 export const CLUTCH_MIN_ROUNDS = 8;
 export const RIVALRY_MIN_MATCHES = 10;
+export const RIVALRY_VOLUME_REFERENCE = 20;
 export const CARRY_MIN_SIDE_SAMPLES = 8;
 export const UPSET_PROBABILITY_THRESHOLD = 0.4;
 export const UPSET_MIN_OPPORTUNITIES = 6;
 export const TRIO_MIN_TOGETHER = 6;
 export const FAMILY_PAIR_MIN_TOGETHER = 6;
-export const FAMILY_PAIR_MIN_APART = 6;
 export const BALANCED_MIN_TEAMMATES = 6;
 
 export const TOP_N = {
@@ -24,7 +24,7 @@ export const TOP_N = {
   consistency: 5,
   upset: 10,
   trios: 8,
-  family: 8,
+  family: 10,
   balanced: 10,
 } as const;
 
@@ -43,9 +43,10 @@ export const METRIC_META: Record<string, DashboardMetricMeta> = {
     topNLabel: "Top 5 clutch risers and droppers.",
   },
   rivalry: {
-    explanation: "Head-to-head records for players facing each other on opposite teams.",
+    explanation:
+      "Ranks head-to-head matchups by a combined score: closeness to a 50/50 split multiplied by a sample-size weight.",
     constraintLabel: "Opponent pair must face off at least 10 rounds.",
-    topNLabel: "Top 5 rivalries by opposite-team frequency.",
+    topNLabel: "Top 5 balanced rivalries (parity x volume).",
   },
   carry: {
     explanation:
@@ -62,9 +63,9 @@ export const METRIC_META: Record<string, DashboardMetricMeta> = {
   },
   upset: {
     explanation:
-      "Tracks wins when a player's team had low pre-round win probability.",
+      "Tracks wins when a player's team had low current skill-model win probability.",
     constraintLabel:
-      "Players >=20 rounds and >=6 upset opportunities (pre-win prob < 40%).",
+      "Players >=20 rounds and >=6 upset opportunities (skill win prob < 40%).",
     topNLabel: "Top 10 upset converters.",
   },
   trios: {
@@ -75,10 +76,10 @@ export const METRIC_META: Record<string, DashboardMetricMeta> = {
   },
   families: {
     explanation:
-      "Highlights cross-family pairs that overperform or underperform when together.",
+      "Shows pairs that most consistently end up on the same team.",
     constraintLabel:
-      "Different family tags, players >=20 rounds, together/apart >=6 rounds.",
-    topNLabel: "Top 8 cross-family synergy pairs.",
+      "Players >=20 rounds and pair shares at least 6 rounds together.",
+    topNLabel: "Top 10 pairs by same-team rate, with together-vs-apart win delta in details.",
   },
   balanced: {
     explanation:

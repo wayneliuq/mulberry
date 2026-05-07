@@ -151,17 +151,20 @@ export function DashboardsPage() {
       {sectionOrder.map((id) => {
         const splitSection = splitSectionsById.get(id);
         if (splitSection) {
+          const valueHeader = splitSection.id === "families" ? "Same-team %" : "Lift";
           return (
             <MetricCard key={id} id={`dashboard-${id}`} title={splitSection.title}>
               <p className="muted">{splitSection.explanation}</p>
               <details className="dashboard-details" open>
                 <summary>{splitSection.positiveTitle}</summary>
-                <RankedTable rows={splitSection.positiveRows} valueHeader="Lift" />
+                <RankedTable rows={splitSection.positiveRows} valueHeader={valueHeader} />
               </details>
-              <details className="dashboard-details" open>
-                <summary>{splitSection.negativeTitle}</summary>
-                <RankedTable rows={splitSection.negativeRows} valueHeader="Lift" />
-              </details>
+              {splitSection.negativeRows.length > 0 ? (
+                <details className="dashboard-details" open>
+                  <summary>{splitSection.negativeTitle}</summary>
+                  <RankedTable rows={splitSection.negativeRows} valueHeader={valueHeader} />
+                </details>
+              ) : null}
             </MetricCard>
           );
         }

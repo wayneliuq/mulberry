@@ -9,13 +9,13 @@ import {
   CLUTCH_MARGIN,
   CLUTCH_MIN_ROUNDS,
   DASHBOARD_MAX_ROUNDS,
-  FAMILY_PAIR_MIN_APART,
   FAMILY_PAIR_MIN_TOGETHER,
   METRIC_META,
   PAIR_MIN_APART,
   PAIR_MIN_TOGETHER,
   PLAYER_MIN_ROUNDS,
   RIVALRY_MIN_MATCHES,
+  RIVALRY_VOLUME_REFERENCE,
   TOP_N,
   TRIO_MIN_TOGETHER,
   UPSET_MIN_OPPORTUNITIES,
@@ -148,7 +148,6 @@ function topRows(rows: RankedMetricRow[], count: number): RankedMetricRow[] {
 function computeComboSections(
   rounds: NormalizedRound[],
   playerNameById: Map<number, string>,
-  familyByPlayerId: Map<number, string | null>,
   roundCountByPlayer: Map<number, number>,
 ): DashboardMetricSplitSection[] {
   const eligiblePlayerIds = Array.from(roundCountByPlayer.entries())
@@ -164,6 +163,8 @@ function computeComboSections(
       together: WinLoss;
       apartA: WinLoss;
       apartB: WinLoss;
+      bothPlayed: number;
+      sameTeamRounds: number;
     }
   >();
 
@@ -177,6 +178,8 @@ function computeComboSections(
         together: { wins: 0, losses: 0 },
         apartA: { wins: 0, losses: 0 },
         apartB: { wins: 0, losses: 0 },
+        bothPlayed: 0,
+        sameTeamRounds: 0,
       });
     }
   }
@@ -186,8 +189,12 @@ function computeComboSections(
       const aPresent = round.teamASet.has(pair.a) || round.teamBSet.has(pair.a);
       const bPresent = round.teamASet.has(pair.b) || round.teamBSet.has(pair.b);
       const sameTeam = aPresent && bPresent && areTeammates(round, pair.a, pair.b);
+      if (aPresent && bPresent) {
+        pair.bothPlayed += 1;
+      }
 
       if (sameTeam) {
+        pair.sameTeamRounds += 1;
         const togetherWin = didPlayerWin(round, pair.a);
         if (togetherWin === null) continue;
         if (togetherWin) pair.together.wins += 1;
@@ -214,11 +221,32 @@ function computeComboSections(
   }
 
   const comboRows: RankedMetricRow[] = [];
-  const crossFamilyRows: RankedMetricRow[] = [];
+  const familyRows: Array<RankedMetricRow & { sharedRounds: number }> = [];
   for (const pair of pairs.values()) {
     const togetherGames = pair.together.wins + pair.together.losses;
     const apartAGames = pair.apartA.wins + pair.apartA.losses;
     const apartBGames = pair.apartB.wins + pair.apartB.losses;
+    const label = `${playerNameById.get(pair.a) ?? pair.a} + ${playerNameById.get(pair.b) ?? pair.b}`;
+    if (pair.bothPlayed >= FAMILY_PAIR_MIN_TOGETHER) {
+      const sameTeamRate =
+        pair.bothPlayed > 0 ? pair.sameTeamRounds / pair.bothPlayed : 0;
+      const togetherRate = togetherGames > 0 ? pair.together.wins / togetherGames : null;
+      const apartRate =
+        apartAGames > 0 && apartBGames > 0
+          ? (pair.apartA.wins / apartAGames + pair.apartB.wins / apartBGames) / 2
+          : null;
+      const deltaLabel =
+        togetherRate !== null && apartRate !== null
+          ? signedPct(togetherRate - apartRate)
+          : "n/a";
+      familyRows.push({
+        label,
+        value: sameTeamRate,
+        valueLabel: pct(sameTeamRate),
+        details: `${pair.sameTeamRounds}/${pair.bothPlayed} shared rounds on same team · win-rate delta ${deltaLabel} vs apart`,
+        sharedRounds: pair.bothPlayed,
+      });
+    }
     if (togetherGames < PAIR_MIN_TOGETHER || apartAGames < PAIR_MIN_APART || apartBGames < PAIR_MIN_APART) {
       continue;
     }
@@ -227,29 +255,21 @@ function computeComboSections(
     const apartBRate = pair.apartB.wins / apartBGames;
     const apartRate = (apartARate + apartBRate) / 2;
     const lift = togetherRate - apartRate;
-    const label = `${playerNameById.get(pair.a) ?? pair.a} + ${playerNameById.get(pair.b) ?? pair.b}`;
-    const row: RankedMetricRow = {
+    comboRows.push({
       label,
       value: lift,
       valueLabel: signedPct(lift),
       details: `Together ${pct(togetherRate)} (${togetherGames}) vs apart avg ${pct(apartRate)} (${apartAGames}/${apartBGames})`,
-    };
-    comboRows.push(row);
-    const familyA = familyByPlayerId.get(pair.a) ?? null;
-    const familyB = familyByPlayerId.get(pair.b) ?? null;
-    const crossFamily = familyA !== familyB || familyA === null || familyB === null;
-    if (
-      crossFamily &&
-      togetherGames >= FAMILY_PAIR_MIN_TOGETHER &&
-      apartAGames >= FAMILY_PAIR_MIN_APART &&
-      apartBGames >= FAMILY_PAIR_MIN_APART
-    ) {
-      crossFamilyRows.push(row);
-    }
+    });
   }
 
   comboRows.sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
-  crossFamilyRows.sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+  familyRows.sort(
+    (a, b) =>
+      b.value - a.value ||
+      b.sharedRounds - a.sharedRounds ||
+      a.label.localeCompare(b.label),
+  );
 
   return [
     {
@@ -264,10 +284,10 @@ function computeComboSections(
     {
       id: "families",
       title: "Homegrown Families / Factions",
-      positiveTitle: "Best cross-family pairs",
-      negativeTitle: "Worst cross-family pairs",
-      positiveRows: topRows(crossFamilyRows, TOP_N.family),
-      negativeRows: topRows([...crossFamilyRows].reverse(), TOP_N.family),
+      positiveTitle: "Most frequently same-team pairs",
+      negativeTitle: "No secondary ranking",
+      positiveRows: topRows(familyRows, TOP_N.family).map(({ sharedRounds, ...row }) => row),
+      negativeRows: [],
       ...METRIC_META.families,
     },
   ];
@@ -383,17 +403,30 @@ function computeRivalrySection(
   }
   const rows = Array.from(records.values())
     .filter((record) => record.oppositeTeams >= RIVALRY_MIN_MATCHES)
-    .map<RankedMetricRow>((record) => {
-      const oppositeRate =
-        record.bothPlayed > 0 ? record.oppositeTeams / record.bothPlayed : 0;
-      return {
-        label: `${playerNameById.get(record.a) ?? record.a} vs ${playerNameById.get(record.b) ?? record.b}`,
-        value: oppositeRate,
-        valueLabel: pct(oppositeRate),
-        details: `${record.aWins}-${record.bWins} head-to-head (${record.oppositeTeams} opposite-team rounds)`,
-      };
+    .map((record) => {
+      const headToHeadTotal = record.aWins + record.bWins;
+      const aWinRate = headToHeadTotal > 0 ? record.aWins / headToHeadTotal : 0.5;
+      // Rivalries are most interesting when the matchup is near 50/50, but
+      // we also want more rounds to count as stronger evidence.
+      const parityScore = 1 - Math.min(1, Math.abs(aWinRate - 0.5) * 2);
+      const volumeWeight = Math.min(
+        1,
+        Math.log1p(record.oppositeTeams) / Math.log1p(RIVALRY_VOLUME_REFERENCE),
+      );
+      return { record, rivalryScore: parityScore * volumeWeight };
     })
-    .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+    .sort((a, b) => {
+      if (b.rivalryScore !== a.rivalryScore) return b.rivalryScore - a.rivalryScore;
+      const labelA = `${playerNameById.get(a.record.a) ?? a.record.a} vs ${playerNameById.get(a.record.b) ?? a.record.b}`;
+      const labelB = `${playerNameById.get(b.record.a) ?? b.record.a} vs ${playerNameById.get(b.record.b) ?? b.record.b}`;
+      return labelA.localeCompare(labelB);
+    })
+    .map<RankedMetricRow>(({ record, rivalryScore }) => ({
+      label: `${playerNameById.get(record.a) ?? record.a} vs ${playerNameById.get(record.b) ?? record.b}`,
+      value: rivalryScore,
+      valueLabel: pct(rivalryScore),
+      details: `${record.aWins}-${record.bWins} head-to-head (${record.oppositeTeams} opposite-team rounds)`,
+    }));
   return {
     id: "rivalry",
     title: "Rivalry Board",
@@ -522,12 +555,13 @@ function computeUpsetSection(
       scoreTeamA: round.scoreTeamA,
       scoreTeamB: round.scoreTeamB,
     };
+    priors.push(match);
     const probs = predictBasketballMatchWinProbabilities(priors, match);
     if (probs && round.winnerTeam !== "draw") {
       for (const playerId of round.participants) {
         const onTeamA = round.teamASet.has(playerId);
-        const preProb = onTeamA ? probs.teamAWinProb : probs.teamBWinProb;
-        if (preProb < UPSET_PROBABILITY_THRESHOLD) {
+        const skillWinProb = onTeamA ? probs.teamAWinProb : probs.teamBWinProb;
+        if (skillWinProb < UPSET_PROBABILITY_THRESHOLD) {
           const wl = opportunities.get(playerId) ?? { wins: 0, losses: 0 };
           const win = didPlayerWin(round, playerId);
           if (win) wl.wins += 1;
@@ -536,7 +570,6 @@ function computeUpsetSection(
         }
       }
     }
-    priors.push(match);
   }
   const rows: RankedMetricRow[] = [];
   for (const [playerId, wl] of opportunities.entries()) {
@@ -698,14 +731,11 @@ export function buildBasketballDashboardMetrics(
   const playerNameById = new Map(
     input.data.players.map((player) => [player.id, player.displayName]),
   );
-  const familyByPlayerId = new Map(
-    input.data.players.map((player) => [player.id, player.familyId]),
-  );
   const roundCountByPlayer = computeRoundCountByPlayer(rounds);
   const rankByPlayerId = computeOverallRankByPoints(rounds);
 
   const splitSections: DashboardMetricSplitSection[] = [
-    ...computeComboSections(rounds, playerNameById, familyByPlayerId, roundCountByPlayer),
+    ...computeComboSections(rounds, playerNameById, roundCountByPlayer),
     computeClutchSection(rounds, playerNameById, roundCountByPlayer),
     computeCarrySection(rounds, playerNameById, roundCountByPlayer, rankByPlayerId),
     computeConsistencySection(rounds, playerNameById, roundCountByPlayer),
