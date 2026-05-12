@@ -37,6 +37,7 @@ export function DashboardsPage() {
 
   const sectionOrder = useMemo(
     () => [
+      "nbaComp",
       "combos",
       "clutch",
       "rivalry",
@@ -56,7 +57,11 @@ export function DashboardsPage() {
     const clutch = findSplitSection(metrics.splitSections, "clutch")?.positiveRows[0];
     const upset = findSection(metrics.sections, "upset")?.rows[0];
     const balanced = findSection(metrics.sections, "balanced")?.rows[0];
+    const nbaComp = findSection(metrics.sections, "nbaComp")?.rows[0];
     return [
+      nbaComp
+        ? { label: "NBA comp", value: nbaComp.label, detail: nbaComp.details }
+        : null,
       combo ? { label: "Best combo", value: combo.label, detail: combo.valueLabel } : null,
       clutch ? { label: "Clutch leader", value: clutch.label, detail: clutch.valueLabel } : null,
       upset ? { label: "Upset machine", value: upset.label, detail: upset.valueLabel } : null,
@@ -171,12 +176,13 @@ export function DashboardsPage() {
 
         const section = sectionsById.get(id);
         if (!section) return null;
+        const valueHeader = section.id === "nbaComp" ? "Fit" : "Value";
         return (
           <MetricCard key={id} id={`dashboard-${id}`} title={section.title}>
             <p className="muted">{section.explanation}</p>
             <details className="dashboard-details" open>
               <summary>Ranked results</summary>
-              <RankedTable rows={section.rows} />
+              <RankedTable rows={section.rows} valueHeader={valueHeader} />
             </details>
           </MetricCard>
         );

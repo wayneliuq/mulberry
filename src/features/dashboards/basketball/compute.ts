@@ -21,6 +21,7 @@ import {
   UPSET_MIN_OPPORTUNITIES,
   UPSET_PROBABILITY_THRESHOLD,
 } from "./constants";
+import { computeNbaComparisonSection } from "./nbaComparisons";
 import type {
   DashboardComputeInput,
   DashboardMetricSection,
@@ -745,6 +746,12 @@ export function buildBasketballDashboardMetrics(
   ];
 
   const sections: DashboardMetricSection[] = [
+    {
+      id: "nbaComp",
+      title: "Who You Play Like (NBA)",
+      rows: computeNbaComparisonSection(rounds, playerNameById),
+      ...METRIC_META.nbaComp,
+    },
     computeRivalrySection(rounds, playerNameById),
     computeUpsetSection(rounds, playerNameById, roundCountByPlayer),
     computeBalancedSection(rounds, playerNameById, roundCountByPlayer),

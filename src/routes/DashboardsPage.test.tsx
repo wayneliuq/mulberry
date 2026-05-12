@@ -57,9 +57,10 @@ describe("DashboardsPage", () => {
 
     renderDashboardsPage();
 
+    expect(await screen.findByRole("heading", { name: "Who You Play Like (NBA)" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Best / Worst Combos" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to leaderboards" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "combos" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "nbaComp" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Upset Machine" })).toBeInTheDocument();
   });
 

@@ -87,4 +87,10 @@ export const METRIC_META: Record<string, DashboardMetricMeta> = {
     constraintLabel: "Players >=20 rounds and >=6 unique teammates.",
     topNLabel: "Top 10 balanced teammate indexes.",
   },
+  nbaComp: {
+    explanation:
+      "Lightweight style match vs a curated NBA pool (mixed current stars, legends, and personality picks). Each friend maps to one distinct pro for fun — not a scouting model.",
+    constraintLabel: "Players with >=20 rounds in the analyzed window.",
+    topNLabel: "One unique NBA comp per qualifying friend.",
+  },
 };

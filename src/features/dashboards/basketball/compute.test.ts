@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildBasketballDashboardMetrics } from "./compute";
+import { isExactlyThreeWords } from "./nbaComparisons";
 import type { BasketballDashboardData } from "../../../lib/api/types";
 
 function makeRound(args: {
@@ -279,5 +280,50 @@ describe("buildBasketballDashboardMetrics", () => {
     expect(families?.positiveRows[0]?.valueLabel).toBe("83.3%");
     expect(families?.positiveRows[0]?.details).toContain("win-rate delta +20.0% vs apart");
     expect(families?.negativeRows).toEqual([]);
+  });
+
+  it("nbaComp section assigns distinct NBA comps with three-word reasons", () => {
+    const players = [
+      { id: 1, displayName: "A", familyId: "f1" },
+      { id: 2, displayName: "B", familyId: "f2" },
+      { id: 3, displayName: "C", familyId: "f3" },
+      { id: 4, displayName: "D", familyId: "f4" },
+    ];
+    const rounds = Array.from({ length: 24 }).map((_, idx) => ({
+      roundId: `r-${idx + 1}`,
+      gameId: "g-1",
+      roundNumber: idx + 1,
+      createdAt: `2026-02-${String((idx % 28) + 1).padStart(2, "0")}T10:00:00.000Z`,
+      teamAPlayerIds: [1, 2],
+      teamBPlayerIds: [3, 4],
+      scoreTeamA: idx % 2 === 0 ? 11 : 8,
+      scoreTeamB: idx % 2 === 0 ? 8 : 11,
+    }));
+    const roundEntries = Array.from({ length: 24 }).flatMap((_, idx) => {
+      const roundId = `r-${idx + 1}`;
+      const aWon = idx % 2 === 0;
+      return [
+        { roundId, playerId: 1, pointDelta: aWon ? 1 : -1 },
+        { roundId, playerId: 2, pointDelta: aWon ? 1 : -1 },
+        { roundId, playerId: 3, pointDelta: aWon ? -1 : 1 },
+        { roundId, playerId: 4, pointDelta: aWon ? -1 : 1 },
+      ];
+    });
+    const data: BasketballDashboardData = { players, rounds, roundEntries };
+    const once = buildBasketballDashboardMetrics({ data, maxRounds: 500 });
+    const twice = buildBasketballDashboardMetrics({ data, maxRounds: 500 });
+    const nbaOnce = once.sections.find((s) => s.id === "nbaComp");
+    const nbaTwice = twice.sections.find((s) => s.id === "nbaComp");
+    expect(nbaOnce?.rows.length).toBe(4);
+    expect(nbaTwice?.rows).toEqual(nbaOnce?.rows);
+    const nbaNames = nbaOnce!.rows.map((row) => {
+      const parts = row.label.split(" → ");
+      expect(parts.length).toBe(2);
+      return parts[1]!;
+    });
+    expect(new Set(nbaNames).size).toBe(4);
+    for (const row of nbaOnce!.rows) {
+      expect(isExactlyThreeWords(row.details)).toBe(true);
+    }
   });
 });
