@@ -1,21 +1,21 @@
 /**
  * NBA player comparison pool — static, build-time curated (no runtime fetches).
  *
- * Popularity / “current star” anchors informed by public 2025–26 season signals
- * (e.g. 2026 NBA All-Star fan voting returns / starters: Luka Dončić, Giannis
- * Antetokounmpo, Nikola Jokić, Stephen Curry, Shai Gilgeous-Alexander,
- * Victor Wembanyama, Jalen Brunson, Tyrese Maxey, Cade Cunningham, Donovan
- * Mitchell — see NBA.com / Basketball-Reference All-Star voting pages).
+ * Research refresh (Feb 2026): public All-Star starter / fan-vote reporting
+ * highlights Luka Dončić and Giannis Antetokounmpo among top vote-getters, with
+ * Nikola Jokić, Tyrese Maxey, Jalen Brunson, and Stephen Curry also leading
+ * fan returns; LeBron James was widely noted as missing a starter slot after
+ * a long starter streak (NBA.com communications / Yahoo Sports summaries).
  *
- * Legacy rows = all-time / retired icons. Personality rows = high-visibility
- * attitude / edge reputations (for fun, not analytics).
+ * Pool skew: mostly LeBron era (2003+) through today’s stars, fewer distant
+ * pre-2000s names; includes Yao Ming as requested. Vectors are coarse fun priors.
  */
 
 import {
   predictBasketballMatchWinProbabilities,
   type BasketballMatchInput,
 } from "../../game-types/basketball";
-import type { NormalizedRound, RankedMetricRow } from "./types";
+import type { NbaComparisonRow, NormalizedRound } from "./types";
 import {
   CARRY_MIN_SIDE_SAMPLES,
   CLUTCH_MARGIN,
@@ -37,13 +37,10 @@ export type ComparisonVector = {
   personaIntensity: number;
 };
 
-export type NbaPoolTag = "current-popular" | "legacy" | "personality";
-
 export type NbaComparisonPlayer = {
   id: string;
   displayName: string;
   vector: ComparisonVector;
-  tags: NbaPoolTag[];
 };
 
 type WinLoss = { wins: number; losses: number };
@@ -105,58 +102,6 @@ function didPlayerWin(round: NormalizedRound, playerId: number): boolean | null 
 
 function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
-}
-
-/** Public for tests: phrase must be exactly three words. */
-export function isExactlyThreeWords(phrase: string): boolean {
-  const trimmed = phrase.trim();
-  if (!trimmed) return false;
-  return trimmed.split(/\s+/).length === 3;
-}
-
-const REASON_BY_DIMENSION: Record<keyof ComparisonVector, string> = {
-  winImpact: "Pure winning machine",
-  carryBias: "Carries lesser teammates",
-  clutchDelta: "Big moment closer",
-  consistency: "Steady calm operator",
-  upsetFactor: "Upset minded grinder",
-  chemistryBias: "Elevates team chemistry",
-  personaIntensity: "Loud fierce competitor",
-};
-
-function pickReasonDimension(
-  friend: ComparisonVector,
-  nba: ComparisonVector,
-  nbaTags: NbaPoolTag[],
-): keyof ComparisonVector {
-  if (nbaTags.includes("personality") && nba.personaIntensity >= 0.72) {
-    return "personaIntensity";
-  }
-  let bestKey: keyof ComparisonVector = "winImpact";
-  let bestScore = Number.POSITIVE_INFINITY;
-  for (const key of VECTOR_KEYS) {
-    const closeness = Math.abs(friend[key] - nba[key]);
-    const weight = 1 / (DISTANCE_WEIGHTS[key] + 0.01);
-    const score = closeness * weight;
-    if (score < bestScore) {
-      bestScore = score;
-      bestKey = key;
-    }
-  }
-  return bestKey;
-}
-
-export function buildThreeWordReason(
-  friend: ComparisonVector,
-  nba: ComparisonVector,
-  nbaTags: NbaPoolTag[],
-): string {
-  const dim = pickReasonDimension(friend, nba, nbaTags);
-  const phrase = REASON_BY_DIMENSION[dim];
-  if (!isExactlyThreeWords(phrase)) {
-    throw new Error(`Invalid reason phrase for ${dim}: "${phrase}"`);
-  }
-  return phrase;
 }
 
 function vectorDistance(a: ComparisonVector, b: ComparisonVector): number {
@@ -521,25 +466,179 @@ function assignUniqueGreedy(
 }
 
 export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
-  // --- Current popular (2025–26 All-Star / media visibility) ---
+  // ~LeBron era (2003+) through 2026; Yao Ming included; pre-LeBron legends omitted.
   {
-    id: "luka",
-    displayName: "Luka Dončić",
-    tags: ["current-popular"],
+    id: "yao",
+    displayName: "Yao Ming",
     vector: {
-      winImpact: 0.92,
-      carryBias: 0.88,
-      consistency: 0.78,
+      winImpact: 0.82,
+      carryBias: 0.58,
+      consistency: 0.8,
+      clutchDelta: 0.72,
+      upsetFactor: 0.52,
+      chemistryBias: 0.78,
+      personaIntensity: 0.35,
+    },
+  },
+  {
+    id: "lebron",
+    displayName: "LeBron James",
+    vector: {
+      winImpact: 0.9,
+      carryBias: 0.78,
+      consistency: 0.88,
+      clutchDelta: 0.8,
+      upsetFactor: 0.58,
+      chemistryBias: 0.88,
+      personaIntensity: 0.55,
+    },
+  },
+  {
+    id: "wade",
+    displayName: "Dwyane Wade",
+    vector: {
+      winImpact: 0.86,
+      carryBias: 0.74,
+      consistency: 0.82,
+      clutchDelta: 0.84,
+      upsetFactor: 0.56,
+      chemistryBias: 0.7,
+      personaIntensity: 0.48,
+    },
+  },
+  {
+    id: "melo",
+    displayName: "Carmelo Anthony",
+    vector: {
+      winImpact: 0.8,
+      carryBias: 0.72,
+      consistency: 0.76,
       clutchDelta: 0.82,
-      upsetFactor: 0.62,
-      chemistryBias: 0.55,
-      personaIntensity: 0.45,
+      upsetFactor: 0.5,
+      chemistryBias: 0.58,
+      personaIntensity: 0.42,
+    },
+  },
+  {
+    id: "durant",
+    displayName: "Kevin Durant",
+    vector: {
+      winImpact: 0.9,
+      carryBias: 0.85,
+      consistency: 0.87,
+      clutchDelta: 0.84,
+      upsetFactor: 0.54,
+      chemistryBias: 0.62,
+      personaIntensity: 0.46,
+    },
+  },
+  {
+    id: "curry",
+    displayName: "Stephen Curry",
+    vector: {
+      winImpact: 0.88,
+      carryBias: 0.72,
+      consistency: 0.85,
+      clutchDelta: 0.92,
+      upsetFactor: 0.6,
+      chemistryBias: 0.7,
+      personaIntensity: 0.42,
+    },
+  },
+  {
+    id: "harden",
+    displayName: "James Harden",
+    vector: {
+      winImpact: 0.84,
+      carryBias: 0.8,
+      consistency: 0.78,
+      clutchDelta: 0.74,
+      upsetFactor: 0.55,
+      chemistryBias: 0.72,
+      personaIntensity: 0.58,
+    },
+  },
+  {
+    id: "westbrook",
+    displayName: "Russell Westbrook",
+    vector: {
+      winImpact: 0.76,
+      carryBias: 0.82,
+      consistency: 0.62,
+      clutchDelta: 0.72,
+      upsetFactor: 0.56,
+      chemistryBias: 0.6,
+      personaIntensity: 0.85,
+    },
+  },
+  {
+    id: "cp3",
+    displayName: "Chris Paul",
+    vector: {
+      winImpact: 0.82,
+      carryBias: 0.65,
+      consistency: 0.9,
+      clutchDelta: 0.8,
+      upsetFactor: 0.54,
+      chemistryBias: 0.92,
+      personaIntensity: 0.62,
+    },
+  },
+  {
+    id: "kawhi",
+    displayName: "Kawhi Leonard",
+    vector: {
+      winImpact: 0.86,
+      carryBias: 0.7,
+      consistency: 0.9,
+      clutchDelta: 0.88,
+      upsetFactor: 0.52,
+      chemistryBias: 0.58,
+      personaIntensity: 0.32,
+    },
+  },
+  {
+    id: "george",
+    displayName: "Paul George",
+    vector: {
+      winImpact: 0.8,
+      carryBias: 0.68,
+      consistency: 0.8,
+      clutchDelta: 0.78,
+      upsetFactor: 0.53,
+      chemistryBias: 0.6,
+      personaIntensity: 0.44,
+    },
+  },
+  {
+    id: "davis",
+    displayName: "Anthony Davis",
+    vector: {
+      winImpact: 0.82,
+      carryBias: 0.65,
+      consistency: 0.72,
+      clutchDelta: 0.7,
+      upsetFactor: 0.54,
+      chemistryBias: 0.64,
+      personaIntensity: 0.42,
+    },
+  },
+  {
+    id: "kyrie",
+    displayName: "Kyrie Irving",
+    vector: {
+      winImpact: 0.8,
+      carryBias: 0.7,
+      consistency: 0.78,
+      clutchDelta: 0.86,
+      upsetFactor: 0.55,
+      chemistryBias: 0.58,
+      personaIntensity: 0.52,
     },
   },
   {
     id: "giannis",
     displayName: "Giannis Antetokounmpo",
-    tags: ["current-popular"],
     vector: {
       winImpact: 0.9,
       carryBias: 0.82,
@@ -553,7 +652,6 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
   {
     id: "jokic",
     displayName: "Nikola Jokić",
-    tags: ["current-popular"],
     vector: {
       winImpact: 0.93,
       carryBias: 0.75,
@@ -565,205 +663,8 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
     },
   },
   {
-    id: "curry",
-    displayName: "Stephen Curry",
-    tags: ["current-popular"],
-    vector: {
-      winImpact: 0.88,
-      carryBias: 0.72,
-      consistency: 0.85,
-      clutchDelta: 0.92,
-      upsetFactor: 0.6,
-      chemistryBias: 0.7,
-      personaIntensity: 0.42,
-    },
-  },
-  {
-    id: "sga",
-    displayName: "Shai Gilgeous-Alexander",
-    tags: ["current-popular"],
-    vector: {
-      winImpact: 0.89,
-      carryBias: 0.8,
-      consistency: 0.86,
-      clutchDelta: 0.8,
-      upsetFactor: 0.52,
-      chemistryBias: 0.58,
-      personaIntensity: 0.38,
-    },
-  },
-  {
-    id: "wemby",
-    displayName: "Victor Wembanyama",
-    tags: ["current-popular"],
-    vector: {
-      winImpact: 0.78,
-      carryBias: 0.7,
-      consistency: 0.65,
-      clutchDelta: 0.72,
-      upsetFactor: 0.58,
-      chemistryBias: 0.6,
-      personaIntensity: 0.4,
-    },
-  },
-  {
-    id: "brunson",
-    displayName: "Jalen Brunson",
-    tags: ["current-popular"],
-    vector: {
-      winImpact: 0.82,
-      carryBias: 0.68,
-      consistency: 0.82,
-      clutchDelta: 0.88,
-      upsetFactor: 0.55,
-      chemistryBias: 0.72,
-      personaIntensity: 0.36,
-    },
-  },
-  {
-    id: "maxey",
-    displayName: "Tyrese Maxey",
-    tags: ["current-popular"],
-    vector: {
-      winImpact: 0.8,
-      carryBias: 0.65,
-      consistency: 0.8,
-      clutchDelta: 0.78,
-      upsetFactor: 0.52,
-      chemistryBias: 0.62,
-      personaIntensity: 0.34,
-    },
-  },
-  {
-    id: "cade",
-    displayName: "Cade Cunningham",
-    tags: ["current-popular"],
-    vector: {
-      winImpact: 0.76,
-      carryBias: 0.62,
-      consistency: 0.72,
-      clutchDelta: 0.7,
-      upsetFactor: 0.5,
-      chemistryBias: 0.68,
-      personaIntensity: 0.4,
-    },
-  },
-  {
-    id: "mitchell",
-    displayName: "Donovan Mitchell",
-    tags: ["current-popular"],
-    vector: {
-      winImpact: 0.84,
-      carryBias: 0.74,
-      consistency: 0.74,
-      clutchDelta: 0.85,
-      upsetFactor: 0.56,
-      chemistryBias: 0.58,
-      personaIntensity: 0.48,
-    },
-  },
-  {
-    id: "lebron",
-    displayName: "LeBron James",
-    tags: ["current-popular", "legacy"],
-    vector: {
-      winImpact: 0.9,
-      carryBias: 0.78,
-      consistency: 0.88,
-      clutchDelta: 0.8,
-      upsetFactor: 0.58,
-      chemistryBias: 0.88,
-      personaIntensity: 0.55,
-    },
-  },
-  {
-    id: "durant",
-    displayName: "Kevin Durant",
-    tags: ["current-popular", "legacy"],
-    vector: {
-      winImpact: 0.9,
-      carryBias: 0.85,
-      consistency: 0.87,
-      clutchDelta: 0.84,
-      upsetFactor: 0.54,
-      chemistryBias: 0.62,
-      personaIntensity: 0.46,
-    },
-  },
-  {
-    id: "tatum",
-    displayName: "Jayson Tatum",
-    tags: ["current-popular"],
-    vector: {
-      winImpact: 0.85,
-      carryBias: 0.7,
-      consistency: 0.8,
-      clutchDelta: 0.76,
-      upsetFactor: 0.53,
-      chemistryBias: 0.65,
-      personaIntensity: 0.4,
-    },
-  },
-  {
-    id: "ant",
-    displayName: "Anthony Edwards",
-    tags: ["current-popular"],
-    vector: {
-      winImpact: 0.83,
-      carryBias: 0.72,
-      consistency: 0.7,
-      clutchDelta: 0.74,
-      upsetFactor: 0.57,
-      chemistryBias: 0.55,
-      personaIntensity: 0.58,
-    },
-  },
-  {
-    id: "booker",
-    displayName: "Devin Booker",
-    tags: ["current-popular"],
-    vector: {
-      winImpact: 0.82,
-      carryBias: 0.68,
-      consistency: 0.78,
-      clutchDelta: 0.86,
-      upsetFactor: 0.5,
-      chemistryBias: 0.6,
-      personaIntensity: 0.44,
-    },
-  },
-  {
-    id: "ja",
-    displayName: "Ja Morant",
-    tags: ["current-popular", "personality"],
-    vector: {
-      winImpact: 0.78,
-      carryBias: 0.76,
-      consistency: 0.62,
-      clutchDelta: 0.78,
-      upsetFactor: 0.55,
-      chemistryBias: 0.52,
-      personaIntensity: 0.72,
-    },
-  },
-  {
-    id: "trae",
-    displayName: "Trae Young",
-    tags: ["current-popular"],
-    vector: {
-      winImpact: 0.76,
-      carryBias: 0.74,
-      consistency: 0.68,
-      clutchDelta: 0.82,
-      upsetFactor: 0.52,
-      chemistryBias: 0.58,
-      personaIntensity: 0.5,
-    },
-  },
-  {
     id: "embiid",
     displayName: "Joel Embiid",
-    tags: ["current-popular"],
     vector: {
       winImpact: 0.84,
       carryBias: 0.72,
@@ -775,235 +676,99 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
     },
   },
   {
-    id: "davis",
-    displayName: "Anthony Davis",
-    tags: ["current-popular"],
-    vector: {
-      winImpact: 0.82,
-      carryBias: 0.65,
-      consistency: 0.72,
-      clutchDelta: 0.7,
-      upsetFactor: 0.54,
-      chemistryBias: 0.64,
-      personaIntensity: 0.42,
-    },
-  },
-  {
-    id: "kawhi",
-    displayName: "Kawhi Leonard",
-    tags: ["current-popular", "legacy"],
-    vector: {
-      winImpact: 0.86,
-      carryBias: 0.7,
-      consistency: 0.9,
-      clutchDelta: 0.88,
-      upsetFactor: 0.52,
-      chemistryBias: 0.58,
-      personaIntensity: 0.32,
-    },
-  },
-  {
-    id: "flagg",
-    displayName: "Cooper Flagg",
-    tags: ["current-popular"],
-    vector: {
-      winImpact: 0.68,
-      carryBias: 0.58,
-      consistency: 0.66,
-      clutchDelta: 0.65,
-      upsetFactor: 0.52,
-      chemistryBias: 0.62,
-      personaIntensity: 0.38,
-    },
-  },
-  // --- Legacy icons ---
-  {
-    id: "jordan",
-    displayName: "Michael Jordan",
-    tags: ["legacy"],
-    vector: {
-      winImpact: 0.98,
-      carryBias: 0.9,
-      consistency: 0.92,
-      clutchDelta: 0.98,
-      upsetFactor: 0.62,
-      chemistryBias: 0.72,
-      personaIntensity: 0.68,
-    },
-  },
-  {
-    id: "magic",
-    displayName: "Magic Johnson",
-    tags: ["legacy"],
+    id: "luka",
+    displayName: "Luka Dončić",
     vector: {
       winImpact: 0.92,
-      carryBias: 0.72,
-      consistency: 0.85,
-      clutchDelta: 0.78,
-      upsetFactor: 0.55,
-      chemistryBias: 0.95,
-      personaIntensity: 0.55,
-    },
-  },
-  {
-    id: "bird",
-    displayName: "Larry Bird",
-    tags: ["legacy"],
-    vector: {
-      winImpact: 0.9,
-      carryBias: 0.74,
-      consistency: 0.86,
-      clutchDelta: 0.88,
-      upsetFactor: 0.58,
-      chemistryBias: 0.78,
-      personaIntensity: 0.62,
-    },
-  },
-  {
-    id: "kobe",
-    displayName: "Kobe Bryant",
-    tags: ["legacy"],
-    vector: {
-      winImpact: 0.88,
-      carryBias: 0.82,
-      consistency: 0.82,
-      clutchDelta: 0.95,
-      upsetFactor: 0.56,
-      chemistryBias: 0.65,
-      personaIntensity: 0.75,
-    },
-  },
-  {
-    id: "duncan",
-    displayName: "Tim Duncan",
-    tags: ["legacy"],
-    vector: {
-      winImpact: 0.92,
-      carryBias: 0.68,
-      consistency: 0.95,
-      clutchDelta: 0.72,
-      upsetFactor: 0.5,
-      chemistryBias: 0.82,
-      personaIntensity: 0.28,
-    },
-  },
-  {
-    id: "shaq",
-    displayName: "Shaquille O'Neal",
-    tags: ["legacy", "personality"],
-    vector: {
-      winImpact: 0.9,
-      carryBias: 0.78,
-      consistency: 0.72,
-      clutchDelta: 0.65,
-      upsetFactor: 0.55,
-      chemistryBias: 0.7,
-      personaIntensity: 0.78,
-    },
-  },
-  {
-    id: "hakeem",
-    displayName: "Hakeem Olajuwon",
-    tags: ["legacy"],
-    vector: {
-      winImpact: 0.88,
-      carryBias: 0.72,
-      consistency: 0.88,
-      clutchDelta: 0.8,
-      upsetFactor: 0.54,
-      chemistryBias: 0.68,
-      personaIntensity: 0.4,
-    },
-  },
-  {
-    id: "iverson",
-    displayName: "Allen Iverson",
-    tags: ["legacy", "personality"],
-    vector: {
-      winImpact: 0.78,
       carryBias: 0.88,
-      consistency: 0.65,
-      clutchDelta: 0.85,
-      upsetFactor: 0.6,
-      chemistryBias: 0.52,
-      personaIntensity: 0.82,
-    },
-  },
-  {
-    id: "dirk",
-    displayName: "Dirk Nowitzki",
-    tags: ["legacy"],
-    vector: {
-      winImpact: 0.86,
-      carryBias: 0.76,
-      consistency: 0.88,
-      clutchDelta: 0.86,
-      upsetFactor: 0.52,
-      chemistryBias: 0.62,
-      personaIntensity: 0.38,
-    },
-  },
-  {
-    id: "kareem",
-    displayName: "Kareem Abdul-Jabbar",
-    tags: ["legacy"],
-    vector: {
-      winImpact: 0.94,
-      carryBias: 0.7,
-      consistency: 0.9,
-      clutchDelta: 0.74,
-      upsetFactor: 0.5,
-      chemistryBias: 0.75,
-      personaIntensity: 0.35,
-    },
-  },
-  {
-    id: "russell-bill",
-    displayName: "Bill Russell",
-    tags: ["legacy"],
-    vector: {
-      winImpact: 0.93,
-      carryBias: 0.65,
-      consistency: 0.85,
-      clutchDelta: 0.68,
-      upsetFactor: 0.55,
-      chemistryBias: 0.8,
+      consistency: 0.78,
+      clutchDelta: 0.82,
+      upsetFactor: 0.62,
+      chemistryBias: 0.55,
       personaIntensity: 0.45,
     },
   },
   {
-    id: "wilt",
-    displayName: "Wilt Chamberlain",
-    tags: ["legacy"],
+    id: "sga",
+    displayName: "Shai Gilgeous-Alexander",
     vector: {
-      winImpact: 0.9,
-      carryBias: 0.92,
-      consistency: 0.8,
-      clutchDelta: 0.7,
-      upsetFactor: 0.58,
-      chemistryBias: 0.55,
-      personaIntensity: 0.6,
+      winImpact: 0.89,
+      carryBias: 0.8,
+      consistency: 0.86,
+      clutchDelta: 0.8,
+      upsetFactor: 0.52,
+      chemistryBias: 0.58,
+      personaIntensity: 0.38,
     },
   },
   {
-    id: "oscar",
-    displayName: "Oscar Robertson",
-    tags: ["legacy"],
+    id: "tatum",
+    displayName: "Jayson Tatum",
     vector: {
-      winImpact: 0.87,
-      carryBias: 0.8,
-      consistency: 0.84,
+      winImpact: 0.85,
+      carryBias: 0.7,
+      consistency: 0.8,
       clutchDelta: 0.76,
       upsetFactor: 0.53,
-      chemistryBias: 0.74,
+      chemistryBias: 0.65,
+      personaIntensity: 0.4,
+    },
+  },
+  {
+    id: "booker",
+    displayName: "Devin Booker",
+    vector: {
+      winImpact: 0.82,
+      carryBias: 0.68,
+      consistency: 0.78,
+      clutchDelta: 0.86,
+      upsetFactor: 0.5,
+      chemistryBias: 0.6,
+      personaIntensity: 0.44,
+    },
+  },
+  {
+    id: "dame",
+    displayName: "Damian Lillard",
+    vector: {
+      winImpact: 0.83,
+      carryBias: 0.76,
+      consistency: 0.8,
+      clutchDelta: 0.9,
+      upsetFactor: 0.57,
+      chemistryBias: 0.62,
+      personaIntensity: 0.46,
+    },
+  },
+  {
+    id: "mitchell",
+    displayName: "Donovan Mitchell",
+    vector: {
+      winImpact: 0.84,
+      carryBias: 0.74,
+      consistency: 0.74,
+      clutchDelta: 0.85,
+      upsetFactor: 0.56,
+      chemistryBias: 0.58,
       personaIntensity: 0.48,
     },
   },
-  // --- Personality / edge (fun comps) ---
+  {
+    id: "jimmy",
+    displayName: "Jimmy Butler",
+    vector: {
+      winImpact: 0.82,
+      carryBias: 0.78,
+      consistency: 0.8,
+      clutchDelta: 0.82,
+      upsetFactor: 0.62,
+      chemistryBias: 0.68,
+      personaIntensity: 0.72,
+    },
+  },
   {
     id: "draymond",
     displayName: "Draymond Green",
-    tags: ["personality", "current-popular"],
     vector: {
       winImpact: 0.78,
       carryBias: 0.62,
@@ -1017,7 +782,6 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
   {
     id: "dillon",
     displayName: "Dillon Brooks",
-    tags: ["personality", "current-popular"],
     vector: {
       winImpact: 0.7,
       carryBias: 0.58,
@@ -1029,93 +793,34 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
     },
   },
   {
-    id: "beverley",
-    displayName: "Patrick Beverley",
-    tags: ["personality"],
+    id: "ja",
+    displayName: "Ja Morant",
     vector: {
-      winImpact: 0.65,
-      carryBias: 0.55,
-      consistency: 0.7,
-      clutchDelta: 0.62,
-      upsetFactor: 0.58,
-      chemistryBias: 0.62,
-      personaIntensity: 0.88,
-    },
-  },
-  {
-    id: "westbrook",
-    displayName: "Russell Westbrook",
-    tags: ["personality", "legacy", "current-popular"],
-    vector: {
-      winImpact: 0.76,
-      carryBias: 0.82,
+      winImpact: 0.78,
+      carryBias: 0.76,
       consistency: 0.62,
-      clutchDelta: 0.72,
-      upsetFactor: 0.56,
-      chemistryBias: 0.6,
-      personaIntensity: 0.85,
-    },
-  },
-  {
-    id: "rodman",
-    displayName: "Dennis Rodman",
-    tags: ["legacy", "personality"],
-    vector: {
-      winImpact: 0.72,
-      carryBias: 0.55,
-      consistency: 0.78,
-      clutchDelta: 0.6,
-      upsetFactor: 0.52,
-      chemistryBias: 0.75,
-      personaIntensity: 0.95,
-    },
-  },
-  {
-    id: "rasheed",
-    displayName: "Rasheed Wallace",
-    tags: ["legacy", "personality"],
-    vector: {
-      winImpact: 0.75,
-      carryBias: 0.58,
-      consistency: 0.72,
-      clutchDelta: 0.68,
-      upsetFactor: 0.54,
-      chemistryBias: 0.65,
-      personaIntensity: 0.88,
-    },
-  },
-  {
-    id: "jimmy",
-    displayName: "Jimmy Butler",
-    tags: ["personality", "current-popular"],
-    vector: {
-      winImpact: 0.82,
-      carryBias: 0.78,
-      consistency: 0.8,
-      clutchDelta: 0.82,
-      upsetFactor: 0.62,
-      chemistryBias: 0.68,
+      clutchDelta: 0.78,
+      upsetFactor: 0.55,
+      chemistryBias: 0.52,
       personaIntensity: 0.72,
     },
   },
   {
-    id: "smart",
-    displayName: "Marcus Smart",
-    tags: ["personality"],
+    id: "trae",
+    displayName: "Trae Young",
     vector: {
-      winImpact: 0.68,
-      carryBias: 0.52,
-      consistency: 0.74,
-      clutchDelta: 0.65,
-      upsetFactor: 0.56,
-      chemistryBias: 0.72,
-      personaIntensity: 0.8,
+      winImpact: 0.76,
+      carryBias: 0.74,
+      consistency: 0.68,
+      clutchDelta: 0.82,
+      upsetFactor: 0.52,
+      chemistryBias: 0.58,
+      personaIntensity: 0.5,
     },
   },
   {
     id: "zion",
     displayName: "Zion Williamson",
-    tags: ["current-popular"],
     vector: {
       winImpact: 0.76,
       carryBias: 0.75,
@@ -1127,9 +832,73 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
     },
   },
   {
+    id: "ant",
+    displayName: "Anthony Edwards",
+    vector: {
+      winImpact: 0.83,
+      carryBias: 0.72,
+      consistency: 0.7,
+      clutchDelta: 0.74,
+      upsetFactor: 0.57,
+      chemistryBias: 0.55,
+      personaIntensity: 0.58,
+    },
+  },
+  {
+    id: "wemby",
+    displayName: "Victor Wembanyama",
+    vector: {
+      winImpact: 0.78,
+      carryBias: 0.7,
+      consistency: 0.65,
+      clutchDelta: 0.72,
+      upsetFactor: 0.58,
+      chemistryBias: 0.6,
+      personaIntensity: 0.4,
+    },
+  },
+  {
+    id: "brunson",
+    displayName: "Jalen Brunson",
+    vector: {
+      winImpact: 0.82,
+      carryBias: 0.68,
+      consistency: 0.82,
+      clutchDelta: 0.88,
+      upsetFactor: 0.55,
+      chemistryBias: 0.72,
+      personaIntensity: 0.36,
+    },
+  },
+  {
+    id: "maxey",
+    displayName: "Tyrese Maxey",
+    vector: {
+      winImpact: 0.8,
+      carryBias: 0.65,
+      consistency: 0.8,
+      clutchDelta: 0.78,
+      upsetFactor: 0.52,
+      chemistryBias: 0.62,
+      personaIntensity: 0.34,
+    },
+  },
+  {
+    id: "cade",
+    displayName: "Cade Cunningham",
+    vector: {
+      winImpact: 0.76,
+      carryBias: 0.62,
+      consistency: 0.72,
+      clutchDelta: 0.7,
+      upsetFactor: 0.5,
+      chemistryBias: 0.68,
+      personaIntensity: 0.4,
+    },
+  },
+  {
     id: "banchero",
     displayName: "Paolo Banchero",
-    tags: ["current-popular"],
     vector: {
       winImpact: 0.74,
       carryBias: 0.68,
@@ -1141,53 +910,154 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
     },
   },
   {
-    id: "hard",
-    displayName: "James Harden",
-    tags: ["current-popular", "legacy", "personality"],
+    id: "flagg",
+    displayName: "Cooper Flagg",
     vector: {
-      winImpact: 0.84,
-      carryBias: 0.8,
-      consistency: 0.78,
-      clutchDelta: 0.74,
-      upsetFactor: 0.55,
-      chemistryBias: 0.72,
-      personaIntensity: 0.58,
+      winImpact: 0.68,
+      carryBias: 0.58,
+      consistency: 0.66,
+      clutchDelta: 0.65,
+      upsetFactor: 0.52,
+      chemistryBias: 0.62,
+      personaIntensity: 0.38,
     },
   },
   {
-    id: "cp3",
-    displayName: "Chris Paul",
-    tags: ["legacy", "current-popular"],
+    id: "klay",
+    displayName: "Klay Thompson",
     vector: {
-      winImpact: 0.82,
-      carryBias: 0.65,
-      consistency: 0.9,
+      winImpact: 0.78,
+      carryBias: 0.55,
+      consistency: 0.82,
       clutchDelta: 0.8,
-      upsetFactor: 0.54,
-      chemistryBias: 0.92,
-      personaIntensity: 0.62,
+      upsetFactor: 0.52,
+      chemistryBias: 0.65,
+      personaIntensity: 0.36,
     },
   },
   {
-    id: "barkley",
-    displayName: "Charles Barkley",
-    tags: ["legacy", "personality"],
+    id: "bam",
+    displayName: "Bam Adebayo",
     vector: {
-      winImpact: 0.84,
-      carryBias: 0.72,
-      consistency: 0.74,
+      winImpact: 0.78,
+      carryBias: 0.6,
+      consistency: 0.82,
+      clutchDelta: 0.7,
+      upsetFactor: 0.54,
+      chemistryBias: 0.8,
+      personaIntensity: 0.45,
+    },
+  },
+  {
+    id: "sabonis",
+    displayName: "Domantas Sabonis",
+    vector: {
+      winImpact: 0.8,
+      carryBias: 0.64,
+      consistency: 0.84,
       clutchDelta: 0.72,
+      upsetFactor: 0.5,
+      chemistryBias: 0.88,
+      personaIntensity: 0.38,
+    },
+  },
+  {
+    id: "fox",
+    displayName: "De'Aaron Fox",
+    vector: {
+      winImpact: 0.77,
+      carryBias: 0.7,
+      consistency: 0.74,
+      clutchDelta: 0.78,
+      upsetFactor: 0.53,
+      chemistryBias: 0.58,
+      personaIntensity: 0.44,
+    },
+  },
+  {
+    id: "haliburton",
+    displayName: "Tyrese Haliburton",
+    vector: {
+      winImpact: 0.79,
+      carryBias: 0.66,
+      consistency: 0.82,
+      clutchDelta: 0.76,
+      upsetFactor: 0.52,
+      chemistryBias: 0.85,
+      personaIntensity: 0.36,
+    },
+  },
+  {
+    id: "murray",
+    displayName: "Jamal Murray",
+    vector: {
+      winImpact: 0.81,
+      carryBias: 0.7,
+      consistency: 0.78,
+      clutchDelta: 0.86,
       upsetFactor: 0.56,
       chemistryBias: 0.62,
-      personaIntensity: 0.78,
+      personaIntensity: 0.4,
+    },
+  },
+  {
+    id: "kat",
+    displayName: "Karl-Anthony Towns",
+    vector: {
+      winImpact: 0.81,
+      carryBias: 0.68,
+      consistency: 0.74,
+      clutchDelta: 0.74,
+      upsetFactor: 0.51,
+      chemistryBias: 0.64,
+      personaIntensity: 0.4,
+    },
+  },
+  {
+    id: "gobert",
+    displayName: "Rudy Gobert",
+    vector: {
+      winImpact: 0.76,
+      carryBias: 0.52,
+      consistency: 0.85,
+      clutchDelta: 0.62,
+      upsetFactor: 0.48,
+      chemistryBias: 0.78,
+      personaIntensity: 0.42,
+    },
+  },
+  {
+    id: "beverley",
+    displayName: "Patrick Beverley",
+    vector: {
+      winImpact: 0.65,
+      carryBias: 0.55,
+      consistency: 0.7,
+      clutchDelta: 0.62,
+      upsetFactor: 0.58,
+      chemistryBias: 0.62,
+      personaIntensity: 0.88,
+    },
+  },
+  {
+    id: "smart",
+    displayName: "Marcus Smart",
+    vector: {
+      winImpact: 0.68,
+      carryBias: 0.52,
+      consistency: 0.74,
+      clutchDelta: 0.65,
+      upsetFactor: 0.56,
+      chemistryBias: 0.72,
+      personaIntensity: 0.8,
     },
   },
 ];
 
-export function computeNbaComparisonSection(
+export function computeNbaComparisonRows(
   rounds: NormalizedRound[],
   playerNameById: Map<number, string>,
-): RankedMetricRow[] {
+): NbaComparisonRow[] {
   const roundCountByPlayer = computeRoundCountByPlayer(rounds);
   const rawMap = gatherFriendRawStats(rounds, playerNameById, roundCountByPlayer);
   if (rawMap.size === 0) return [];
@@ -1208,15 +1078,12 @@ export function computeNbaComparisonSection(
   const matches = assignUniqueGreedy(friendIds, friendVectors, NBA_COMPARISON_PLAYER_POOL);
 
   return matches.map((m) => {
-    const fv = friendVectors.get(m.playerId)!;
-    const reason = buildThreeWordReason(fv, m.nba.vector, m.nba.tags);
     const fit = fitScoreFromDistance(m.distance);
-    const name = playerNameById.get(m.playerId) ?? String(m.playerId);
+    const playerName = playerNameById.get(m.playerId) ?? String(m.playerId);
     return {
-      label: `${name} → ${m.nba.displayName}`,
-      value: fit,
-      valueLabel: fit.toFixed(2),
-      details: reason,
+      playerName,
+      nbaMatchName: m.nba.displayName,
+      fitScore: fit,
     };
   });
 }

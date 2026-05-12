@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildBasketballDashboardMetrics } from "./compute";
-import { isExactlyThreeWords } from "./nbaComparisons";
+import { NBA_COMPARISON_PLAYER_POOL } from "./nbaComparisons";
 import type { BasketballDashboardData } from "../../../lib/api/types";
 
 function makeRound(args: {
@@ -282,7 +282,8 @@ describe("buildBasketballDashboardMetrics", () => {
     expect(families?.negativeRows).toEqual([]);
   });
 
-  it("nbaComp section assigns distinct NBA comps with three-word reasons", () => {
+  it("nba comparisons assign distinct NBA players (LeBron-era pool includes Yao)", () => {
+    expect(NBA_COMPARISON_PLAYER_POOL.some((p) => p.id === "yao")).toBe(true);
     const players = [
       { id: 1, displayName: "A", familyId: "f1" },
       { id: 2, displayName: "B", familyId: "f2" },
@@ -312,18 +313,16 @@ describe("buildBasketballDashboardMetrics", () => {
     const data: BasketballDashboardData = { players, rounds, roundEntries };
     const once = buildBasketballDashboardMetrics({ data, maxRounds: 500 });
     const twice = buildBasketballDashboardMetrics({ data, maxRounds: 500 });
-    const nbaOnce = once.sections.find((s) => s.id === "nbaComp");
-    const nbaTwice = twice.sections.find((s) => s.id === "nbaComp");
-    expect(nbaOnce?.rows.length).toBe(4);
-    expect(nbaTwice?.rows).toEqual(nbaOnce?.rows);
-    const nbaNames = nbaOnce!.rows.map((row) => {
-      const parts = row.label.split(" → ");
-      expect(parts.length).toBe(2);
-      return parts[1]!;
-    });
+    const nbaOnce = once.nbaComparisons;
+    const nbaTwice = twice.nbaComparisons;
+    expect(nbaOnce.length).toBe(4);
+    expect(nbaTwice).toEqual(nbaOnce);
+    const nbaNames = nbaOnce.map((row) => row.nbaMatchName);
     expect(new Set(nbaNames).size).toBe(4);
-    for (const row of nbaOnce!.rows) {
-      expect(isExactlyThreeWords(row.details)).toBe(true);
+    for (const row of nbaOnce) {
+      expect(row.playerName).toMatch(/^[A-D]$/);
+      expect(row.fitScore).toBeGreaterThan(0);
+      expect(row.fitScore).toBeLessThanOrEqual(1);
     }
   });
 });

@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
 import { fetchBasketballDashboardData } from "../lib/api/read";
+import { NBA_COMPARISON_SECTION_TITLE } from "../features/dashboards/basketball/constants";
 import { DashboardsPage } from "./DashboardsPage";
 
 vi.mock("../lib/api/read", () => ({
@@ -57,7 +58,12 @@ describe("DashboardsPage", () => {
 
     renderDashboardsPage();
 
-    expect(await screen.findByRole("heading", { name: "Who You Play Like (NBA)" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: NBA_COMPARISON_SECTION_TITLE }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Player" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "NBA match" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Fit" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Best / Worst Combos" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to leaderboards" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "nbaComp" })).toBeInTheDocument();

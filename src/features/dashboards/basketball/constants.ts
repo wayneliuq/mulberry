@@ -89,8 +89,10 @@ export const METRIC_META: Record<string, DashboardMetricMeta> = {
   },
   nbaComp: {
     explanation:
-      "Lightweight style match vs a curated NBA pool (mixed current stars, legends, and personality picks). Each friend maps to one distinct pro for fun — not a scouting model.",
+      "Fit goes from 0 to 1. We sketch your playing style from these games—wins, close games, how streaky you are, surprise wins, and how you look with different teammates—and compare that to a loose sketch for each NBA player. Higher means more alike. Each friend gets one NBA name with no repeats. For fun with your group, not a scouting report.",
     constraintLabel: "Players with >=20 rounds in the analyzed window.",
     topNLabel: "One unique NBA comp per qualifying friend.",
   },
 };
+
+export const NBA_COMPARISON_SECTION_TITLE = "Who You Play Like (NBA)";

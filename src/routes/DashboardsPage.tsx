@@ -2,11 +2,16 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { buildBasketballDashboardMetricsFromData } from "../features/dashboards/basketball/compute";
+import {
+  METRIC_META,
+  NBA_COMPARISON_SECTION_TITLE,
+} from "../features/dashboards/basketball/constants";
 import type {
   DashboardMetricSection,
   DashboardMetricSplitSection,
 } from "../features/dashboards/basketball/types";
 import { MetricCard } from "../features/dashboards/components/MetricCard";
+import { NbaComparisonTable } from "../features/dashboards/components/NbaComparisonTable";
 import { RankedTable } from "../features/dashboards/components/RankedTable";
 import { fetchBasketballDashboardData } from "../lib/api/read";
 
@@ -57,10 +62,14 @@ export function DashboardsPage() {
     const clutch = findSplitSection(metrics.splitSections, "clutch")?.positiveRows[0];
     const upset = findSection(metrics.sections, "upset")?.rows[0];
     const balanced = findSection(metrics.sections, "balanced")?.rows[0];
-    const nbaComp = findSection(metrics.sections, "nbaComp")?.rows[0];
+    const nbaFirst = metrics.nbaComparisons[0];
     return [
-      nbaComp
-        ? { label: "NBA comp", value: nbaComp.label, detail: nbaComp.details }
+      nbaFirst
+        ? {
+            label: "NBA comp",
+            value: `${nbaFirst.playerName} → ${nbaFirst.nbaMatchName}`,
+            detail: nbaFirst.fitScore.toFixed(2),
+          }
         : null,
       combo ? { label: "Best combo", value: combo.label, detail: combo.valueLabel } : null,
       clutch ? { label: "Clutch leader", value: clutch.label, detail: clutch.valueLabel } : null,
@@ -154,6 +163,18 @@ export function DashboardsPage() {
       </article>
 
       {sectionOrder.map((id) => {
+        if (id === "nbaComp") {
+          return (
+            <MetricCard key={id} id={`dashboard-${id}`} title={NBA_COMPARISON_SECTION_TITLE}>
+              <p className="muted">{METRIC_META.nbaComp.explanation}</p>
+              <details className="dashboard-details" open>
+                <summary>Matches</summary>
+                <NbaComparisonTable rows={metrics.nbaComparisons} />
+              </details>
+            </MetricCard>
+          );
+        }
+
         const splitSection = splitSectionsById.get(id);
         if (splitSection) {
           const valueHeader = splitSection.id === "families" ? "Same-team %" : "Lift";
@@ -176,13 +197,12 @@ export function DashboardsPage() {
 
         const section = sectionsById.get(id);
         if (!section) return null;
-        const valueHeader = section.id === "nbaComp" ? "Fit" : "Value";
         return (
           <MetricCard key={id} id={`dashboard-${id}`} title={section.title}>
             <p className="muted">{section.explanation}</p>
             <details className="dashboard-details" open>
               <summary>Ranked results</summary>
-              <RankedTable rows={section.rows} valueHeader={valueHeader} />
+              <RankedTable rows={section.rows} />
             </details>
           </MetricCard>
         );

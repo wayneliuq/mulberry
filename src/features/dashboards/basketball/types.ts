@@ -16,6 +16,13 @@ export type RankedMetricRow = {
   details: string;
 };
 
+/** One row for the NBA style-match table (player | NBA | fit). */
+export type NbaComparisonRow = {
+  playerName: string;
+  nbaMatchName: string;
+  fitScore: number;
+};
+
 export type DashboardMetricSection = DashboardMetricMeta & {
   id: string;
   title: string;
@@ -34,6 +41,8 @@ export type DashboardMetricSplitSection = DashboardMetricMeta & {
 export type DashboardMetricsModel = {
   sections: DashboardMetricSection[];
   splitSections: DashboardMetricSplitSection[];
+  /** LeBron-era / modern NBA pool match; empty when nobody hits the games threshold. */
+  nbaComparisons: NbaComparisonRow[];
   diagnostics: {
     totalRounds: number;
     eligibleRounds: number;
