@@ -66,7 +66,7 @@ export function DashboardsPage() {
     return [
       nbaFirst
         ? {
-            label: "NBA comp",
+            label: "Closest NBA match",
             value: `${nbaFirst.playerName} → ${nbaFirst.nbaMatchName}`,
             detail: nbaFirst.fitScore.toFixed(2),
           }

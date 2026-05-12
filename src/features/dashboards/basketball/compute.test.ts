@@ -319,6 +319,9 @@ describe("buildBasketballDashboardMetrics", () => {
     expect(nbaTwice).toEqual(nbaOnce);
     const nbaNames = nbaOnce.map((row) => row.nbaMatchName);
     expect(new Set(nbaNames).size).toBe(4);
+    for (let i = 0; i < nbaOnce.length - 1; i++) {
+      expect(nbaOnce[i]!.fitScore).toBeGreaterThanOrEqual(nbaOnce[i + 1]!.fitScore);
+    }
     for (const row of nbaOnce) {
       expect(row.playerName).toMatch(/^[A-D]$/);
       expect(row.fitScore).toBeGreaterThan(0);

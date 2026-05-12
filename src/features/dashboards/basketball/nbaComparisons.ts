@@ -1077,7 +1077,7 @@ export function computeNbaComparisonRows(
   const friendIds = Array.from(rawMap.keys()).sort((a, b) => a - b);
   const matches = assignUniqueGreedy(friendIds, friendVectors, NBA_COMPARISON_PLAYER_POOL);
 
-  return matches.map((m) => {
+  const rows = matches.map((m) => {
     const fit = fitScoreFromDistance(m.distance);
     const playerName = playerNameById.get(m.playerId) ?? String(m.playerId);
     return {
@@ -1086,4 +1086,9 @@ export function computeNbaComparisonRows(
       fitScore: fit,
     };
   });
+  rows.sort((a, b) => {
+    if (b.fitScore !== a.fitScore) return b.fitScore - a.fitScore;
+    return a.playerName.localeCompare(b.playerName);
+  });
+  return rows;
 }
