@@ -35,6 +35,7 @@ export type ComparisonVector = {
   upsetFactor: number;
   chemistryBias: number;
   personaIntensity: number;
+  overperformance: number;
 };
 
 export type NbaComparisonPlayer = {
@@ -53,16 +54,18 @@ const VECTOR_KEYS = [
   "upsetFactor",
   "chemistryBias",
   "personaIntensity",
+  "overperformance",
 ] as const satisfies readonly (keyof ComparisonVector)[];
 
 const DISTANCE_WEIGHTS: Record<keyof ComparisonVector, number> = {
-  winImpact: 1.15,
-  carryBias: 1.05,
+  winImpact: 1.3,
+  carryBias: 1.2,
   consistency: 0.95,
-  clutchDelta: 0.85,
-  upsetFactor: 1.0,
+  clutchDelta: 1.0,
+  upsetFactor: 1.15,
   chemistryBias: 0.9,
-  personaIntensity: 0.55,
+  personaIntensity: 0.45,
+  overperformance: 1.05,
 };
 
 function stdev(values: number[]): number {
@@ -123,12 +126,16 @@ type FriendRaw = {
   roundsPlayed: number;
   winRate: number;
   clutchDelta: number | null;
+  clutchSampleSize: number;
   carryBias: number | null;
+  carrySampleSize: number;
   volatility: number;
   upsetRate: number | null;
   upsetOpportunities: number;
   maxComboLift: number | null;
   teammateEntropy: number;
+  overperformance: number | null;
+  overperformanceSampleSize: number;
 };
 
 function computeRoundCountByPlayer(rounds: NormalizedRound[]): Map<number, number> {
@@ -173,6 +180,8 @@ function gatherFriendRawStats(
   const deltasByPlayer = new Map<number, number[]>();
   const opportunities = new Map<number, WinLoss>();
   const teammateCounts = new Map<number, Map<number, number>>();
+  const overperformanceSum = new Map<number, number>();
+  const overperformanceCount = new Map<number, number>();
   const priors: BasketballMatchInput[] = [];
 
   for (const round of rounds) {
@@ -238,9 +247,19 @@ function gatherFriendRawStats(
       for (const playerId of round.participants) {
         const onTeamA = round.teamASet.has(playerId);
         const skillWinProb = onTeamA ? probs.teamAWinProb : probs.teamBWinProb;
+        const w = didPlayerWin(round, playerId);
+        if (w !== null) {
+          overperformanceSum.set(
+            playerId,
+            (overperformanceSum.get(playerId) ?? 0) + ((w ? 1 : 0) - skillWinProb),
+          );
+          overperformanceCount.set(
+            playerId,
+            (overperformanceCount.get(playerId) ?? 0) + 1,
+          );
+        }
         if (skillWinProb < UPSET_PROBABILITY_THRESHOLD) {
           const wl = opportunities.get(playerId) ?? { wins: 0, losses: 0 };
-          const w = didPlayerWin(round, playerId);
           if (w === true) wl.wins += 1;
           else if (w === false) wl.losses += 1;
           opportunities.set(playerId, wl);
@@ -339,7 +358,7 @@ function gatherFriendRawStats(
     const c = close.get(playerId) ?? { wins: 0, losses: 0 };
     const closeGames = c.wins + c.losses;
     let clutchDelta: number | null = null;
-    if (closeGames >= CLUTCH_MIN_ROUNDS && total > 0) {
+    if (closeGames > 0 && total > 0) {
       const overallRate = o.wins / total;
       const closeRate = c.wins / closeGames;
       clutchDelta = closeRate - overallRate;
@@ -350,26 +369,24 @@ function gatherFriendRawStats(
     const lowerGames = lowerWL.wins + lowerWL.losses;
     const higherGames = higherWL.wins + higherWL.losses;
     let carryBias: number | null = null;
-    if (
-      roundsPlayed >= PLAYER_MIN_ROUNDS &&
-      lowerGames >= CARRY_MIN_SIDE_SAMPLES &&
-      higherGames >= CARRY_MIN_SIDE_SAMPLES
-    ) {
+    if (lowerGames > 0 && higherGames > 0) {
       carryBias = lowerWL.wins / lowerGames - higherWL.wins / higherGames;
     }
+    const carrySampleSize = Math.min(lowerGames, higherGames);
 
     const deltas = deltasByPlayer.get(playerId) ?? [];
     const volatility = stdev(deltas.length > 0 ? deltas : [0]);
 
     const opp = opportunities.get(playerId) ?? { wins: 0, losses: 0 };
     const oppTotal = opp.wins + opp.losses;
-    let upsetRate: number | null = null;
-    if (oppTotal >= UPSET_MIN_OPPORTUNITIES) {
-      upsetRate = opp.wins / oppTotal;
-    }
+    const upsetRate: number | null = oppTotal > 0 ? opp.wins / oppTotal : null;
 
     const counts = teammateCounts.get(playerId) ?? new Map<number, number>();
     const teammateEntropy = entropy(Array.from(counts.values()));
+
+    const overCount = overperformanceCount.get(playerId) ?? 0;
+    const overSum = overperformanceSum.get(playerId) ?? 0;
+    const overperformance = overCount > 0 ? overSum / overCount : null;
 
     out.set(playerId, {
       playerId,
@@ -377,15 +394,25 @@ function gatherFriendRawStats(
       roundsPlayed,
       winRate,
       clutchDelta,
+      clutchSampleSize: closeGames,
       carryBias,
+      carrySampleSize,
       volatility,
       upsetRate,
       upsetOpportunities: oppTotal,
       maxComboLift: maxComboLiftByPlayer.has(playerId) ? maxComboLiftByPlayer.get(playerId)! : null,
       teammateEntropy,
+      overperformance,
+      overperformanceSampleSize: overCount,
     });
   }
   return out;
+}
+
+function shrinkTowardNeutral(scaled: number, n: number, threshold: number): number {
+  if (n <= 0) return 0.5;
+  const w = Math.min(1, n / threshold);
+  return clamp01(w * scaled + (1 - w) * 0.5);
 }
 
 function rawToComparisonVector(
@@ -396,15 +423,37 @@ function rawToComparisonVector(
   },
 ): ComparisonVector {
   const winImpact = clamp01(raw.winRate);
-  const carryBias = raw.carryBias === null ? 0.5 : clamp01((raw.carryBias + 1) / 2);
+
+  const carryScaled = raw.carryBias === null ? 0.5 : clamp01((raw.carryBias + 1) / 2);
+  const carryBias = shrinkTowardNeutral(
+    carryScaled,
+    raw.carrySampleSize,
+    CARRY_MIN_SIDE_SAMPLES,
+  );
+
   const volMax = cohort.volatilityMax || 1;
   const consistency = clamp01(1 - raw.volatility / volMax);
-  const clutchDelta = raw.clutchDelta === null ? 0.5 : clamp01((raw.clutchDelta + 0.35) / 0.7);
-  const upsetFactor = raw.upsetRate === null ? 0.5 : clamp01(raw.upsetRate);
+
+  const clutchScaled =
+    raw.clutchDelta === null ? 0.5 : clamp01((raw.clutchDelta + 0.35) / 0.7);
+  const clutchDelta = shrinkTowardNeutral(
+    clutchScaled,
+    raw.clutchSampleSize,
+    CLUTCH_MIN_ROUNDS,
+  );
+
+  const upsetScaled = raw.upsetRate === null ? 0.5 : clamp01(raw.upsetRate);
+  const upsetFactor = shrinkTowardNeutral(
+    upsetScaled,
+    raw.upsetOpportunities,
+    UPSET_MIN_OPPORTUNITIES,
+  );
+
   const entMax = cohort.entropyMax || 1;
   const chemistryBias = clamp01(raw.teammateEntropy / entMax);
   const lift = raw.maxComboLift === null ? 0 : clamp01((raw.maxComboLift + 0.35) / 0.7);
   const chemBlend = clamp01(chemistryBias * 0.55 + lift * 0.45);
+
   const upsetIntensity = raw.upsetRate === null ? 0.35 : clamp01(raw.upsetRate);
   const volNorm = clamp01(raw.volatility / volMax);
   const carryExtreme = raw.carryBias === null ? 0.4 : clamp01(Math.abs(raw.carryBias) * 2);
@@ -413,6 +462,14 @@ function rawToComparisonVector(
   const personaIntensity = clamp01(
     upsetIntensity * 0.35 + volNorm * 0.25 + carryExtreme * 0.2 + clutchExtreme * 0.2,
   );
+
+  // Overperformance: mean of (actual_win − model_pre_round_win_prob) across decisive rounds.
+  // Practical range ~[-0.25, +0.25]; map linearly so 0 → 0.5.
+  const overperformance =
+    raw.overperformance === null
+      ? 0.5
+      : clamp01((raw.overperformance + 0.25) / 0.5);
+
   return {
     winImpact,
     carryBias,
@@ -421,6 +478,7 @@ function rawToComparisonVector(
     upsetFactor,
     chemistryBias: chemBlend,
     personaIntensity,
+    overperformance,
   };
 }
 
@@ -478,6 +536,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.52,
       chemistryBias: 0.78,
       personaIntensity: 0.35,
+      overperformance: 0.62,
     },
   },
   {
@@ -491,6 +550,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.58,
       chemistryBias: 0.88,
       personaIntensity: 0.55,
+      overperformance: 0.92,
     },
   },
   {
@@ -504,6 +564,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.56,
       chemistryBias: 0.7,
       personaIntensity: 0.48,
+      overperformance: 0.78,
     },
   },
   {
@@ -517,6 +578,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.5,
       chemistryBias: 0.58,
       personaIntensity: 0.42,
+      overperformance: 0.45,
     },
   },
   {
@@ -530,6 +592,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.54,
       chemistryBias: 0.62,
       personaIntensity: 0.46,
+      overperformance: 0.78,
     },
   },
   {
@@ -543,6 +606,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.6,
       chemistryBias: 0.7,
       personaIntensity: 0.42,
+      overperformance: 0.86,
     },
   },
   {
@@ -556,6 +620,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.55,
       chemistryBias: 0.72,
       personaIntensity: 0.58,
+      overperformance: 0.66,
     },
   },
   {
@@ -569,6 +634,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.56,
       chemistryBias: 0.6,
       personaIntensity: 0.85,
+      overperformance: 0.55,
     },
   },
   {
@@ -582,6 +648,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.54,
       chemistryBias: 0.92,
       personaIntensity: 0.62,
+      overperformance: 0.78,
     },
   },
   {
@@ -595,6 +662,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.52,
       chemistryBias: 0.58,
       personaIntensity: 0.32,
+      overperformance: 0.8,
     },
   },
   {
@@ -608,6 +676,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.53,
       chemistryBias: 0.6,
       personaIntensity: 0.44,
+      overperformance: 0.6,
     },
   },
   {
@@ -621,6 +690,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.54,
       chemistryBias: 0.64,
       personaIntensity: 0.42,
+      overperformance: 0.62,
     },
   },
   {
@@ -634,6 +704,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.55,
       chemistryBias: 0.58,
       personaIntensity: 0.52,
+      overperformance: 0.62,
     },
   },
   {
@@ -647,6 +718,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.58,
       chemistryBias: 0.62,
       personaIntensity: 0.52,
+      overperformance: 0.88,
     },
   },
   {
@@ -660,6 +732,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.55,
       chemistryBias: 0.95,
       personaIntensity: 0.35,
+      overperformance: 0.9,
     },
   },
   {
@@ -673,6 +746,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.48,
       chemistryBias: 0.55,
       personaIntensity: 0.55,
+      overperformance: 0.58,
     },
   },
   {
@@ -686,6 +760,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.62,
       chemistryBias: 0.55,
       personaIntensity: 0.45,
+      overperformance: 0.78,
     },
   },
   {
@@ -699,6 +774,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.52,
       chemistryBias: 0.58,
       personaIntensity: 0.38,
+      overperformance: 0.82,
     },
   },
   {
@@ -712,6 +788,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.53,
       chemistryBias: 0.65,
       personaIntensity: 0.4,
+      overperformance: 0.72,
     },
   },
   {
@@ -725,6 +802,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.5,
       chemistryBias: 0.6,
       personaIntensity: 0.44,
+      overperformance: 0.65,
     },
   },
   {
@@ -738,6 +816,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.57,
       chemistryBias: 0.62,
       personaIntensity: 0.46,
+      overperformance: 0.72,
     },
   },
   {
@@ -751,6 +830,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.56,
       chemistryBias: 0.58,
       personaIntensity: 0.48,
+      overperformance: 0.68,
     },
   },
   {
@@ -764,6 +844,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.62,
       chemistryBias: 0.68,
       personaIntensity: 0.72,
+      overperformance: 0.85,
     },
   },
   {
@@ -777,6 +858,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.58,
       chemistryBias: 0.88,
       personaIntensity: 0.92,
+      overperformance: 0.74,
     },
   },
   {
@@ -790,6 +872,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.55,
       chemistryBias: 0.55,
       personaIntensity: 0.9,
+      overperformance: 0.55,
     },
   },
   {
@@ -803,6 +886,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.55,
       chemistryBias: 0.52,
       personaIntensity: 0.72,
+      overperformance: 0.6,
     },
   },
   {
@@ -816,6 +900,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.52,
       chemistryBias: 0.58,
       personaIntensity: 0.5,
+      overperformance: 0.55,
     },
   },
   {
@@ -829,6 +914,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.54,
       chemistryBias: 0.58,
       personaIntensity: 0.48,
+      overperformance: 0.48,
     },
   },
   {
@@ -842,6 +928,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.57,
       chemistryBias: 0.55,
       personaIntensity: 0.58,
+      overperformance: 0.72,
     },
   },
   {
@@ -855,6 +942,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.58,
       chemistryBias: 0.6,
       personaIntensity: 0.4,
+      overperformance: 0.7,
     },
   },
   {
@@ -868,6 +956,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.55,
       chemistryBias: 0.72,
       personaIntensity: 0.36,
+      overperformance: 0.78,
     },
   },
   {
@@ -881,6 +970,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.52,
       chemistryBias: 0.62,
       personaIntensity: 0.34,
+      overperformance: 0.66,
     },
   },
   {
@@ -894,6 +984,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.5,
       chemistryBias: 0.68,
       personaIntensity: 0.4,
+      overperformance: 0.6,
     },
   },
   {
@@ -907,6 +998,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.5,
       chemistryBias: 0.6,
       personaIntensity: 0.42,
+      overperformance: 0.62,
     },
   },
   {
@@ -920,6 +1012,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.52,
       chemistryBias: 0.62,
       personaIntensity: 0.38,
+      overperformance: 0.55,
     },
   },
   {
@@ -933,6 +1026,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.52,
       chemistryBias: 0.65,
       personaIntensity: 0.36,
+      overperformance: 0.7,
     },
   },
   {
@@ -946,6 +1040,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.54,
       chemistryBias: 0.8,
       personaIntensity: 0.45,
+      overperformance: 0.7,
     },
   },
   {
@@ -959,6 +1054,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.5,
       chemistryBias: 0.88,
       personaIntensity: 0.38,
+      overperformance: 0.62,
     },
   },
   {
@@ -972,6 +1068,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.53,
       chemistryBias: 0.58,
       personaIntensity: 0.44,
+      overperformance: 0.62,
     },
   },
   {
@@ -985,6 +1082,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.52,
       chemistryBias: 0.85,
       personaIntensity: 0.36,
+      overperformance: 0.78,
     },
   },
   {
@@ -998,6 +1096,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.56,
       chemistryBias: 0.62,
       personaIntensity: 0.4,
+      overperformance: 0.7,
     },
   },
   {
@@ -1011,6 +1110,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.51,
       chemistryBias: 0.64,
       personaIntensity: 0.4,
+      overperformance: 0.55,
     },
   },
   {
@@ -1024,6 +1124,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.48,
       chemistryBias: 0.78,
       personaIntensity: 0.42,
+      overperformance: 0.55,
     },
   },
   {
@@ -1037,6 +1138,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.58,
       chemistryBias: 0.62,
       personaIntensity: 0.88,
+      overperformance: 0.55,
     },
   },
   {
@@ -1050,6 +1152,7 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       upsetFactor: 0.56,
       chemistryBias: 0.72,
       personaIntensity: 0.8,
+      overperformance: 0.62,
     },
   },
 ];
