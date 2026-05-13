@@ -1,0 +1,1022 @@
+[
+  {
+    "id": "yao",
+    "displayName": "Yao Ming",
+    "primeWindow": "2006–07 — 2008–09",
+    "statsPrime": {
+      "winImpact": 0.82,
+      "overperformance": 0.62,
+      "clutchDelta": 0.72,
+      "consistency": 0.8
+    },
+    "narrative": {
+      "carryBias": 0.58,
+      "upsetFactor": 0.52,
+      "chemistryBias": 0.78,
+      "personaIntensity": 0.35
+    }
+  },
+  {
+    "id": "lebron",
+    "displayName": "LeBron James",
+    "primeWindow": "2011–12 — 2013–14",
+    "statsPrime": {
+      "winImpact": 0.9,
+      "overperformance": 0.92,
+      "clutchDelta": 0.8,
+      "consistency": 0.88
+    },
+    "narrative": {
+      "carryBias": 0.78,
+      "upsetFactor": 0.58,
+      "chemistryBias": 0.88,
+      "personaIntensity": 0.55
+    }
+  },
+  {
+    "id": "wade",
+    "displayName": "Dwyane Wade",
+    "primeWindow": "2005–06 — 2007–08",
+    "statsPrime": {
+      "winImpact": 0.86,
+      "overperformance": 0.78,
+      "clutchDelta": 0.84,
+      "consistency": 0.82
+    },
+    "narrative": {
+      "carryBias": 0.74,
+      "upsetFactor": 0.56,
+      "chemistryBias": 0.7,
+      "personaIntensity": 0.48
+    }
+  },
+  {
+    "id": "durant",
+    "displayName": "Kevin Durant",
+    "primeWindow": "2012–13 — 2014–15",
+    "statsPrime": {
+      "winImpact": 0.9,
+      "overperformance": 0.78,
+      "clutchDelta": 0.84,
+      "consistency": 0.87
+    },
+    "narrative": {
+      "carryBias": 0.85,
+      "upsetFactor": 0.54,
+      "chemistryBias": 0.62,
+      "personaIntensity": 0.46
+    }
+  },
+  {
+    "id": "curry",
+    "displayName": "Stephen Curry",
+    "primeWindow": "2015–16 — 2017–18",
+    "statsPrime": {
+      "winImpact": 0.88,
+      "overperformance": 0.86,
+      "clutchDelta": 0.92,
+      "consistency": 0.85
+    },
+    "narrative": {
+      "carryBias": 0.72,
+      "upsetFactor": 0.6,
+      "chemistryBias": 0.7,
+      "personaIntensity": 0.42
+    }
+  },
+  {
+    "id": "harden",
+    "displayName": "James Harden",
+    "primeWindow": "2017–18 — 2019–20",
+    "statsPrime": {
+      "winImpact": 0.84,
+      "overperformance": 0.66,
+      "clutchDelta": 0.74,
+      "consistency": 0.78
+    },
+    "narrative": {
+      "carryBias": 0.8,
+      "upsetFactor": 0.55,
+      "chemistryBias": 0.72,
+      "personaIntensity": 0.58
+    }
+  },
+  {
+    "id": "westbrook",
+    "displayName": "Russell Westbrook",
+    "primeWindow": "2015–16 — 2017–18",
+    "statsPrime": {
+      "winImpact": 0.76,
+      "overperformance": 0.55,
+      "clutchDelta": 0.72,
+      "consistency": 0.62
+    },
+    "narrative": {
+      "carryBias": 0.82,
+      "upsetFactor": 0.56,
+      "chemistryBias": 0.6,
+      "personaIntensity": 0.85
+    }
+  },
+  {
+    "id": "cp3",
+    "displayName": "Chris Paul",
+    "primeWindow": "2007–08 — 2009–10",
+    "statsPrime": {
+      "winImpact": 0.82,
+      "overperformance": 0.78,
+      "clutchDelta": 0.8,
+      "consistency": 0.9
+    },
+    "narrative": {
+      "carryBias": 0.65,
+      "upsetFactor": 0.54,
+      "chemistryBias": 0.92,
+      "personaIntensity": 0.62
+    }
+  },
+  {
+    "id": "kawhi",
+    "displayName": "Kawhi Leonard",
+    "primeWindow": "2015–16 — 2017–18",
+    "statsPrime": {
+      "winImpact": 0.86,
+      "overperformance": 0.8,
+      "clutchDelta": 0.88,
+      "consistency": 0.9
+    },
+    "narrative": {
+      "carryBias": 0.7,
+      "upsetFactor": 0.52,
+      "chemistryBias": 0.58,
+      "personaIntensity": 0.32
+    }
+  },
+  {
+    "id": "davis",
+    "displayName": "Anthony Davis",
+    "primeWindow": "2017–18 — 2019–20",
+    "statsPrime": {
+      "winImpact": 0.82,
+      "overperformance": 0.62,
+      "clutchDelta": 0.7,
+      "consistency": 0.72
+    },
+    "narrative": {
+      "carryBias": 0.65,
+      "upsetFactor": 0.54,
+      "chemistryBias": 0.64,
+      "personaIntensity": 0.42
+    }
+  },
+  {
+    "id": "kyrie",
+    "displayName": "Kyrie Irving",
+    "primeWindow": "2016–17 — 2018–19",
+    "statsPrime": {
+      "winImpact": 0.8,
+      "overperformance": 0.62,
+      "clutchDelta": 0.86,
+      "consistency": 0.78
+    },
+    "narrative": {
+      "carryBias": 0.7,
+      "upsetFactor": 0.55,
+      "chemistryBias": 0.58,
+      "personaIntensity": 0.52
+    }
+  },
+  {
+    "id": "giannis",
+    "displayName": "Giannis Antetokounmpo",
+    "primeWindow": "2018–19 — 2020–21",
+    "statsPrime": {
+      "winImpact": 0.9,
+      "overperformance": 0.88,
+      "clutchDelta": 0.68,
+      "consistency": 0.8
+    },
+    "narrative": {
+      "carryBias": 0.82,
+      "upsetFactor": 0.58,
+      "chemistryBias": 0.62,
+      "personaIntensity": 0.52
+    }
+  },
+  {
+    "id": "jokic",
+    "displayName": "Nikola Jokić",
+    "primeWindow": "2020–21 — 2022–23",
+    "statsPrime": {
+      "winImpact": 0.93,
+      "overperformance": 0.9,
+      "clutchDelta": 0.75,
+      "consistency": 0.9
+    },
+    "narrative": {
+      "carryBias": 0.75,
+      "upsetFactor": 0.55,
+      "chemistryBias": 0.95,
+      "personaIntensity": 0.35
+    }
+  },
+  {
+    "id": "embiid",
+    "displayName": "Joel Embiid",
+    "primeWindow": "2020–21 — 2022–23",
+    "statsPrime": {
+      "winImpact": 0.84,
+      "overperformance": 0.58,
+      "clutchDelta": 0.72,
+      "consistency": 0.7
+    },
+    "narrative": {
+      "carryBias": 0.72,
+      "upsetFactor": 0.48,
+      "chemistryBias": 0.55,
+      "personaIntensity": 0.55
+    }
+  },
+  {
+    "id": "luka",
+    "displayName": "Luka Dončić",
+    "primeWindow": "2019–20 — 2021–22",
+    "statsPrime": {
+      "winImpact": 0.92,
+      "overperformance": 0.78,
+      "clutchDelta": 0.82,
+      "consistency": 0.78
+    },
+    "narrative": {
+      "carryBias": 0.88,
+      "upsetFactor": 0.62,
+      "chemistryBias": 0.55,
+      "personaIntensity": 0.45
+    }
+  },
+  {
+    "id": "sga",
+    "displayName": "Shai Gilgeous-Alexander",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.89,
+      "overperformance": 0.82,
+      "clutchDelta": 0.8,
+      "consistency": 0.86
+    },
+    "narrative": {
+      "carryBias": 0.8,
+      "upsetFactor": 0.52,
+      "chemistryBias": 0.58,
+      "personaIntensity": 0.38
+    }
+  },
+  {
+    "id": "tatum",
+    "displayName": "Jayson Tatum",
+    "primeWindow": "2021–22 — 2023–24",
+    "statsPrime": {
+      "winImpact": 0.85,
+      "overperformance": 0.72,
+      "clutchDelta": 0.76,
+      "consistency": 0.8
+    },
+    "narrative": {
+      "carryBias": 0.7,
+      "upsetFactor": 0.53,
+      "chemistryBias": 0.65,
+      "personaIntensity": 0.4
+    }
+  },
+  {
+    "id": "booker",
+    "displayName": "Devin Booker",
+    "primeWindow": "2020–21 — 2022–23",
+    "statsPrime": {
+      "winImpact": 0.82,
+      "overperformance": 0.65,
+      "clutchDelta": 0.86,
+      "consistency": 0.78
+    },
+    "narrative": {
+      "carryBias": 0.68,
+      "upsetFactor": 0.5,
+      "chemistryBias": 0.6,
+      "personaIntensity": 0.44
+    }
+  },
+  {
+    "id": "dame",
+    "displayName": "Damian Lillard",
+    "primeWindow": "2018–19 — 2020–21",
+    "statsPrime": {
+      "winImpact": 0.83,
+      "overperformance": 0.72,
+      "clutchDelta": 0.9,
+      "consistency": 0.8
+    },
+    "narrative": {
+      "carryBias": 0.76,
+      "upsetFactor": 0.57,
+      "chemistryBias": 0.62,
+      "personaIntensity": 0.46
+    }
+  },
+  {
+    "id": "mitchell",
+    "displayName": "Donovan Mitchell",
+    "primeWindow": "2021–22 — 2023–24",
+    "statsPrime": {
+      "winImpact": 0.84,
+      "overperformance": 0.68,
+      "clutchDelta": 0.85,
+      "consistency": 0.74
+    },
+    "narrative": {
+      "carryBias": 0.74,
+      "upsetFactor": 0.56,
+      "chemistryBias": 0.58,
+      "personaIntensity": 0.48
+    }
+  },
+  {
+    "id": "jimmy",
+    "displayName": "Jimmy Butler",
+    "primeWindow": "2018–19 — 2020–21",
+    "statsPrime": {
+      "winImpact": 0.82,
+      "overperformance": 0.85,
+      "clutchDelta": 0.82,
+      "consistency": 0.8
+    },
+    "narrative": {
+      "carryBias": 0.78,
+      "upsetFactor": 0.62,
+      "chemistryBias": 0.68,
+      "personaIntensity": 0.72
+    }
+  },
+  {
+    "id": "draymond",
+    "displayName": "Draymond Green",
+    "primeWindow": "2015–16 — 2017–18",
+    "statsPrime": {
+      "winImpact": 0.78,
+      "overperformance": 0.74,
+      "clutchDelta": 0.68,
+      "consistency": 0.72
+    },
+    "narrative": {
+      "carryBias": 0.62,
+      "upsetFactor": 0.58,
+      "chemistryBias": 0.88,
+      "personaIntensity": 0.92
+    }
+  },
+  {
+    "id": "dillon",
+    "displayName": "Dillon Brooks",
+    "primeWindow": "2021–22 — 2023–24",
+    "statsPrime": {
+      "winImpact": 0.7,
+      "overperformance": 0.55,
+      "clutchDelta": 0.65,
+      "consistency": 0.68
+    },
+    "narrative": {
+      "carryBias": 0.58,
+      "upsetFactor": 0.55,
+      "chemistryBias": 0.55,
+      "personaIntensity": 0.9
+    }
+  },
+  {
+    "id": "ja",
+    "displayName": "Ja Morant",
+    "primeWindow": "2021–22 — 2023–24",
+    "statsPrime": {
+      "winImpact": 0.78,
+      "overperformance": 0.6,
+      "clutchDelta": 0.78,
+      "consistency": 0.62
+    },
+    "narrative": {
+      "carryBias": 0.76,
+      "upsetFactor": 0.55,
+      "chemistryBias": 0.52,
+      "personaIntensity": 0.72
+    }
+  },
+  {
+    "id": "trae",
+    "displayName": "Trae Young",
+    "primeWindow": "2019–20 — 2021–22",
+    "statsPrime": {
+      "winImpact": 0.76,
+      "overperformance": 0.55,
+      "clutchDelta": 0.82,
+      "consistency": 0.68
+    },
+    "narrative": {
+      "carryBias": 0.74,
+      "upsetFactor": 0.52,
+      "chemistryBias": 0.58,
+      "personaIntensity": 0.5
+    }
+  },
+  {
+    "id": "zion",
+    "displayName": "Zion Williamson",
+    "primeWindow": "2020–21 — 2022–23",
+    "statsPrime": {
+      "winImpact": 0.76,
+      "overperformance": 0.48,
+      "clutchDelta": 0.68,
+      "consistency": 0.62
+    },
+    "narrative": {
+      "carryBias": 0.75,
+      "upsetFactor": 0.54,
+      "chemistryBias": 0.58,
+      "personaIntensity": 0.48
+    }
+  },
+  {
+    "id": "ant",
+    "displayName": "Anthony Edwards",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.83,
+      "overperformance": 0.72,
+      "clutchDelta": 0.74,
+      "consistency": 0.7
+    },
+    "narrative": {
+      "carryBias": 0.72,
+      "upsetFactor": 0.57,
+      "chemistryBias": 0.55,
+      "personaIntensity": 0.58
+    }
+  },
+  {
+    "id": "wemby",
+    "displayName": "Victor Wembanyama",
+    "primeWindow": "2023–24 — 2025–26",
+    "statsPrime": {
+      "winImpact": 0.78,
+      "overperformance": 0.7,
+      "clutchDelta": 0.72,
+      "consistency": 0.65
+    },
+    "narrative": {
+      "carryBias": 0.7,
+      "upsetFactor": 0.58,
+      "chemistryBias": 0.6,
+      "personaIntensity": 0.4
+    }
+  },
+  {
+    "id": "brunson",
+    "displayName": "Jalen Brunson",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.82,
+      "overperformance": 0.78,
+      "clutchDelta": 0.88,
+      "consistency": 0.82
+    },
+    "narrative": {
+      "carryBias": 0.68,
+      "upsetFactor": 0.55,
+      "chemistryBias": 0.72,
+      "personaIntensity": 0.36
+    }
+  },
+  {
+    "id": "maxey",
+    "displayName": "Tyrese Maxey",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.8,
+      "overperformance": 0.66,
+      "clutchDelta": 0.78,
+      "consistency": 0.8
+    },
+    "narrative": {
+      "carryBias": 0.65,
+      "upsetFactor": 0.52,
+      "chemistryBias": 0.62,
+      "personaIntensity": 0.34
+    }
+  },
+  {
+    "id": "klay",
+    "displayName": "Klay Thompson",
+    "primeWindow": "2015–16 — 2017–18",
+    "statsPrime": {
+      "winImpact": 0.78,
+      "overperformance": 0.7,
+      "clutchDelta": 0.8,
+      "consistency": 0.82
+    },
+    "narrative": {
+      "carryBias": 0.55,
+      "upsetFactor": 0.52,
+      "chemistryBias": 0.65,
+      "personaIntensity": 0.36
+    }
+  },
+  {
+    "id": "bam",
+    "displayName": "Bam Adebayo",
+    "primeWindow": "2019–20 — 2021–22",
+    "statsPrime": {
+      "winImpact": 0.78,
+      "overperformance": 0.7,
+      "clutchDelta": 0.7,
+      "consistency": 0.82
+    },
+    "narrative": {
+      "carryBias": 0.6,
+      "upsetFactor": 0.54,
+      "chemistryBias": 0.8,
+      "personaIntensity": 0.45
+    }
+  },
+  {
+    "id": "sabonis",
+    "displayName": "Domantas Sabonis",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.8,
+      "overperformance": 0.62,
+      "clutchDelta": 0.72,
+      "consistency": 0.84
+    },
+    "narrative": {
+      "carryBias": 0.64,
+      "upsetFactor": 0.5,
+      "chemistryBias": 0.88,
+      "personaIntensity": 0.38
+    }
+  },
+  {
+    "id": "fox",
+    "displayName": "De'Aaron Fox",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.77,
+      "overperformance": 0.62,
+      "clutchDelta": 0.78,
+      "consistency": 0.74
+    },
+    "narrative": {
+      "carryBias": 0.7,
+      "upsetFactor": 0.53,
+      "chemistryBias": 0.58,
+      "personaIntensity": 0.44
+    }
+  },
+  {
+    "id": "haliburton",
+    "displayName": "Tyrese Haliburton",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.79,
+      "overperformance": 0.78,
+      "clutchDelta": 0.76,
+      "consistency": 0.82
+    },
+    "narrative": {
+      "carryBias": 0.66,
+      "upsetFactor": 0.52,
+      "chemistryBias": 0.85,
+      "personaIntensity": 0.36
+    }
+  },
+  {
+    "id": "murray",
+    "displayName": "Jamal Murray",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.81,
+      "overperformance": 0.7,
+      "clutchDelta": 0.86,
+      "consistency": 0.78
+    },
+    "narrative": {
+      "carryBias": 0.7,
+      "upsetFactor": 0.56,
+      "chemistryBias": 0.62,
+      "personaIntensity": 0.4
+    }
+  },
+  {
+    "id": "kat",
+    "displayName": "Karl-Anthony Towns",
+    "primeWindow": "2021–22 — 2023–24",
+    "statsPrime": {
+      "winImpact": 0.81,
+      "overperformance": 0.55,
+      "clutchDelta": 0.74,
+      "consistency": 0.74
+    },
+    "narrative": {
+      "carryBias": 0.68,
+      "upsetFactor": 0.51,
+      "chemistryBias": 0.64,
+      "personaIntensity": 0.4
+    }
+  },
+  {
+    "id": "gobert",
+    "displayName": "Rudy Gobert",
+    "primeWindow": "2016–17 — 2018–19",
+    "statsPrime": {
+      "winImpact": 0.76,
+      "overperformance": 0.55,
+      "clutchDelta": 0.62,
+      "consistency": 0.85
+    },
+    "narrative": {
+      "carryBias": 0.52,
+      "upsetFactor": 0.48,
+      "chemistryBias": 0.78,
+      "personaIntensity": 0.42
+    }
+  },
+  {
+    "id": "beverley",
+    "displayName": "Patrick Beverley",
+    "primeWindow": "2013–14 — 2015–16",
+    "statsPrime": {
+      "winImpact": 0.65,
+      "overperformance": 0.55,
+      "clutchDelta": 0.62,
+      "consistency": 0.7
+    },
+    "narrative": {
+      "carryBias": 0.55,
+      "upsetFactor": 0.58,
+      "chemistryBias": 0.62,
+      "personaIntensity": 0.88
+    }
+  },
+  {
+    "id": "smart",
+    "displayName": "Marcus Smart",
+    "primeWindow": "2018–19 — 2020–21",
+    "statsPrime": {
+      "winImpact": 0.68,
+      "overperformance": 0.62,
+      "clutchDelta": 0.65,
+      "consistency": 0.74
+    },
+    "narrative": {
+      "carryBias": 0.52,
+      "upsetFactor": 0.56,
+      "chemistryBias": 0.72,
+      "personaIntensity": 0.8
+    }
+  },
+  {
+    "id": "michael_jordan",
+    "displayName": "Michael Jordan",
+    "primeWindow": "1990–91 — 1992–93",
+    "statsPrime": {
+      "winImpact": 0.96,
+      "overperformance": 0.94,
+      "clutchDelta": 0.94,
+      "consistency": 0.92
+    },
+    "narrative": {
+      "carryBias": 0.82,
+      "upsetFactor": 0.62,
+      "chemistryBias": 0.74,
+      "personaIntensity": 0.48
+    }
+  },
+  {
+    "id": "kobe_bryant",
+    "displayName": "Kobe Bryant",
+    "primeWindow": "2007–08 — 2009–10",
+    "statsPrime": {
+      "winImpact": 0.92,
+      "overperformance": 0.86,
+      "clutchDelta": 0.92,
+      "consistency": 0.84
+    },
+    "narrative": {
+      "carryBias": 0.76,
+      "upsetFactor": 0.58,
+      "chemistryBias": 0.58,
+      "personaIntensity": 0.58
+    }
+  },
+  {
+    "id": "caitlin_clark",
+    "displayName": "Caitlin Clark",
+    "primeWindow": "2022–23 — 2024–25 (Iowa / WNBA start)",
+    "statsPrime": {
+      "winImpact": 0.87,
+      "overperformance": 0.82,
+      "clutchDelta": 0.86,
+      "consistency": 0.8
+    },
+    "narrative": {
+      "carryBias": 0.72,
+      "upsetFactor": 0.55,
+      "chemistryBias": 0.72,
+      "personaIntensity": 0.44
+    }
+  },
+  {
+    "id": "angel_reese",
+    "displayName": "Angel Reese",
+    "primeWindow": "2021–22 — 2023–24 (LSU prime)",
+    "statsPrime": {
+      "winImpact": 0.74,
+      "overperformance": 0.62,
+      "clutchDelta": 0.66,
+      "consistency": 0.68
+    },
+    "narrative": {
+      "carryBias": 0.6,
+      "upsetFactor": 0.52,
+      "chemistryBias": 0.58,
+      "personaIntensity": 0.68
+    }
+  },
+  {
+    "id": "sabrina_ionescu",
+    "displayName": "Sabrina Ionescu",
+    "primeWindow": "2021–22 — 2023–24 (NY Liberty prime)",
+    "statsPrime": {
+      "winImpact": 0.83,
+      "overperformance": 0.74,
+      "clutchDelta": 0.85,
+      "consistency": 0.82
+    },
+    "narrative": {
+      "carryBias": 0.7,
+      "upsetFactor": 0.54,
+      "chemistryBias": 0.8,
+      "personaIntensity": 0.38
+    }
+  },
+  {
+    "id": "demar_derozan",
+    "displayName": "DeMar DeRozan",
+    "primeWindow": "2015–16 — 2017–18",
+    "statsPrime": {
+      "winImpact": 0.81,
+      "overperformance": 0.62,
+      "clutchDelta": 0.86,
+      "consistency": 0.82
+    },
+    "narrative": {
+      "carryBias": 0.66,
+      "upsetFactor": 0.5,
+      "chemistryBias": 0.55,
+      "personaIntensity": 0.38
+    }
+  },
+  {
+    "id": "jrue_holiday",
+    "displayName": "Jrue Holiday",
+    "primeWindow": "2017–18 — 2019–20",
+    "statsPrime": {
+      "winImpact": 0.8,
+      "overperformance": 0.72,
+      "clutchDelta": 0.74,
+      "consistency": 0.86
+    },
+    "narrative": {
+      "carryBias": 0.6,
+      "upsetFactor": 0.56,
+      "chemistryBias": 0.85,
+      "personaIntensity": 0.48
+    }
+  },
+  {
+    "id": "pascal_siakam",
+    "displayName": "Pascal Siakam",
+    "primeWindow": "2018–19 — 2020–21",
+    "statsPrime": {
+      "winImpact": 0.8,
+      "overperformance": 0.65,
+      "clutchDelta": 0.72,
+      "consistency": 0.78
+    },
+    "narrative": {
+      "carryBias": 0.66,
+      "upsetFactor": 0.54,
+      "chemistryBias": 0.62,
+      "personaIntensity": 0.42
+    }
+  },
+  {
+    "id": "scottie_barnes",
+    "displayName": "Scottie Barnes",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.77,
+      "overperformance": 0.62,
+      "clutchDelta": 0.7,
+      "consistency": 0.74
+    },
+    "narrative": {
+      "carryBias": 0.64,
+      "upsetFactor": 0.52,
+      "chemistryBias": 0.72,
+      "personaIntensity": 0.48
+    }
+  },
+  {
+    "id": "al_horford",
+    "displayName": "Al Horford",
+    "primeWindow": "2014–15 — 2016–17",
+    "statsPrime": {
+      "winImpact": 0.76,
+      "overperformance": 0.68,
+      "clutchDelta": 0.72,
+      "consistency": 0.86
+    },
+    "narrative": {
+      "carryBias": 0.55,
+      "upsetFactor": 0.5,
+      "chemistryBias": 0.82,
+      "personaIntensity": 0.38
+    }
+  },
+  {
+    "id": "franz_wagner",
+    "displayName": "Franz Wagner",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.78,
+      "overperformance": 0.62,
+      "clutchDelta": 0.74,
+      "consistency": 0.76
+    },
+    "narrative": {
+      "carryBias": 0.62,
+      "upsetFactor": 0.51,
+      "chemistryBias": 0.6,
+      "personaIntensity": 0.36
+    }
+  },
+  {
+    "id": "evan_mobley",
+    "displayName": "Evan Mobley",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.76,
+      "overperformance": 0.64,
+      "clutchDelta": 0.68,
+      "consistency": 0.8
+    },
+    "narrative": {
+      "carryBias": 0.55,
+      "upsetFactor": 0.5,
+      "chemistryBias": 0.72,
+      "personaIntensity": 0.35
+    }
+  },
+  {
+    "id": "austin_reaves",
+    "displayName": "Austin Reaves",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.75,
+      "overperformance": 0.68,
+      "clutchDelta": 0.76,
+      "consistency": 0.74
+    },
+    "narrative": {
+      "carryBias": 0.58,
+      "upsetFactor": 0.54,
+      "chemistryBias": 0.65,
+      "personaIntensity": 0.4
+    }
+  },
+  {
+    "id": "desmond_bane",
+    "displayName": "Desmond Bane",
+    "primeWindow": "2021–22 — 2023–24",
+    "statsPrime": {
+      "winImpact": 0.78,
+      "overperformance": 0.63,
+      "clutchDelta": 0.8,
+      "consistency": 0.77
+    },
+    "narrative": {
+      "carryBias": 0.62,
+      "upsetFactor": 0.52,
+      "chemistryBias": 0.58,
+      "personaIntensity": 0.4
+    }
+  },
+  {
+    "id": "zach_lavine",
+    "displayName": "Zach LaVine",
+    "primeWindow": "2018–19 — 2020–21",
+    "statsPrime": {
+      "winImpact": 0.79,
+      "overperformance": 0.6,
+      "clutchDelta": 0.82,
+      "consistency": 0.72
+    },
+    "narrative": {
+      "carryBias": 0.7,
+      "upsetFactor": 0.51,
+      "chemistryBias": 0.56,
+      "personaIntensity": 0.42
+    }
+  },
+  {
+    "id": "grayson_allen",
+    "displayName": "Grayson Allen",
+    "primeWindow": "2020–21 — 2022–23",
+    "statsPrime": {
+      "winImpact": 0.68,
+      "overperformance": 0.58,
+      "clutchDelta": 0.72,
+      "consistency": 0.7
+    },
+    "narrative": {
+      "carryBias": 0.56,
+      "upsetFactor": 0.54,
+      "chemistryBias": 0.54,
+      "personaIntensity": 0.82
+    }
+  },
+  {
+    "id": "jusuf_nurkic",
+    "displayName": "Jusuf Nurkić",
+    "primeWindow": "2017–18 — 2019–20",
+    "statsPrime": {
+      "winImpact": 0.72,
+      "overperformance": 0.58,
+      "clutchDelta": 0.66,
+      "consistency": 0.7
+    },
+    "narrative": {
+      "carryBias": 0.58,
+      "upsetFactor": 0.52,
+      "chemistryBias": 0.62,
+      "personaIntensity": 0.72
+    }
+  },
+  {
+    "id": "jordan_poole",
+    "displayName": "Jordan Poole",
+    "primeWindow": "2021–22 — 2022–23",
+    "statsPrime": {
+      "winImpact": 0.72,
+      "overperformance": 0.52,
+      "clutchDelta": 0.76,
+      "consistency": 0.6
+    },
+    "narrative": {
+      "carryBias": 0.68,
+      "upsetFactor": 0.5,
+      "chemistryBias": 0.52,
+      "personaIntensity": 0.68
+    }
+  },
+  {
+    "id": "kyle_kuzma",
+    "displayName": "Kyle Kuzma",
+    "primeWindow": "2018–19 — 2020–21",
+    "statsPrime": {
+      "winImpact": 0.74,
+      "overperformance": 0.56,
+      "clutchDelta": 0.72,
+      "consistency": 0.7
+    },
+    "narrative": {
+      "carryBias": 0.64,
+      "upsetFactor": 0.51,
+      "chemistryBias": 0.56,
+      "personaIntensity": 0.62
+    }
+  },
+  {
+    "id": "nikola_vucevic",
+    "displayName": "Nikola Vučević",
+    "primeWindow": "2018–19 — 2020–21",
+    "statsPrime": {
+      "winImpact": 0.78,
+      "overperformance": 0.6,
+      "clutchDelta": 0.7,
+      "consistency": 0.78
+    },
+    "narrative": {
+      "carryBias": 0.62,
+      "upsetFactor": 0.49,
+      "chemistryBias": 0.72,
+      "personaIntensity": 0.36
+    }
+  }
+]

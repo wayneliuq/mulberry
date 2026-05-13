@@ -10,7 +10,10 @@ intent, not a spec.
 
 | Concern | File |
 |---|---|
-| Matching logic, NBA pool, vectors, fit | `src/features/dashboards/basketball/nbaComparisons.ts` |
+| Matching logic, vectors, fit, anchors | `src/features/dashboards/basketball/nbaComparisons.ts` |
+| 8-axis vector types (friend + pool) | `src/features/dashboards/basketball/nbaComparisonVector.ts` |
+| Curated pool source (prime + split priors) | `src/features/dashboards/basketball/nbaComparisonPool.source.json` |
+| Pool merge (stats percentile spread + narrative) | `src/features/dashboards/basketball/nbaComparisonPool.build.ts` |
 | Thresholds (eligibility, sample minimums) | `src/features/dashboards/basketball/constants.ts` |
 | Dashboard aggregator (calls comparison) | `src/features/dashboards/basketball/compute.ts` |
 | Friend/round types | `src/features/dashboards/basketball/types.ts` |
@@ -104,14 +107,24 @@ sort by distance ascending, walk the list taking each edge whose friend
 and NBA player are both still unassigned. Each NBA name is used at most
 once per friend cohort.
 
-This runs fresh on every dashboard load — no persistence today. This is
-the source of the churn problem the stability system addresses.
+This runs on every dashboard load; **anchors** in `localStorage` can keep the same
+pro assignment when the friend vector moves only a little (see “Pending: Stability
+system” / implemented hysteresis in code). Unanchored friends still use pure greedy.
 
 ### 6. NBA pool
 
-Static, hand-curated array `NBA_COMPARISON_PLAYER_POOL` (currently 60
-entries, all with 8-dim vectors). Vectors are explicitly "coarse fun
-priors," not derived from real NBA stats.
+Curated **source** lives in `nbaComparisonPool.source.json` (~60 pros). Each
+entry has a `primeWindow` label, a **stats-half** prior (`statsPrime`: winImpact,
+overperformance, clutchDelta, consistency) meant to reflect a **best contiguous
+three-season prime** (curator judgment, not automated box scores), and a
+**narrative-half** prior (`narrative`: carryBias, upsetFactor, chemistryBias,
+personaIntensity) for archetype / vibe.
+
+`nbaComparisonPool.build.ts` exports `NBA_COMPARISON_PLAYER_POOL`: the stats
+half is re-mapped to **average-rank percentiles within the pool** on each of
+those four axes (full [0, 1] spread across the cohort); the narrative half is
+passed through clamped to [0, 1]. Runtime matching still uses one 8-dimensional
+weighted Euclidean distance against the friend vector from `rawToComparisonVector`.
 
 ## Recent changes (commit `9156430`)
 
@@ -379,7 +392,8 @@ not anchored-state transitions.
 
 If you're picking this up cold, do these in order:
 
-1. Read `src/features/dashboards/basketball/nbaComparisons.ts` end to end.
+1. Read `nbaComparisons.ts`, `nbaComparisonPool.build.ts`, and
+   `nbaComparisonPool.source.json` for the full matching + pool story.
 2. Skim `src/features/dashboards/basketball/compute.test.ts` to see
    what's covered.
 3. Apply the user-facing rename to "Pro Basketball" copy in dashboard text.

@@ -66,6 +66,67 @@ The machine summary includes the scoreline and per‑player deltas (by id). The 
 
 ---
 
+## Basketball dashboard (pickup analytics)
+
+Beyond OpenSkill and Mulberry points, the **basketball game dashboard** can show
+ranked behavioral metrics and a **“Who You Play Like (Pro Basketball)”** table
+when enough decisive rounds exist in the selected window.
+
+### Friend style vector
+
+For each eligible friend, Mulberry derives an **8-axis style vector** in \([0, 1]\)
+from pickup history (win impact, carry bias, consistency, clutch tendency,
+upset factor, chemistry, persona intensity, and a separate “overperformance”
+signal). Values are **cohort-relative** within that friend group for the
+window (not league-wide NBA stats). The implementation lives in
+`src/features/dashboards/basketball/nbaComparisons.ts` (`gatherFriendRawStats`,
+`rawToComparisonVector`).
+
+### Pro pool and distance
+
+The app compares each friend vector to a **static pool** of ~60 NBA and WNBA
+names. Curator input is stored in
+`src/features/dashboards/basketball/nbaComparisonPool.source.json`: each row
+has a human-readable **`primeWindow`** plus two halves:
+
+- **Stats-like half** (`statsPrime`): `winImpact`, `overperformance`,
+  `clutchDelta`, `consistency` — intended to summarize a **best three-season
+  prime** in plain language, still as hand priors (not live API stats).
+- **Narrative half** (`narrative`): `carryBias`, `upsetFactor`, `chemistryBias`,
+  `personaIntensity` — loose archetype / roleplay vibe for the same eight axes
+  on the friend side.
+
+`src/features/dashboards/basketball/nbaComparisonPool.build.ts` **merges** those
+into the runtime `ComparisonVector`: the four stats priors become **within-pool
+percentile ranks** (average-rank tie handling) so pros spread across the stats
+axes; the four narrative priors are used **directly** (clamped to \([0, 1]\)).
+Matching is **closest weighted Euclidean** distance, with **one pro per friend**
+and **no pro reused** within the cohort (global greedy assignment in
+`nbaComparisons.ts`).
+
+### Stability (anchors)
+
+To reduce match churn when new rounds nudge vectors slightly, the dashboard can
+**persist an anchor** per friend (last matched pro id + snapshot vector) in
+browser `localStorage` under the key `mulberry:nba-comp:v1` (see
+`NBA_COMP_ANCHOR_STORAGE_KEY` in `constants.ts`). If the friend’s fresh vector
+stays within a **hysteresis band** around the saved vector and the pro is still
+free, the same pro is kept; otherwise the friend re-enters the greedy pool.
+**Stickiness** inflates greedy distance slightly toward the previous pro so ties
+break toward continuity without breaking uniqueness.
+
+### Editing or refreshing the pro list
+
+1. Edit `nbaComparisonPool.source.json` (keep ~60 entries unless you also tune
+   thresholds and copy).
+2. Run `node scripts/validate-nba-pool-source.mjs` to sanity-check shape, ids,
+   and count.
+3. Rebuild / run tests; the bundled app imports the JSON at compile time.
+
+Design notes and algorithm history: `docs/nba-comp-design.md`.
+
+---
+
 ## Reproducibility
 
 OpenSkill replay for round *n* depends only on prior rounds’ **teams + scores** (not on past Mulberry deltas).
