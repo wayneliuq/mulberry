@@ -1,5 +1,5 @@
 import type { GameTypeId } from "../../features/game-types/types";
-import { supabase } from "../supabase/client";
+import { selectAll, supabase } from "../supabase/client";
 import type {
   BasketballDashboardData,
   BasketballDashboardRound,
@@ -61,7 +61,7 @@ type RawRound = {
   id: string;
   game_id: string;
   round_number: number;
-  summary_text: string | null;
+  summary_text?: string | null;
   created_at: string;
   settings_snapshot: Record<string, unknown> | null;
 };
@@ -167,17 +167,20 @@ function assertData<T>(data: T | null, error: { message: string } | null) {
 }
 
 export async function fetchPlayers() {
-  const { data, error } = await supabase
-    .from("players")
-    .select("id, display_name, family_id")
-    .eq("is_active", true)
-    .order("display_name", { ascending: true });
+  const { data, error } = await selectAll<RawPlayer>((from, to) =>
+    supabase
+      .from("players")
+      .select("id, display_name, family_id")
+      .eq("is_active", true)
+      .order("display_name", { ascending: true })
+      .range(from, to),
+  );
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return (data ?? []).map<PlayerSummary>((player) => ({
+  return data.map<PlayerSummary>((player) => ({
     id: player.id,
     displayName: player.display_name,
     familyId: player.family_id,
@@ -185,16 +188,21 @@ export async function fetchPlayers() {
 }
 
 export async function fetchGames() {
-  const { data, error } = await supabase
-    .from("game_summaries")
-    .select("game_id, display_name, game_type_id, status, created_at, updated_at, round_count, player_count")
-    .order("updated_at", { ascending: false });
+  const { data, error } = await selectAll<RawGameSummary>((from, to) =>
+    supabase
+      .from("game_summaries")
+      .select(
+        "game_id, display_name, game_type_id, status, created_at, updated_at, round_count, player_count",
+      )
+      .order("updated_at", { ascending: false })
+      .range(from, to),
+  );
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return (data ?? []).map<GameSummary>((game: RawGameSummary) => ({
+  return data.map<GameSummary>((game) => ({
     id: game.game_id,
     displayName: game.display_name,
     gameTypeId: game.game_type_id,
@@ -362,15 +370,25 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
       .from("game_point_totals")
       .select("game_id, game_player_id, player_id, point_total")
       .eq("game_id", gameId),
-    supabase
-      .from("rounds")
-      .select("id, game_id, round_number, summary_text, created_at, settings_snapshot")
-      .eq("game_id", gameId)
-      .order("round_number", { ascending: false }),
-    supabase
-      .from("round_entries")
-      .select("round_id, player_id, point_delta, players(display_name, is_active)")
-      .eq("game_id", gameId),
+    selectAll<RawRound>((from, to) =>
+      supabase
+        .from("rounds")
+        .select(
+          "id, game_id, round_number, summary_text, created_at, settings_snapshot",
+        )
+        .eq("game_id", gameId)
+        .order("round_number", { ascending: false })
+        .range(from, to),
+    ),
+    selectAll<RawRoundEntry>((from, to) =>
+      supabase
+        .from("round_entries")
+        .select(
+          "round_id, player_id, point_delta, players(display_name, is_active)",
+        )
+        .eq("game_id", gameId)
+        .range(from, to),
+    ),
     fetchSettlement(gameId),
   ]);
 
@@ -411,7 +429,7 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
 
   const roundEntriesByRoundId = new Map<string, RoundSummary["entries"]>();
 
-  for (const entry of (roundEntriesResult.data ?? []) as RawRoundEntry[]) {
+  for (const entry of roundEntriesResult.data) {
     const existingEntries = roundEntriesByRoundId.get(entry.round_id) ?? [];
     const displayName = getNestedDisplayName(entry.players);
     existingEntries.push({
@@ -449,7 +467,7 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
         total: totalByGamePlayerId.get(player.id) ?? 0,
       };
     }),
-    rounds: ((roundsResult.data ?? []) as RawRound[]).map((round) => ({
+    rounds: roundsResult.data.map((round) => ({
       id: round.id,
       roundNumber: round.round_number,
       createdAt: round.created_at,
@@ -473,18 +491,21 @@ export type BasketballRoundHistoryRow = {
 };
 
 export async function fetchBasketballRoundHistory(): Promise<BasketballRoundHistoryRow[]> {
-  const { data, error } = await supabase
-    .from("rounds")
-    .select("id, game_id, round_number, created_at, settings_snapshot")
-    .eq("game_type_id", "basketball")
-    .order("created_at", { ascending: true })
-    .order("id", { ascending: true });
+  const { data, error } = await selectAll<RawRound>((from, to) =>
+    supabase
+      .from("rounds")
+      .select("id, game_id, round_number, created_at, settings_snapshot")
+      .eq("game_type_id", "basketball")
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as RawRound[]).map((round) => ({
+  return data.map((round) => ({
     roundId: round.id,
     gameId: round.game_id,
     roundNumber: round.round_number,
@@ -552,19 +573,28 @@ function parseBasketballRound(
 
 export async function fetchBasketballDashboardData(): Promise<BasketballDashboardData> {
   const [roundsResult, entriesResult, playersResult] = await Promise.all([
-    supabase
-      .from("rounds")
-      .select("id, game_id, round_number, created_at, settings_snapshot")
-      .eq("game_type_id", "basketball")
-      .order("created_at", { ascending: true })
-      .order("id", { ascending: true }),
-    supabase
-      .from("round_entries")
-      .select("round_id, player_id, point_delta"),
-    supabase
-      .from("players")
-      .select("id, display_name, family_id")
-      .eq("is_active", true),
+    selectAll<RawRound>((from, to) =>
+      supabase
+        .from("rounds")
+        .select("id, game_id, round_number, created_at, settings_snapshot")
+        .eq("game_type_id", "basketball")
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to),
+    ),
+    selectAll<RawRoundEntryMetric>((from, to) =>
+      supabase
+        .from("round_entries")
+        .select("round_id, player_id, point_delta")
+        .range(from, to),
+    ),
+    selectAll<RawPlayer>((from, to) =>
+      supabase
+        .from("players")
+        .select("id, display_name, family_id")
+        .eq("is_active", true)
+        .range(from, to),
+    ),
   ]);
 
   if (roundsResult.error) {
@@ -577,12 +607,12 @@ export async function fetchBasketballDashboardData(): Promise<BasketballDashboar
     throw new Error(playersResult.error.message);
   }
 
-  const rounds = ((roundsResult.data ?? []) as RawRound[])
+  const rounds = roundsResult.data
     .map(parseBasketballRound)
     .filter((round): round is BasketballDashboardRound => round !== null);
   const roundIdSet = new Set(rounds.map((round) => round.roundId));
 
-  const roundEntries = ((entriesResult.data ?? []) as RawRoundEntryMetric[])
+  const roundEntries = entriesResult.data
     .filter((entry) => roundIdSet.has(entry.round_id))
     .map<BasketballDashboardRoundEntry>((entry) => ({
       roundId: entry.round_id,
@@ -590,7 +620,7 @@ export async function fetchBasketballDashboardData(): Promise<BasketballDashboar
       pointDelta: entry.point_delta,
     }));
 
-  const players = ((playersResult.data ?? []) as RawPlayer[])
+  const players = playersResult.data
     .map((player) => ({
       id: player.id,
       displayName: player.display_name,
@@ -625,12 +655,25 @@ export async function fetchLeaderboards(
   gameTypeFilter: GameTypeId | "all" = "all",
 ): Promise<LeaderboardData> {
   const [gamesResult, totalsResult, playersResult, familiesResult] = await Promise.all([
-    supabase.from("games").select("id, game_type_id"),
-    supabase
-      .from("game_point_totals")
-      .select("game_id, game_player_id, player_id, point_total"),
-    supabase.from("players").select("id, display_name, family_id").eq("is_active", true),
-    supabase.from("families").select("id, name"),
+    selectAll<{ id: string; game_type_id: GameTypeId }>((from, to) =>
+      supabase.from("games").select("id, game_type_id").range(from, to),
+    ),
+    selectAll<RawGamePointTotal>((from, to) =>
+      supabase
+        .from("game_point_totals")
+        .select("game_id, game_player_id, player_id, point_total")
+        .range(from, to),
+    ),
+    selectAll<RawPlayer>((from, to) =>
+      supabase
+        .from("players")
+        .select("id, display_name, family_id")
+        .eq("is_active", true)
+        .range(from, to),
+    ),
+    selectAll<RawFamily>((from, to) =>
+      supabase.from("families").select("id, name").range(from, to),
+    ),
   ]);
 
   if (gamesResult.error) {
@@ -646,7 +689,7 @@ export async function fetchLeaderboards(
     throw new Error(familiesResult.error.message);
   }
 
-  const games = (gamesResult.data ?? []) as Array<{ id: string; game_type_id: GameTypeId }>;
+  const games = gamesResult.data;
   const gameTypeByGameId = new Map(games.map((g) => [g.id, g.game_type_id]));
   const filteredGameIds = new Set(
     gameTypeFilter === "all"
@@ -656,14 +699,20 @@ export async function fetchLeaderboards(
 
   const [roundEntriesResult, moneyResult] = await Promise.all([
     filteredGameIds.size > 0
-      ? supabase
-          .from("round_entries")
-          .select("player_id, point_delta, game_id")
-          .in("game_id", Array.from(filteredGameIds))
+      ? selectAll<RawRoundEntryRow>((from, to) =>
+          supabase
+            .from("round_entries")
+            .select("player_id, point_delta, game_id")
+            .in("game_id", Array.from(filteredGameIds))
+            .range(from, to),
+        )
       : { data: [] as RawRoundEntryRow[], error: null },
-    supabase
-      .from("money_settlement_players")
-      .select("player_id, amount_cents, money_settlements(game_id)"),
+    selectAll<RawMoneySettlementPlayer>((from, to) =>
+      supabase
+        .from("money_settlement_players")
+        .select("player_id, amount_cents, money_settlements(game_id)")
+        .range(from, to),
+    ),
   ]);
 
   if (roundEntriesResult.error) {
@@ -673,8 +722,8 @@ export async function fetchLeaderboards(
     throw new Error(moneyResult.error.message);
   }
 
-  const roundEntries = (roundEntriesResult.data ?? []) as RawRoundEntryRow[];
-  const moneyRows = (moneyResult.data ?? []) as RawMoneySettlementPlayer[];
+  const roundEntries = roundEntriesResult.data ?? [];
+  const moneyRows = moneyResult.data ?? [];
 
   const moneyByPlayerId = new Map<number, number>();
   for (const row of moneyRows) {
@@ -704,8 +753,8 @@ export async function fetchLeaderboards(
     pointsByPlayerId.set(entry.player_id, existing);
   }
 
-  const filteredGameTotals = ((totalsResult.data ?? []) as RawGamePointTotal[]).filter(
-    (row) => filteredGameIds.has(row.game_id),
+  const filteredGameTotals = totalsResult.data.filter((row) =>
+    filteredGameIds.has(row.game_id),
   );
 
   const gameWinLossByPlayerId = new Map<number, { gamesWon: number; gamesLost: number }>();
@@ -719,7 +768,7 @@ export async function fetchLeaderboards(
     gameWinLossByPlayerId.set(total.player_id, existing);
   }
 
-  const allPlayers = (playersResult.data ?? []) as RawPlayer[];
+  const allPlayers = playersResult.data;
   const activePlayerIds = new Set(allPlayers.map((p) => p.id));
   const playerById = new Map(allPlayers.map((p) => [p.id, p]));
 
@@ -755,7 +804,7 @@ export async function fetchLeaderboards(
     })
     .sort((left, right) => right.totalPoints - left.totalPoints);
 
-  const families = (familiesResult.data ?? []) as RawFamily[];
+  const families = familiesResult.data;
 
   const familyRows: FamilyLeaderboardRow[] = families
     .map((family) => {
