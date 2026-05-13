@@ -21,7 +21,7 @@ import {
   UPSET_MIN_OPPORTUNITIES,
   UPSET_PROBABILITY_THRESHOLD,
 } from "./constants";
-import { computeNbaComparisonRows } from "./nbaComparisons";
+import { computeNbaComparisonRows, type NbaCompStorageAdapter } from "./nbaComparisons";
 import type {
   DashboardComputeInput,
   DashboardMetricSection,
@@ -727,8 +727,15 @@ function computeBalancedSection(
   };
 }
 
+export type BuildBasketballDashboardMetricsOptions = {
+  nbaCompStorage?: NbaCompStorageAdapter;
+  nbaCompHysteresisTau?: number;
+  nbaCompStickiness?: number;
+};
+
 export function buildBasketballDashboardMetrics(
   input: DashboardComputeInput,
+  options?: BuildBasketballDashboardMetricsOptions,
 ): DashboardMetricsModel {
   const rounds = normalizeData(input.data, input.maxRounds);
   const playerNameById = new Map(
@@ -754,7 +761,11 @@ export function buildBasketballDashboardMetrics(
   return {
     splitSections,
     sections,
-    nbaComparisons: computeNbaComparisonRows(rounds, playerNameById),
+    nbaComparisons: computeNbaComparisonRows(rounds, playerNameById, {
+      storage: options?.nbaCompStorage,
+      hysteresisTau: options?.nbaCompHysteresisTau,
+      stickiness: options?.nbaCompStickiness,
+    }),
     diagnostics: {
       totalRounds: input.data.rounds.length,
       eligibleRounds: rounds.length,
@@ -765,9 +776,13 @@ export function buildBasketballDashboardMetrics(
 
 export function buildBasketballDashboardMetricsFromData(
   data: BasketballDashboardData,
+  options?: BuildBasketballDashboardMetricsOptions,
 ): DashboardMetricsModel {
-  return buildBasketballDashboardMetrics({
-    data,
-    maxRounds: DASHBOARD_MAX_ROUNDS,
-  });
+  return buildBasketballDashboardMetrics(
+    {
+      data,
+      maxRounds: DASHBOARD_MAX_ROUNDS,
+    },
+    options,
+  );
 }

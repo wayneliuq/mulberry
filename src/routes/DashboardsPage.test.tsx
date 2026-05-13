@@ -1,9 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchBasketballDashboardData } from "../lib/api/read";
-import { NBA_COMPARISON_SECTION_TITLE } from "../features/dashboards/basketball/constants";
+import {
+  NBA_COMP_ANCHOR_STORAGE_KEY,
+  NBA_COMPARISON_SECTION_TITLE,
+} from "../features/dashboards/basketball/constants";
 import { DashboardsPage } from "./DashboardsPage";
 
 vi.mock("../lib/api/read", () => ({
@@ -26,6 +29,12 @@ function renderDashboardsPage() {
 }
 
 describe("DashboardsPage", () => {
+  beforeEach(() => {
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem(NBA_COMP_ANCHOR_STORAGE_KEY);
+    }
+  });
+
   it("renders basketball sections and jump chips", async () => {
     fetchBasketballDashboardDataMock.mockResolvedValue({
       players: [
@@ -62,7 +71,7 @@ describe("DashboardsPage", () => {
       await screen.findByRole("heading", { name: NBA_COMPARISON_SECTION_TITLE }),
     ).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Player" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "NBA match" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Pro match" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Fit" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Best / Worst Combos" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to leaderboards" })).toBeInTheDocument();

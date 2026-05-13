@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import type { NbaComparisonRow } from "../basketball/types";
 
 export function NbaComparisonTable({ rows }: { rows: NbaComparisonRow[] }) {
@@ -6,11 +7,11 @@ export function NbaComparisonTable({ rows }: { rows: NbaComparisonRow[] }) {
   }
   return (
     <div className="table-shell">
-      <table>
+      <table className="nba-comp-table">
         <thead>
           <tr>
             <th>Player</th>
-            <th>NBA match</th>
+            <th>Pro match</th>
             <th>Fit</th>
           </tr>
         </thead>
@@ -22,14 +23,30 @@ export function NbaComparisonTable({ rows }: { rows: NbaComparisonRow[] }) {
                 : row.fitScore < 0.45
                   ? "score-negative"
                   : "score-neutral";
+            const hasPrevious =
+              typeof row.previousMatchName === "string" &&
+              row.previousMatchName.trim().length > 0 &&
+              row.previousMatchName !== row.nbaMatchName;
             return (
-              <tr key={`${row.playerName}-${row.nbaMatchName}`}>
-                <td>{row.playerName}</td>
-                <td>{row.nbaMatchName}</td>
-                <td>
-                  <span className={valueClass}>{row.fitScore.toFixed(2)}</span>
-                </td>
-              </tr>
+              <Fragment key={`${row.playerName}-${row.nbaMatchName}`}>
+                <tr
+                  className={`nba-comp-main-row${hasPrevious ? " nba-comp-main-row-with-previous" : ""}`}
+                >
+                  <td>{row.playerName}</td>
+                  <td>{row.nbaMatchName}</td>
+                  <td>
+                    <span className={valueClass}>{row.fitScore.toFixed(2)}</span>
+                  </td>
+                </tr>
+                {hasPrevious ? (
+                  <tr className="nba-comp-previous-row">
+                    <td colSpan={3}>
+                      <span className="nba-comp-previous-label">Previously:</span>{" "}
+                      <span className="nba-comp-previous-name">{row.previousMatchName}</span>
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
             );
           })}
         </tbody>

@@ -20,6 +20,9 @@ import {
   CARRY_MIN_SIDE_SAMPLES,
   CLUTCH_MARGIN,
   CLUTCH_MIN_ROUNDS,
+  NBA_COMP_ANCHOR_STORAGE_KEY,
+  NBA_COMP_HYSTERESIS_TAU,
+  NBA_COMP_STICKINESS,
   PAIR_MIN_APART,
   PAIR_MIN_TOGETHER,
   PLAYER_MIN_ROUNDS,
@@ -119,6 +122,100 @@ function vectorDistance(a: ComparisonVector, b: ComparisonVector): number {
 function fitScoreFromDistance(distance: number): number {
   return 1 / (1 + distance);
 }
+
+/** Persisted anchor: vector baseline for hysteresis + current NBA pool id. */
+export type NbaCompAnchor = {
+  vector: ComparisonVector;
+  nbaId: string;
+  anchoredAt: number;
+};
+
+export type NbaCompAnchorStore = Record<number, NbaCompAnchor>;
+
+export type NbaCompStorageAdapter = {
+  load: () => NbaCompAnchorStore | null;
+  save: (store: NbaCompAnchorStore) => void;
+};
+
+function cloneVector(v: ComparisonVector): ComparisonVector {
+  return { ...v };
+}
+
+function isComparisonVector(value: unknown): value is ComparisonVector {
+  if (!value || typeof value !== "object") return false;
+  const o = value as Record<string, unknown>;
+  for (const key of VECTOR_KEYS) {
+    const n = o[key];
+    if (typeof n !== "number" || !Number.isFinite(n)) return false;
+  }
+  return true;
+}
+
+function parseAnchorStore(raw: unknown): NbaCompAnchorStore | null {
+  if (!raw || typeof raw !== "object") return null;
+  const out: NbaCompAnchorStore = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const id = Number(k);
+    if (!Number.isInteger(id) || id <= 0) continue;
+    if (!v || typeof v !== "object") continue;
+    const entry = v as Record<string, unknown>;
+    const nbaId = entry.nbaId;
+    const anchoredAt = entry.anchoredAt;
+    if (typeof nbaId !== "string" || nbaId.length === 0) continue;
+    if (typeof anchoredAt !== "number" || !Number.isFinite(anchoredAt)) continue;
+    if (!isComparisonVector(entry.vector)) continue;
+    out[id] = {
+      vector: cloneVector(entry.vector as ComparisonVector),
+      nbaId,
+      anchoredAt,
+    };
+  }
+  return Object.keys(out).length > 0 ? out : {};
+}
+
+export function createLocalStorageNbaCompAdapter(): NbaCompStorageAdapter {
+  return {
+    load(): NbaCompAnchorStore | null {
+      if (typeof globalThis === "undefined") return null;
+      const ls = (globalThis as { localStorage?: Storage }).localStorage;
+      if (!ls) return null;
+      try {
+        const raw = ls.getItem(NBA_COMP_ANCHOR_STORAGE_KEY);
+        if (raw === null || raw === "") return null;
+        const parsed: unknown = JSON.parse(raw);
+        return parseAnchorStore(parsed);
+      } catch {
+        return null;
+      }
+    },
+    save(store: NbaCompAnchorStore): void {
+      if (typeof globalThis === "undefined") return;
+      const ls = (globalThis as { localStorage?: Storage }).localStorage;
+      if (!ls) return;
+      try {
+        ls.setItem(NBA_COMP_ANCHOR_STORAGE_KEY, JSON.stringify(store));
+      } catch {
+        // ignore quota / private mode
+      }
+    },
+  };
+}
+
+/** In-memory adapter for tests (deterministic, no localStorage). */
+export function createMemoryNbaCompStorage(
+  initial?: NbaCompAnchorStore | null,
+): NbaCompStorageAdapter {
+  let store: NbaCompAnchorStore | null =
+    initial === undefined ? null : initial === null ? null : { ...initial };
+  return {
+    load: () => (store === null ? null : { ...store }),
+    save: (s: NbaCompAnchorStore) => {
+      store = { ...s };
+    },
+  };
+}
+
+const defaultLocalStorageAdapter = createLocalStorageNbaCompAdapter();
 
 type FriendRaw = {
   playerId: number;
@@ -486,17 +583,25 @@ function assignUniqueGreedy(
   friendIds: number[],
   friendVectors: Map<number, ComparisonVector>,
   pool: NbaComparisonPlayer[],
+  stickyNbaIdByPlayerId: Map<number, string> | undefined,
+  stickiness: number,
 ): Array<{ playerId: number; nba: NbaComparisonPlayer; distance: number }> {
   type Edge = { playerId: number; nbaId: string; distance: number };
+  const sticky = stickyNbaIdByPlayerId ?? new Map<number, string>();
   const edges: Edge[] = [];
   for (const playerId of friendIds) {
     const fv = friendVectors.get(playerId);
     if (!fv) continue;
+    const stickyId = sticky.get(playerId);
     for (const nba of pool) {
+      let distance = vectorDistance(fv, nba.vector);
+      if (stickyId !== undefined && stickyId === nba.id) {
+        distance *= 1 - stickiness;
+      }
       edges.push({
         playerId,
         nbaId: nba.id,
-        distance: vectorDistance(fv, nba.vector),
+        distance,
       });
     }
   }
@@ -524,7 +629,8 @@ function assignUniqueGreedy(
 }
 
 export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
-  // ~LeBron era (2003+) through 2026; Yao Ming included; pre-LeBron legends omitted.
+  // ~60 hand-curated pro basketball comps (NBA + WNBA): GOATs, modern stars, role players,
+  // and ~1/5 "persona" picks for laughs. Vectors are coarse priors — not scouting data.
   {
     id: "yao",
     displayName: "Yao Ming",
@@ -565,20 +671,6 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       chemistryBias: 0.7,
       personaIntensity: 0.48,
       overperformance: 0.78,
-    },
-  },
-  {
-    id: "melo",
-    displayName: "Carmelo Anthony",
-    vector: {
-      winImpact: 0.8,
-      carryBias: 0.72,
-      consistency: 0.76,
-      clutchDelta: 0.82,
-      upsetFactor: 0.5,
-      chemistryBias: 0.58,
-      personaIntensity: 0.42,
-      overperformance: 0.45,
     },
   },
   {
@@ -663,20 +755,6 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       chemistryBias: 0.58,
       personaIntensity: 0.32,
       overperformance: 0.8,
-    },
-  },
-  {
-    id: "george",
-    displayName: "Paul George",
-    vector: {
-      winImpact: 0.8,
-      carryBias: 0.68,
-      consistency: 0.8,
-      clutchDelta: 0.78,
-      upsetFactor: 0.53,
-      chemistryBias: 0.6,
-      personaIntensity: 0.44,
-      overperformance: 0.6,
     },
   },
   {
@@ -974,48 +1052,6 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
     },
   },
   {
-    id: "cade",
-    displayName: "Cade Cunningham",
-    vector: {
-      winImpact: 0.76,
-      carryBias: 0.62,
-      consistency: 0.72,
-      clutchDelta: 0.7,
-      upsetFactor: 0.5,
-      chemistryBias: 0.68,
-      personaIntensity: 0.4,
-      overperformance: 0.6,
-    },
-  },
-  {
-    id: "banchero",
-    displayName: "Paolo Banchero",
-    vector: {
-      winImpact: 0.74,
-      carryBias: 0.68,
-      consistency: 0.7,
-      clutchDelta: 0.72,
-      upsetFactor: 0.5,
-      chemistryBias: 0.6,
-      personaIntensity: 0.42,
-      overperformance: 0.62,
-    },
-  },
-  {
-    id: "flagg",
-    displayName: "Cooper Flagg",
-    vector: {
-      winImpact: 0.68,
-      carryBias: 0.58,
-      consistency: 0.66,
-      clutchDelta: 0.65,
-      upsetFactor: 0.52,
-      chemistryBias: 0.62,
-      personaIntensity: 0.38,
-      overperformance: 0.55,
-    },
-  },
-  {
     id: "klay",
     displayName: "Klay Thompson",
     vector: {
@@ -1155,15 +1191,310 @@ export const NBA_COMPARISON_PLAYER_POOL: NbaComparisonPlayer[] = [
       overperformance: 0.62,
     },
   },
+  {
+    id: "michael_jordan",
+    displayName: "Michael Jordan",
+    vector: {
+      winImpact: 0.96,
+      carryBias: 0.82,
+      consistency: 0.92,
+      clutchDelta: 0.94,
+      upsetFactor: 0.62,
+      chemistryBias: 0.74,
+      personaIntensity: 0.48,
+      overperformance: 0.94,
+    },
+  },
+  {
+    id: "kobe_bryant",
+    displayName: "Kobe Bryant",
+    vector: {
+      winImpact: 0.92,
+      carryBias: 0.76,
+      consistency: 0.84,
+      clutchDelta: 0.92,
+      upsetFactor: 0.58,
+      chemistryBias: 0.58,
+      personaIntensity: 0.58,
+      overperformance: 0.86,
+    },
+  },
+  {
+    id: "caitlin_clark",
+    displayName: "Caitlin Clark",
+    vector: {
+      winImpact: 0.87,
+      carryBias: 0.72,
+      consistency: 0.8,
+      clutchDelta: 0.86,
+      upsetFactor: 0.55,
+      chemistryBias: 0.72,
+      personaIntensity: 0.44,
+      overperformance: 0.82,
+    },
+  },
+  {
+    id: "angel_reese",
+    displayName: "Angel Reese",
+    vector: {
+      winImpact: 0.74,
+      carryBias: 0.6,
+      consistency: 0.68,
+      clutchDelta: 0.66,
+      upsetFactor: 0.52,
+      chemistryBias: 0.58,
+      personaIntensity: 0.68,
+      overperformance: 0.62,
+    },
+  },
+  {
+    id: "sabrina_ionescu",
+    displayName: "Sabrina Ionescu",
+    vector: {
+      winImpact: 0.83,
+      carryBias: 0.7,
+      consistency: 0.82,
+      clutchDelta: 0.85,
+      upsetFactor: 0.54,
+      chemistryBias: 0.8,
+      personaIntensity: 0.38,
+      overperformance: 0.74,
+    },
+  },
+  {
+    id: "demar_derozan",
+    displayName: "DeMar DeRozan",
+    vector: {
+      winImpact: 0.81,
+      carryBias: 0.66,
+      consistency: 0.82,
+      clutchDelta: 0.86,
+      upsetFactor: 0.5,
+      chemistryBias: 0.55,
+      personaIntensity: 0.38,
+      overperformance: 0.62,
+    },
+  },
+  {
+    id: "jrue_holiday",
+    displayName: "Jrue Holiday",
+    vector: {
+      winImpact: 0.8,
+      carryBias: 0.6,
+      consistency: 0.86,
+      clutchDelta: 0.74,
+      upsetFactor: 0.56,
+      chemistryBias: 0.85,
+      personaIntensity: 0.48,
+      overperformance: 0.72,
+    },
+  },
+  {
+    id: "pascal_siakam",
+    displayName: "Pascal Siakam",
+    vector: {
+      winImpact: 0.8,
+      carryBias: 0.66,
+      consistency: 0.78,
+      clutchDelta: 0.72,
+      upsetFactor: 0.54,
+      chemistryBias: 0.62,
+      personaIntensity: 0.42,
+      overperformance: 0.65,
+    },
+  },
+  {
+    id: "scottie_barnes",
+    displayName: "Scottie Barnes",
+    vector: {
+      winImpact: 0.77,
+      carryBias: 0.64,
+      consistency: 0.74,
+      clutchDelta: 0.7,
+      upsetFactor: 0.52,
+      chemistryBias: 0.72,
+      personaIntensity: 0.48,
+      overperformance: 0.62,
+    },
+  },
+  {
+    id: "al_horford",
+    displayName: "Al Horford",
+    vector: {
+      winImpact: 0.76,
+      carryBias: 0.55,
+      consistency: 0.86,
+      clutchDelta: 0.72,
+      upsetFactor: 0.5,
+      chemistryBias: 0.82,
+      personaIntensity: 0.38,
+      overperformance: 0.68,
+    },
+  },
+  {
+    id: "franz_wagner",
+    displayName: "Franz Wagner",
+    vector: {
+      winImpact: 0.78,
+      carryBias: 0.62,
+      consistency: 0.76,
+      clutchDelta: 0.74,
+      upsetFactor: 0.51,
+      chemistryBias: 0.6,
+      personaIntensity: 0.36,
+      overperformance: 0.62,
+    },
+  },
+  {
+    id: "evan_mobley",
+    displayName: "Evan Mobley",
+    vector: {
+      winImpact: 0.76,
+      carryBias: 0.55,
+      consistency: 0.8,
+      clutchDelta: 0.68,
+      upsetFactor: 0.5,
+      chemistryBias: 0.72,
+      personaIntensity: 0.35,
+      overperformance: 0.64,
+    },
+  },
+  {
+    id: "austin_reaves",
+    displayName: "Austin Reaves",
+    vector: {
+      winImpact: 0.75,
+      carryBias: 0.58,
+      consistency: 0.74,
+      clutchDelta: 0.76,
+      upsetFactor: 0.54,
+      chemistryBias: 0.65,
+      personaIntensity: 0.4,
+      overperformance: 0.68,
+    },
+  },
+  {
+    id: "desmond_bane",
+    displayName: "Desmond Bane",
+    vector: {
+      winImpact: 0.78,
+      carryBias: 0.62,
+      consistency: 0.77,
+      clutchDelta: 0.8,
+      upsetFactor: 0.52,
+      chemistryBias: 0.58,
+      personaIntensity: 0.4,
+      overperformance: 0.63,
+    },
+  },
+  {
+    id: "zach_lavine",
+    displayName: "Zach LaVine",
+    vector: {
+      winImpact: 0.79,
+      carryBias: 0.7,
+      consistency: 0.72,
+      clutchDelta: 0.82,
+      upsetFactor: 0.51,
+      chemistryBias: 0.56,
+      personaIntensity: 0.42,
+      overperformance: 0.6,
+    },
+  },
+  {
+    id: "grayson_allen",
+    displayName: "Grayson Allen",
+    vector: {
+      winImpact: 0.68,
+      carryBias: 0.56,
+      consistency: 0.7,
+      clutchDelta: 0.72,
+      upsetFactor: 0.54,
+      chemistryBias: 0.54,
+      personaIntensity: 0.82,
+      overperformance: 0.58,
+    },
+  },
+  {
+    id: "jusuf_nurkic",
+    displayName: "Jusuf Nurkić",
+    vector: {
+      winImpact: 0.72,
+      carryBias: 0.58,
+      consistency: 0.7,
+      clutchDelta: 0.66,
+      upsetFactor: 0.52,
+      chemistryBias: 0.62,
+      personaIntensity: 0.72,
+      overperformance: 0.58,
+    },
+  },
+  {
+    id: "jordan_poole",
+    displayName: "Jordan Poole",
+    vector: {
+      winImpact: 0.72,
+      carryBias: 0.68,
+      consistency: 0.6,
+      clutchDelta: 0.76,
+      upsetFactor: 0.5,
+      chemistryBias: 0.52,
+      personaIntensity: 0.68,
+      overperformance: 0.52,
+    },
+  },
+  {
+    id: "kyle_kuzma",
+    displayName: "Kyle Kuzma",
+    vector: {
+      winImpact: 0.74,
+      carryBias: 0.64,
+      consistency: 0.7,
+      clutchDelta: 0.72,
+      upsetFactor: 0.51,
+      chemistryBias: 0.56,
+      personaIntensity: 0.62,
+      overperformance: 0.56,
+    },
+  },
+  {
+    id: "nikola_vucevic",
+    displayName: "Nikola Vučević",
+    vector: {
+      winImpact: 0.78,
+      carryBias: 0.62,
+      consistency: 0.78,
+      clutchDelta: 0.7,
+      upsetFactor: 0.49,
+      chemistryBias: 0.72,
+      personaIntensity: 0.36,
+      overperformance: 0.6,
+    },
+  },
 ];
+
+export type ComputeNbaComparisonRowsOptions = {
+  storage?: NbaCompStorageAdapter;
+  hysteresisTau?: number;
+  /** Distance multiplier for sticky rematch edges; default from constants. */
+  stickiness?: number;
+};
 
 export function computeNbaComparisonRows(
   rounds: NormalizedRound[],
   playerNameById: Map<number, string>,
+  options?: ComputeNbaComparisonRowsOptions,
 ): NbaComparisonRow[] {
+  const storage = options?.storage ?? defaultLocalStorageAdapter;
+  const tau = options?.hysteresisTau ?? NBA_COMP_HYSTERESIS_TAU;
+  const stickiness = options?.stickiness ?? NBA_COMP_STICKINESS;
+
   const roundCountByPlayer = computeRoundCountByPlayer(rounds);
   const rawMap = gatherFriendRawStats(rounds, playerNameById, roundCountByPlayer);
-  if (rawMap.size === 0) return [];
+  if (rawMap.size === 0) {
+    storage.save({});
+    return [];
+  }
 
   const volatilities = Array.from(rawMap.values()).map((r) => r.volatility);
   const entropies = Array.from(rawMap.values()).map((r) => r.teammateEntropy);
@@ -1178,17 +1509,103 @@ export function computeNbaComparisonRows(
   }
 
   const friendIds = Array.from(rawMap.keys()).sort((a, b) => a - b);
-  const matches = assignUniqueGreedy(friendIds, friendVectors, NBA_COMPARISON_PLAYER_POOL);
+  const poolById = new Map(NBA_COMPARISON_PLAYER_POOL.map((p) => [p.id, p]));
 
-  const rows = matches.map((m) => {
+  const loaded = storage.load();
+  const anchors: NbaCompAnchorStore =
+    loaded && typeof loaded === "object" ? loaded : {};
+
+  const lockedMatches = new Map<number, { nba: NbaComparisonPlayer; distance: number }>();
+  const greedyFriendIds: number[] = [];
+  const stickyNbaIdByPlayerId = new Map<number, string>();
+  const lockedNbaIds = new Set<string>();
+
+  for (const id of friendIds) {
+    const fresh = friendVectors.get(id);
+    if (!fresh) continue;
+    const anchor = anchors[id];
+
+    if (!anchor || !poolById.has(anchor.nbaId)) {
+      greedyFriendIds.push(id);
+      continue;
+    }
+
+    const drift = vectorDistance(fresh, anchor.vector);
+    const wantsLock = drift <= tau;
+    const nbaIdFree = !lockedNbaIds.has(anchor.nbaId);
+
+    if (wantsLock && nbaIdFree) {
+      const nba = poolById.get(anchor.nbaId)!;
+      lockedNbaIds.add(anchor.nbaId);
+      lockedMatches.set(id, {
+        nba,
+        distance: vectorDistance(fresh, nba.vector),
+      });
+    } else {
+      greedyFriendIds.push(id);
+      stickyNbaIdByPlayerId.set(id, anchor.nbaId);
+    }
+  }
+
+  const takenNbaIds = new Set<string>();
+  for (const m of lockedMatches.values()) {
+    takenNbaIds.add(m.nba.id);
+  }
+
+  const greedyPool = NBA_COMPARISON_PLAYER_POOL.filter((p) => !takenNbaIds.has(p.id));
+  const greedyMatches = assignUniqueGreedy(
+    [...greedyFriendIds].sort((a, b) => a - b),
+    friendVectors,
+    greedyPool,
+    stickyNbaIdByPlayerId,
+    stickiness,
+  );
+
+  const matchByPlayer = new Map<number, { nba: NbaComparisonPlayer; distance: number }>();
+  for (const [id, m] of lockedMatches) matchByPlayer.set(id, m);
+  for (const m of greedyMatches) matchByPlayer.set(m.playerId, m);
+
+  const nextStore: NbaCompAnchorStore = {};
+  const rows: NbaComparisonRow[] = [];
+
+  for (const id of friendIds) {
+    const m = matchByPlayer.get(id);
+    if (!m) continue;
+
+    const playerName = playerNameById.get(id) ?? String(id);
     const fit = fitScoreFromDistance(m.distance);
-    const playerName = playerNameById.get(m.playerId) ?? String(m.playerId);
-    return {
+    const old = anchors[id];
+
+    const row: NbaComparisonRow = {
       playerName,
       nbaMatchName: m.nba.displayName,
       fitScore: fit,
     };
-  });
+
+    if (!lockedMatches.has(id) && old && poolById.has(old.nbaId) && old.nbaId !== m.nba.id) {
+      row.previousMatchName = poolById.get(old.nbaId)!.displayName;
+    }
+
+    rows.push(row);
+
+    const fresh = friendVectors.get(id)!;
+    if (lockedMatches.has(id) && anchors[id]) {
+      nextStore[id] = {
+        vector: cloneVector(anchors[id]!.vector),
+        nbaId: anchors[id]!.nbaId,
+        anchoredAt: anchors[id]!.anchoredAt,
+      };
+    } else {
+      nextStore[id] = {
+        vector: cloneVector(fresh),
+        nbaId: m.nba.id,
+        anchoredAt: old?.nbaId === m.nba.id ? old.anchoredAt : Date.now(),
+      };
+    }
+  }
+
+  storage.save(nextStore);
+
   rows.sort((a, b) => {
     if (b.fitScore !== a.fitScore) return b.fitScore - a.fitScore;
     return a.playerName.localeCompare(b.playerName);

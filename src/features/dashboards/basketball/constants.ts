@@ -89,10 +89,25 @@ export const METRIC_META: Record<string, DashboardMetricMeta> = {
   },
   nbaComp: {
     explanation:
-      "Fit goes from 0 to 1. We sketch your playing style from these games—wins, close games, how streaky you are, surprise wins, and how you look with different teammates—and compare that to a loose sketch for each NBA player. Higher means more alike. Each friend gets one NBA name with no repeats. For fun with your group, not a scouting report.",
+      "Fit goes from 0 to 1. We sketch your playing style from these games—wins, close games, how streaky you are, surprise wins, and how you look with different teammates—and compare that to a loose sketch for each pro player in the pool (NBA + WNBA). Higher means more alike. Each friend gets one name with no repeats. For fun with your group, not a scouting report.",
     constraintLabel: "Players with >=20 rounds in the analyzed window.",
-    topNLabel: "One unique NBA comp per qualifying friend.",
+    topNLabel: "One unique pro comp per qualifying friend.",
   },
 };
 
-export const NBA_COMPARISON_SECTION_TITLE = "Who You Play Like (NBA)";
+export const NBA_COMPARISON_SECTION_TITLE = "Who You Play Like (Pro Basketball)";
+
+/** localStorage key for NBA comp anchor state (per browser). */
+export const NBA_COMP_ANCHOR_STORAGE_KEY = "mulberry:nba-comp:v1";
+
+/**
+ * Weighted L2 drift threshold on the 8-dim comparison vector.
+ * Rematch only when ‖fresh − lastAnchored‖ > this value.
+ */
+export const NBA_COMP_HYSTERESIS_TAU = 0.08;
+
+/**
+ * Multiplier applied to distance(friend, previousNba) during rematch greedy:
+ * effectiveDistance = distance × (1 − stickiness).
+ */
+export const NBA_COMP_STICKINESS = 0.15;

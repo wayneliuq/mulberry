@@ -1,6 +1,6 @@
 # NBA Comp — Design Notes & Handoff
 
-Working notes for the "Who You Play Like (NBA)" feature on the basketball
+Working notes for the "Who You Play Like (Pro Basketball)" feature on the basketball
 dashboard. Captures the current algorithm, the recent weight/dimension
 changes, and the next two pieces of work (stability system + pool refresh).
 Update this file as decisions land — it's the source of truth for design
@@ -109,7 +109,7 @@ the source of the churn problem the stability system addresses.
 
 ### 6. NBA pool
 
-Static, hand-curated array `NBA_COMPARISON_PLAYER_POOL` (currently 45
+Static, hand-curated array `NBA_COMPARISON_PLAYER_POOL` (currently 60
 entries, all with 8-dim vectors). Vectors are explicitly "coarse fun
 priors," not derived from real NBA stats.
 
@@ -124,7 +124,7 @@ flow.
   "are you the reason your team wins?" — orthogonal to raw winRate.
 - Replaced hard 0.5 sub-threshold fallbacks with linear shrinkage so
   partial-data friends still contribute proportional signal.
-- Added curated `overperformance` priors for all 45 existing pool entries.
+- Added curated `overperformance` priors for all pool entries.
 
 **Known side effect:** total vector weight grew ~23% (6.45 → 7.95), so
 absolute fit scores drift down a bit. UI color thresholds are absolute,
@@ -258,38 +258,122 @@ For each NBA player, set each dim by anchoring against archetypes:
 These are subjective priors — the goal is internal consistency, not
 literal accuracy.
 
-### Open questions
+### Resolved decisions (2026-05-12)
 
-1. **WNBA inclusion.** The current code names the section "Who You Play
-   Like (NBA)". Caitlin / Angel / Sabrina pull us off NBA-only.
-   Options:
-   a) Rename section to "Basketball" / "Pro Basketball"; WNBA stars sit
-      naturally in the same pool. Cleanest UX.
-   b) Keep NBA-only and rotate WNBA into a separate, smaller pool with
-      its own assignment pass.
-   c) Add WNBA names but keep the section title; live with the inaccuracy.
-   Recommendation: **(a)** — minimum code, no user confusion.
-2. **Existing pool churn.** Pool will grow from 45 → ~60. Do we replace
-   any current entries (e.g., legacy "infamous" picks that don't read
-   right anymore) or only add? Recommendation: **prune ~5, add ~20** to
-   land at 60, keep recognizable.
-3. **Display name handling for WNBA.** Display names are free text in
-   the pool entry; no DB schema impact.
+1. **WNBA inclusion: include in the same pool, rename the feature copy.**
+   We will keep one shared "pro basketball" comparison pool and rename
+   user-facing text from NBA-only language to avoid mismatch.
+   - Section title target: `Who You Play Like (Pro Basketball)`.
+   - Internal ids/types can stay as-is for now (`nbaComp`, `nbaId`) to
+     avoid broad churn; we can rename symbols later in a dedicated cleanup.
+2. **Pool churn strategy: rebalance to ~60 total with controlled pruning.**
+   We will not only add names. Plan:
+   - Remove ~5 entries that are currently redundant/low-recognition.
+   - Add ~20 entries (GOATs + active stars + role/chaos picks) to land near 60.
+   - Keep the 4:1 famous:infamous mix target.
+3. **Display names for WNBA entries: no schema changes.**
+   Pool entries are static text labels; no API or DB migration required.
+4. **Copy update required in constraints/explainer text.**
+   Any line saying "NBA-only" should move to "pro basketball comp pool"
+   wording so users do not infer exclusion.
+
+## Critical review: gaps and mitigations
+
+### 1) Assignment quality risk: greedy can miss better global pairings
+
+Current assignment is deterministic and fast, but `assignUniqueGreedy`
+is not guaranteed to minimize total distance globally. Most cohorts are
+small enough that this is acceptable, but it can produce "obviously odd"
+pairings in edge cases, especially after adding stickiness.
+
+**Mitigation now:** keep greedy (simple and stable), then run a cheap
+2-swap local improvement pass over assigned pairs. If swapping two NBA
+names lowers total distance, take the swap; repeat until no improvement.
+This keeps complexity low while catching many greedy misses.
+
+### 2) Stability vs quality risk: hysteresis can freeze outdated matches
+
+The planned stability layer improves identity, but if thresholds are too
+high, a friend can stay stuck with an outdated comp for too long.
+
+**Mitigation now:** add a "max stale age" guardrail (e.g., force re-anchor
+after 30 days or after N qualifying rounds since anchor) even if
+hysteresis does not trip. This prevents permanent lock-in.
+
+### 3) Cohort-relative normalization introduces social drift
+
+`consistency` and part of `chemistryBias` depend on cohort max values.
+A friend's vector can change when other friends join/leave, even with
+unchanged personal play.
+
+**Mitigation now:** keep current behavior plus hysteresis.  
+**If drift is user-visible:** switch to robust fixed scaling
+(e.g., pre-chosen caps or rolling percentile anchors) for those axes.
+
+### 4) Explainability gap in UI
+
+Users only see name + fit score. Without "why", low-trust outcomes can
+feel random, especially when matches change.
+
+**Mitigation now:** show top-3 driving dimensions for each match
+(e.g., "clutch + carry + upset") with simple labels. Keep numeric detail
+behind a tooltip to avoid overloading casual users.
+
+### 5) Calibration gap for fit-score colors
+
+Color thresholds are static while distance weights changed materially.
+This can unintentionally make the board feel "worse" (more yellow/red)
+without actual quality decline.
+
+**Mitigation now:** track distribution snapshots after release:
+median fit, p25/p75, and % in each color band. Re-tune thresholds only
+after real-data observation, not by intuition.
+
+### 6) Test gap for upcoming stability logic
+
+Current tests verify uniqueness/determinism and section rendering, but
+not anchored-state transitions.
+
+**Required tests when stability lands:**
+- unchanged anchor when vector drift < `tau`,
+- rematch when drift > `tau`,
+- stickiness preference when distances are close,
+- forced rematch when anchored `nbaId` disappears,
+- corrupt/missing storage fallback behavior.
 
 ## Open questions across the whole feature
 
-- **NBA pool vectors are still hand-authored priors.** The whole stack
-  sits on subjective values. We could revisit by deriving NBA vectors
-  from real stats once we identify analogs for each dim (e.g.,
-  win-shares for winImpact, on/off splits for carryBias). Punt until
-  pool refresh lands.
-- **Cohort-relative normalization** of `consistency` and the diversity
-  half of `chemistryBias` means a friend's match shifts when the friend
-  list changes — even with the same gameplay. Hysteresis will hide some
-  of this; if it surfaces, consider switching to fixed-scale
-  normalization.
-- **UI fit-score color thresholds** are absolute. The recent weight bump
-  pushes scores down ~10–15%. Watch real data before adjusting.
+- **Should we support "manual lock" per friend?** Useful for delight
+  ("I am always Curry"), but can hurt model integrity. Default: no lock
+  in v1; revisit if users request it.
+- **Should we surface confidence?** A fit number without confidence can
+  overstate certainty for low-sample players. Likely yes via a simple
+  confidence badge tied to sample size and shrink weight.
+
+## Endearing/fun improvements (without sacrificing trust)
+
+1. **Comp card + tagline.** Add a short generated-style but deterministic
+   tagline from vector archetypes ("Chaos closer", "Quiet engine", etc.).
+2. **Rival comp reveal.** Show one "your funniest near-miss" comp
+   (second-best fit) in a collapsed row for social conversation.
+3. **Sticky identity moments.** When a comp changes after threshold trip,
+   show "promotion/rebrand" microcopy ("upgraded from X -> Y") with date.
+4. **Duo storyline.** Add optional pair comps ("you two are Splash Bros /
+   Lob City vibes") using existing pair metrics; this is often more social
+   than solo comp.
+5. **Era flavor toggle.** Let users view "modern-heavy" vs "all-era" pools
+   without changing core algorithm (just different candidate pool).
+6. **Share-ready formatting.** Add one-click copy text:
+   `"I'm <NBA/WNBA name> in our run. Fit 0.73. #MulberryHoops"`; this
+   increases replay and group banter.
+
+## Recommended execution order (updated)
+
+1. Implement stability system (hysteresis + stickiness + stale-age guardrail).
+2. Rename user-facing copy to "Pro Basketball" and include WNBA entries.
+3. Refresh pool to ~60 with 4:1 famous:infamous mix.
+4. Add explainability row (top-3 matching dimensions).
+5. Revisit fit color thresholds using observed live distribution.
 
 ## Cheatsheet for next session
 
@@ -298,8 +382,8 @@ If you're picking this up cold, do these in order:
 1. Read `src/features/dashboards/basketball/nbaComparisons.ts` end to end.
 2. Skim `src/features/dashboards/basketball/compute.test.ts` to see
    what's covered.
-3. Decide on the WNBA naming question above (blocks pool refresh).
-4. Implement the stability system (hysteresis + stickiness) — it's
+3. Apply the user-facing rename to "Pro Basketball" copy in dashboard text.
+4. Implement the stability system (hysteresis + stickiness + stale-age guardrail) — it's
    smaller and doesn't depend on the pool work.
 5. Refresh the pool to ~60 entries per the requirements above.
 6. Add tests: a) stickiness keeps the same match when distance change is
