@@ -168,3 +168,11 @@ This allows for minor floating-point rounding differences while still enforcing 
   - The opposing side shares the total gain equally.
 
 This structure keeps every round **fair, symmetric, and zero-sum**, while making a player’s exposure proportional to how many times they are selected into the landlord side.
+
+---
+
+## Manual input (secondary)
+
+The default round form uses outcome, bombs, multipliers, and landlord-side selections (above).
+
+**Manual input** is available as a secondary option. It uses the shared rules in `docs/rules.md` (`0` = auto-split, non-zero = fixed delta). Saved rounds are tagged with `metadata.manualInput: true` (older rows may use `quickFill`).

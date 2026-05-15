@@ -15,7 +15,13 @@ import { useAdminSession } from "../features/admin/AdminSessionContext";
 import { calculateDixitRound } from "../features/game-types/dixit";
 import { calculateFightTheLandlordRound } from "../features/game-types/fightTheLandlord";
 import { getGameTypeOption } from "../features/game-types";
-import { calculateTexasHoldemRound } from "../features/game-types/texasHoldem";
+import {
+  MANUAL_BALANCE_NO_AUTO_SLOTS_MESSAGE,
+  balanceManualPointEntries,
+  clampToTwoDecimals,
+  parseManualPointInputs,
+} from "../features/game-types/manualPointBalance";
+import { ManualRoundForm } from "../features/rounds/ManualRoundForm";
 import {
   type WerewolfTeamId,
   WEREWOLF_TEAMS,
@@ -73,8 +79,20 @@ export function GameViewPage() {
     numBombs: 0,
     selections: {} as Record<number, number>,
   });
-  const [ftlQuickFillMode, setFtlQuickFillMode] = useState(false);
-  const [ftlQuickFillInputs, setFtlQuickFillInputs] = useState<
+  const [ftlManualMode, setFtlManualMode] = useState(false);
+  const [ftlManualInputs, setFtlManualInputs] = useState<Record<number, string>>(
+    {},
+  );
+  const [werewolvesManualMode, setWerewolvesManualMode] = useState(false);
+  const [werewolfManualInputs, setWerewolfManualInputs] = useState<
+    Record<number, string>
+  >({});
+  const [dixitManualMode, setDixitManualMode] = useState(false);
+  const [dixitManualInputs, setDixitManualInputs] = useState<
+    Record<number, string>
+  >({});
+  const [basketballManualMode, setBasketballManualMode] = useState(false);
+  const [basketballManualInputs, setBasketballManualInputs] = useState<
     Record<number, string>
   >({});
   const [werewolfValues, setWerewolfValues] = useState<{
@@ -93,9 +111,6 @@ export function GameViewPage() {
     teamA: "",
     teamB: "",
   });
-
-  const clampToTwoDecimals = (value: number) =>
-    Math.round(value * 100) / 100;
 
   const gameQuery = useQuery({
     queryKey: ["game", gameId],
@@ -288,6 +303,14 @@ export function GameViewPage() {
         survivedIds: [],
         winningTeamIds: [],
       });
+      setFtlManualMode(false);
+      setFtlManualInputs({});
+      setWerewolvesManualMode(false);
+      setWerewolfManualInputs({});
+      setDixitManualMode(false);
+      setDixitManualInputs({});
+      setBasketballManualMode(false);
+      setBasketballManualInputs({});
       await invalidateGameData();
     },
   });
@@ -417,46 +440,57 @@ export function GameViewPage() {
     );
   }
 
-  async function handleTexasHoldemRoundSubmit() {
-    const entries = unlockedPlayers.map((player) => {
-      const raw = Number(texasPointInputs[player.playerId] ?? 0);
-      return {
-        playerId: player.playerId,
-        pointDelta: clampToTwoDecimals(raw),
-      };
-    });
-    const result = calculateTexasHoldemRound({ entries });
+  const MANUAL_INPUT_HELPER =
+    "0 = auto-split among players at 0; enter a non-zero value to fix that player's delta.";
 
-    const roundedTotal = clampToTwoDecimals(result.total);
-
-    if (Math.abs(roundedTotal) > 0.01) {
-      const shouldContinue = window.confirm(
-        `This round totals ${roundedTotal}. Continue anyway?`,
-      );
-
-      if (!shouldContinue) {
-        return;
-      }
+  async function submitBalancedManualRound({
+    inputs,
+    playerIds,
+    metadata,
+    nameById,
+  }: {
+    inputs: Record<number, string>;
+    playerIds: number[];
+    metadata: Record<string, unknown>;
+    nameById: Map<number, string>;
+  }) {
+    const balance = balanceManualPointEntries(
+      parseManualPointInputs(inputs, playerIds),
+    );
+    if (!balance.ok) {
+      window.alert(MANUAL_BALANCE_NO_AUTO_SLOTS_MESSAGE);
+      return;
     }
 
-    const summaryText = unlockedPlayers
-      .map((player) => {
-        const pointDelta = entries.find(
-          (entry) => entry.playerId === player.playerId,
-        )?.pointDelta ?? 0;
-
-        return `${player.displayName} ${
-          pointDelta > 0 ? "+" : ""
-        }${clampToTwoDecimals(pointDelta)}`;
+    const entries = balance.entries.map((entry) => ({
+      playerId: entry.playerId,
+      pointDelta: entry.pointDelta,
+    }));
+    const summaryText = entries
+      .map((entry) => {
+        const name = nameById.get(entry.playerId) ?? entry.playerId;
+        const rounded = clampToTwoDecimals(entry.pointDelta);
+        return `${name} ${rounded > 0 ? "+" : ""}${rounded}`;
       })
       .join(", ");
 
     await createRoundMutation.mutateAsync({
       entries,
       summaryText,
-      metadata: {
-        mode: "texas-holdem",
-      },
+      metadata,
+    });
+  }
+
+  async function handleTexasHoldemRoundSubmit() {
+    const playerIds = unlockedPlayers.map((player) => player.playerId);
+    const nameById = new Map(
+      unlockedPlayers.map((player) => [player.playerId, player.displayName]),
+    );
+    await submitBalancedManualRound({
+      inputs: texasPointInputs,
+      playerIds,
+      metadata: { mode: "texas-holdem" },
+      nameById,
     });
   }
 
@@ -554,40 +588,94 @@ export function GameViewPage() {
     });
   }
 
-  async function handleFtlQuickFillSubmit() {
-    if (!game) return;
-    const entries = unlockedPlayers.map((player) => {
-      const raw = Number(ftlQuickFillInputs[player.playerId] ?? 0);
-      return {
-        playerId: player.playerId,
-        pointDelta: clampToTwoDecimals(raw),
-      };
-    });
-    let total = entries.reduce((sum, e) => sum + e.pointDelta, 0);
-    if (Math.abs(total) > 0.01) {
-      const zeroPlayers = entries.filter((e) => Math.abs(e.pointDelta) < 0.01);
-      if (zeroPlayers.length > 0) {
-        const share = -total / zeroPlayers.length;
-        for (const entry of entries) {
-          if (Math.abs(entry.pointDelta) < 0.01) {
-            entry.pointDelta = clampToTwoDecimals(share);
-          }
-        }
-      }
+  async function handleFtlManualSubmit() {
+    if (!game) {
+      return;
     }
-    const summaryText = entries
-      .map(
-        (e) =>
-          `${unlockedPlayers.find((p) => p.playerId === e.playerId)?.displayName ?? e.playerId} ${e.pointDelta > 0 ? "+" : ""}${clampToTwoDecimals(e.pointDelta)}`,
-      )
-      .join(", ");
-    await createRoundMutation.mutateAsync({
-      entries,
-      summaryText,
+    const playerIds = unlockedPlayers.map((player) => player.playerId);
+    const nameById = new Map(
+      unlockedPlayers.map((player) => [player.playerId, player.displayName]),
+    );
+    await submitBalancedManualRound({
+      inputs: ftlManualInputs,
+      playerIds,
       metadata: {
         mode: "fight-the-landlord",
-        quickFill: true,
+        manualInput: true,
       },
+      nameById,
+    });
+  }
+
+  async function handleWerewolvesManualSubmit() {
+    if (!game || unlockedPlayers.length < 3) {
+      return;
+    }
+    const playerIds = unlockedPlayers.map((player) => player.playerId);
+    const nameById = new Map(
+      unlockedPlayers.map((player) => [player.playerId, player.displayName]),
+    );
+    await submitBalancedManualRound({
+      inputs: werewolfManualInputs,
+      playerIds,
+      metadata: {
+        mode: "werewolves",
+        manualInput: true,
+      },
+      nameById,
+    });
+  }
+
+  async function handleDixitManualSubmit() {
+    if (!game) {
+      return;
+    }
+    const playerIds = unlockedPlayers.map((player) => player.playerId);
+    const nameById = new Map(
+      unlockedPlayers.map((player) => [player.playerId, player.displayName]),
+    );
+    await submitBalancedManualRound({
+      inputs: dixitManualInputs,
+      playerIds,
+      metadata: {
+        mode: "dixit",
+        manualInput: true,
+      },
+      nameById,
+    });
+  }
+
+  async function handleBasketballManualSubmit() {
+    if (!game) {
+      return;
+    }
+
+    const teamA = sortedUnlockedPlayers
+      .filter((player) => basketballTeamByPlayerId[player.playerId] === "A")
+      .map((player) => player.playerId);
+    const teamB = sortedUnlockedPlayers
+      .filter((player) => basketballTeamByPlayerId[player.playerId] === "B")
+      .map((player) => player.playerId);
+
+    if (teamA.length < 1 || teamB.length < 1) {
+      window.alert("Put at least one unlocked player on each team.");
+      return;
+    }
+
+    const rosterIds = [...teamA, ...teamB];
+    const nameById = new Map(
+      sortedUnlockedPlayers.map((player) => [player.playerId, player.displayName]),
+    );
+    await submitBalancedManualRound({
+      inputs: basketballManualInputs,
+      playerIds: rosterIds,
+      metadata: {
+        mode: "basketball",
+        manualInput: true,
+        teamAPlayerIds: teamA,
+        teamBPlayerIds: teamB,
+      },
+      nameById,
     });
   }
 
@@ -714,13 +802,28 @@ export function GameViewPage() {
     setBasketballScores({ teamA: "", teamB: "" });
   }
 
-  const pointStep =
+  const manualPointStep =
     game?.gameTypeId === "dixit" || game?.gameTypeId === "basketball"
       ? 0.01
       : (game?.pointBasis ?? 1);
 
+  const manualRoundPlayers = sortedUnlockedPlayers.map((player) => ({
+    playerId: player.playerId,
+    displayName: player.displayName,
+  }));
+
+  const basketballManualPlayers = sortedUnlockedPlayers
+    .filter(
+      (player) =>
+        basketballTeamByPlayerId[player.playerId] === "A" ||
+        basketballTeamByPlayerId[player.playerId] === "B",
+    )
+    .map((player) => ({
+      playerId: player.playerId,
+      displayName: player.displayName,
+    }));
+
   function adjustPointInput(
-    _current: Record<number, string>,
     setter: Dispatch<SetStateAction<Record<number, string>>>,
     playerId: number,
     delta: number,
@@ -981,79 +1084,46 @@ export function GameViewPage() {
                 Unlock at least two players before creating a round.
               </p>
             ) : game.gameTypeId === "texas-holdem" ? (
-              <form
-                className="stack-sm"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void handleTexasHoldemRoundSubmit();
-                }}
-              >
-                {sortedUnlockedPlayers.map((player) => (
-                  <label key={player.playerId} className="stack-xs">
-                    <span>{player.displayName}</span>
-                    <div className="inline-actions point-input-row">
-                      <button
-                        type="button"
-                        className="icon-button"
-                        aria-label={`Decrease ${player.displayName} by ${pointStep}`}
-                        onClick={() =>
-                          adjustPointInput(
-                            texasPointInputs,
-                            setTexasPointInputs,
-                            player.playerId,
-                            -pointStep,
-                          )
-                        }
-                      >
-                        −
-                      </button>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={texasPointInputs[player.playerId] ?? "0"}
-                        onChange={(event) =>
-                          setTexasPointInputs((current) => ({
-                            ...current,
-                            [player.playerId]: event.target.value,
-                          }))
-                        }
-                      />
-                      <button
-                        type="button"
-                        className="icon-button"
-                        aria-label={`Increase ${player.displayName} by ${pointStep}`}
-                        onClick={() =>
-                          adjustPointInput(
-                            texasPointInputs,
-                            setTexasPointInputs,
-                            player.playerId,
-                            pointStep,
-                          )
-                        }
-                      >
-                        +
-                      </button>
-                    </div>
-                  </label>
-                ))}
-                {createRoundMutation.error ? (
-                  <p className="form-error">{createRoundMutation.error.message}</p>
-                ) : null}
+              <ManualRoundForm
+                players={manualRoundPlayers}
+                inputs={texasPointInputs}
+                onInputsChange={setTexasPointInputs}
+                pointStep={manualPointStep}
+                helperText={MANUAL_INPUT_HELPER}
+                sortMode={unlockedSort}
+                onSortChange={setUnlockedSort}
+                onSubmit={() => void handleTexasHoldemRoundSubmit()}
+                onCancel={() => setShowRoundForm(false)}
+                submitError={createRoundMutation.error?.message}
+              />
+            ) : game.gameTypeId === "dixit" ? (
+              dixitManualMode ? (
+                <ManualRoundForm
+                  players={manualRoundPlayers}
+                  inputs={dixitManualInputs}
+                  onInputsChange={setDixitManualInputs}
+                  pointStep={manualPointStep}
+                  helperText={MANUAL_INPUT_HELPER}
+                  sortMode={unlockedSort}
+                  onSortChange={setUnlockedSort}
+                  onSubmit={() => void handleDixitManualSubmit()}
+                  onCancel={() => setShowRoundForm(false)}
+                  backLabel="Back to raw scores"
+                  onBack={() => setDixitManualMode(false)}
+                  submitError={createRoundMutation.error?.message}
+                />
+              ) : (
+              <>
                 <div className="inline-actions">
-                  <button type="submit" className="primary-button">
-                    Save round
-                  </button>
                   <button
                     type="button"
                     className="secondary-button"
-                    onClick={() => setShowRoundForm(false)}
+                    onClick={() => setDixitManualMode(true)}
                   >
-                    Cancel
+                    Manual input
                   </button>
                 </div>
-              </form>
-            ) : game.gameTypeId === "dixit" ? (
-              <form
+<form
                 className="stack-sm"
                 onSubmit={(event) => {
                   event.preventDefault();
@@ -1072,13 +1142,12 @@ export function GameViewPage() {
                       <button
                         type="button"
                         className="icon-button"
-                        aria-label={`Decrease ${player.displayName} by ${pointStep}`}
+                        aria-label={`Decrease ${player.displayName} by ${manualPointStep}`}
                         onClick={() =>
                           adjustPointInput(
-                            dixitPointInputs,
                             setDixitPointInputs,
                             player.playerId,
-                            -pointStep,
+                            -manualPointStep,
                           )
                         }
                       >
@@ -1098,13 +1167,12 @@ export function GameViewPage() {
                       <button
                         type="button"
                         className="icon-button"
-                        aria-label={`Increase ${player.displayName} by ${pointStep}`}
+                        aria-label={`Increase ${player.displayName} by ${manualPointStep}`}
                         onClick={() =>
                           adjustPointInput(
-                            dixitPointInputs,
                             setDixitPointInputs,
                             player.playerId,
-                            pointStep,
+                            manualPointStep,
                           )
                         }
                       >
@@ -1129,7 +1197,35 @@ export function GameViewPage() {
                   </button>
                 </div>
               </form>
+              </>
+              )
             ) : game.gameTypeId === "werewolves" ? (
+              werewolvesManualMode ? (
+                <ManualRoundForm
+                  players={manualRoundPlayers}
+                  inputs={werewolfManualInputs}
+                  onInputsChange={setWerewolfManualInputs}
+                  pointStep={manualPointStep}
+                  helperText={MANUAL_INPUT_HELPER}
+                  sortMode={unlockedSort}
+                  onSortChange={setUnlockedSort}
+                  onSubmit={() => void handleWerewolvesManualSubmit()}
+                  onCancel={() => setShowRoundForm(false)}
+                  backLabel="Back to roles"
+                  onBack={() => setWerewolvesManualMode(false)}
+                  submitError={createRoundMutation.error?.message}
+                />
+              ) : (
+              <>
+                <div className="inline-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setWerewolvesManualMode(true)}
+                  >
+                    Manual input
+                  </button>
+                </div>
               <form
                 className="stack-sm"
                 onSubmit={(event) => {
@@ -1245,7 +1341,72 @@ export function GameViewPage() {
                   </button>
                 </div>
               </form>
+              </>
+              )
             ) : game.gameTypeId === "basketball" ? (
+              basketballManualMode ? (
+                <div className="stack-sm">
+                  <p className="muted">
+                    Manual points for team A/B players only. These rounds do not
+                    affect basketball rating predictions.
+                  </p>
+                  <div className="stack-sm">
+                    <PlayerSortButtons
+                      sortMode={unlockedSort}
+                      onSortChange={setUnlockedSort}
+                    />
+                    <div className="player-list-two-col">
+                      {sortedUnlockedPlayers.map((player) => (
+                        <label key={player.playerId} className="stack-xs">
+                          <span>{player.displayName}</span>
+                          <select
+                            value={
+                              basketballTeamByPlayerId[player.playerId] ?? "none"
+                            }
+                            onChange={(event) =>
+                              setBasketballTeamByPlayerId((current) => ({
+                                ...current,
+                                [player.playerId]: event.target.value as
+                                  | "none"
+                                  | "A"
+                                  | "B",
+                              }))
+                            }
+                          >
+                            <option value="none">None</option>
+                            <option value="A">Team A</option>
+                            <option value="B">Team B</option>
+                          </select>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <ManualRoundForm
+                    players={basketballManualPlayers}
+                    inputs={basketballManualInputs}
+                    onInputsChange={setBasketballManualInputs}
+                    pointStep={manualPointStep}
+                    helperText={MANUAL_INPUT_HELPER}
+                    sortMode={unlockedSort}
+                    onSortChange={setUnlockedSort}
+                    onSubmit={() => void handleBasketballManualSubmit()}
+                    onCancel={() => setShowRoundForm(false)}
+                    backLabel="Back to scores"
+                    onBack={() => setBasketballManualMode(false)}
+                    submitError={createRoundMutation.error?.message}
+                  />
+                </div>
+              ) : (
+              <>
+                <div className="inline-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setBasketballManualMode(true)}
+                  >
+                    Manual input
+                  </button>
+                </div>
               <form
                 className="stack-sm"
                 onSubmit={(event) => {
@@ -1335,97 +1496,32 @@ export function GameViewPage() {
                   </button>
                 </div>
               </form>
-            ) : ftlQuickFillMode ? (
-              <form
-                className="stack-sm"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void handleFtlQuickFillSubmit();
-                }}
-              >
-                <p className="muted">
-                  Enter points per player. If the total is not zero, the remainder is split among players with 0.
-                </p>
-                {sortedUnlockedPlayers.map((player) => (
-                  <label key={player.playerId} className="stack-xs">
-                    <span>{player.displayName}</span>
-                    <div className="inline-actions point-input-row">
-                      <button
-                        type="button"
-                        className="icon-button"
-                        aria-label={`Decrease ${player.displayName} by ${pointStep}`}
-                        onClick={() =>
-                          adjustPointInput(
-                            ftlQuickFillInputs,
-                            setFtlQuickFillInputs,
-                            player.playerId,
-                            -pointStep,
-                          )
-                        }
-                      >
-                        −
-                      </button>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={ftlQuickFillInputs[player.playerId] ?? "0"}
-                        onChange={(event) =>
-                          setFtlQuickFillInputs((current) => ({
-                            ...current,
-                            [player.playerId]: event.target.value,
-                          }))
-                        }
-                      />
-                      <button
-                        type="button"
-                        className="icon-button"
-                        aria-label={`Increase ${player.displayName} by ${pointStep}`}
-                        onClick={() =>
-                          adjustPointInput(
-                            ftlQuickFillInputs,
-                            setFtlQuickFillInputs,
-                            player.playerId,
-                            pointStep,
-                          )
-                        }
-                      >
-                        +
-                      </button>
-                    </div>
-                  </label>
-                ))}
-                {createRoundMutation.error ? (
-                  <p className="form-error">{createRoundMutation.error.message}</p>
-                ) : null}
-                <div className="inline-actions">
-                  <button type="submit" className="primary-button">
-                    Save round
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => setFtlQuickFillMode(false)}
-                  >
-                    Use multipliers
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => setShowRoundForm(false)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
+              </>
+              )
+            ) : ftlManualMode ? (
+              <ManualRoundForm
+                players={manualRoundPlayers}
+                inputs={ftlManualInputs}
+                onInputsChange={setFtlManualInputs}
+                pointStep={manualPointStep}
+                helperText={MANUAL_INPUT_HELPER}
+                sortMode={unlockedSort}
+                onSortChange={setUnlockedSort}
+                onSubmit={() => void handleFtlManualSubmit()}
+                onCancel={() => setShowRoundForm(false)}
+                backLabel="Use structured scoring"
+                onBack={() => setFtlManualMode(false)}
+                submitError={createRoundMutation.error?.message}
+              />
             ) : (
               <>
                 <div className="inline-actions">
                   <button
                     type="button"
                     className="secondary-button"
-                    onClick={() => setFtlQuickFillMode(true)}
+                    onClick={() => setFtlManualMode(true)}
                   >
-                    Quick Fill
+                    Manual input
                   </button>
                 </div>
                 <form

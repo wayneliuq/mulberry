@@ -30,7 +30,7 @@ For Texas Hold'em, the **entered value is the final value**:
   - `playerId = p`
   - `pointDelta = delta(p)`
 
-There is **no additional computation** or redistribution layer beyond what is entered.
+On save, the UI applies the shared **auto-split** rules (`docs/rules.md`) so players left at `0` absorb the remainder; see **Auto-split on save** below.
 
 ### Round total and zero-sum behavior
 
@@ -42,17 +42,13 @@ There is **no additional computation** or redistribution layer beyond what is en
   - `total = roundTotal`
   - `isZeroSum = (roundTotal === 0)`
 
-#### UI safety check
+#### Auto-split on save
 
-Because this game type is often expected to be **zero-sum**:
+Texas Hold'em uses the shared **manual input** rules (see `docs/rules.md`):
 
-- When saving a round, the UI:
-  - Computes the total across all players.
-  - Rounds the total to **two decimals**.
-  - If `|roundedTotal| > 0.01`, a confirmation dialog is shown:
-    - The admin can still choose to continue and save the round.
-
-This prevents accidental mis-entries but still allows **non-zero-sum rounds** when desired.
+- Enter non-zero deltas for players who won or lost a known amount.
+- Leave other players at **`0`** to auto-split the remainder evenly.
+- The saved round is always zero-sum within rounding tolerance.
 
 ---
 

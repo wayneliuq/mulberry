@@ -17,6 +17,8 @@ You enter **raw** scores per player; Mulberry derives **stored** round deltas th
 
 There is **no** per-round point basis or other game-type-specific settings beyond what already exists on the game record (see **Game settings**).
 
+**Manual input** (secondary) stores **final** per-player `pointDelta` values using the shared rules in `docs/rules.md`, without the raw-score mean removal or scaling below. Primary rounds may still store `rawEntries` in metadata.
+
 ---
 
 ## Game settings

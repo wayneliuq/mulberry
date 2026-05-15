@@ -13,6 +13,14 @@ Each Mulberry **round** is one pickup game to a target score (for example 11 wit
 
 ---
 
+## Manual input (secondary)
+
+The default round form uses team assignments and final scores (below).
+
+**Manual input** assigns team A/B, then enters per-player deltas for rostered players only. It uses the shared manual rules in `docs/rules.md`. Rounds are tagged `metadata.manualInput: true` and **omit** `scoreTeamA` / `scoreTeamB`, so they do not feed OpenSkill history or basketball dashboards that require scores.
+
+---
+
 ## Raw round input (source of truth)
 
 Each round stores, in the round `settings_snapshot.metadata` (and mirrored in round-entry metadata for traceability):

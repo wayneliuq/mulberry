@@ -167,3 +167,11 @@ This design ensures that:
 - Team outcome matters **a lot** (via `pointBasis` and pool size).
 - Survival always matters **a little** (via the fixed `pointBasis` survival pool).
 - Every round’s calculations are deterministic and reconstructable from its stored inputs.
+
+---
+
+## Manual input (secondary)
+
+The default round form uses team assignments, survival, and winning teams (above).
+
+**Manual input** uses the shared rules in `docs/rules.md` and saves rounds with `metadata.manualInput: true`.

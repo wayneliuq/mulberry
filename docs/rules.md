@@ -73,6 +73,16 @@ This document captures core behavior decisions so implementation can proceed wit
 - The stored per-player money impact still belongs to individual players so player money leaderboards remain accurate.
 - The transfer list may reference a family group label when multiple related players settle as one unit, but the underlying settlement must remain traceable back to the individual members included in that grouped calculation.
 
+## Manual round input (all game types)
+
+Many game types offer **Manual input** as a secondary way to enter a round (Texas Hold'em uses it as the only mode).
+
+- **`0` = auto-split eligible**: that player's final delta is computed at save time.
+- **Non-zero = explicit manual** delta for that player (kept as entered, rounded to two decimals).
+- At save, non-zero values are summed; each auto-eligible player receives an equal share of the negative of that sum so the round is zero-sum (with a small remainder fix on one player when needed).
+- If every player has a non-zero value and the total is not already zero, the round cannot be saved until at least one player is set back to `0` or the totals are balanced manually.
+- **Locked** players are excluded from the round form and from balancing.
+
 ## Fight the Landlord distribution
 
 - Fight the Landlord must remain zero-sum for every round.
