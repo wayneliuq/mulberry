@@ -123,8 +123,8 @@ free, the same pro is kept; otherwise the friend re-enters the greedy pool.
 **Stickiness** inflates greedy distance slightly toward the previous pro so ties
 break toward continuity without breaking uniqueness. When a pro assignment changes,
 the prior pro is stored as **`previousNbaId`** on the anchor and shown on every
-later load until the next change. The **2–3 most recently added** comparison rows
-(first time a friend appears in the table) get a subtle ★ and **New** pill.
+later load until the next change. The **2–3 rows with the most recent pro
+assignment** (first time in the table or a rematch) get a subtle ★ and **New** pill.
 
 ### Editing or refreshing the pro list
 

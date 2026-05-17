@@ -480,9 +480,10 @@ describe("buildBasketballDashboardMetrics", () => {
     const rowAThird = third.nbaComparisons.find((r) => r.playerName === "A");
     expect(rowAThird?.previousMatchName).toBe("Patrick Beverley");
     expect(rowAThird?.nbaMatchName).toBe(rowA?.nbaMatchName);
+    expect(rowAThird?.isNew).toBe(true);
   });
 
-  it("marks the most recently added pro-comparison rows as isNew", () => {
+  it("marks rows with the most recent pro assignments as isNew", () => {
     const storage = createMemoryNbaCompStorage(null);
     const players = Array.from({ length: 6 }).map((_, i) => ({
       id: i + 1,

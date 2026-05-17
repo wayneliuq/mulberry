@@ -798,9 +798,10 @@ export function computeNbaComparisonRows(
     nextStore[id] = buildNextAnchor(old, fresh, m.nba.id, locked);
   }
 
+  // anchoredAt bumps on first assignment and on pro change — highlights new + rematched rows.
   const newHighlightIds = new Set(
     rowPlayerIds
-      .map((id) => ({ id, at: nextStore[id]?.firstComparedAt ?? 0 }))
+      .map((id) => ({ id, at: nextStore[id]?.anchoredAt ?? 0 }))
       .sort((a, b) => b.at - a.at)
       .slice(0, NBA_COMP_NEW_HIGHLIGHT_COUNT)
       .map((e) => e.id),

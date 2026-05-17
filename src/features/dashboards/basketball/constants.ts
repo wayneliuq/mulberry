@@ -112,5 +112,5 @@ export const NBA_COMP_HYSTERESIS_TAU = 0.08;
  */
 export const NBA_COMP_STICKINESS = 0.15;
 
-/** How many most-recently-added pro-comparison rows get the “New” pill. */
+/** How many rows with the most recent pro assignment get the “New” pill (new or changed). */
 export const NBA_COMP_NEW_HIGHLIGHT_COUNT = 3;
