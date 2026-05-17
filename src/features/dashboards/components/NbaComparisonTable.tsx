@@ -32,7 +32,19 @@ export function NbaComparisonTable({ rows }: { rows: NbaComparisonRow[] }) {
                 <tr
                   className={`nba-comp-main-row${hasPrevious ? " nba-comp-main-row-with-previous" : ""}`}
                 >
-                  <td>{row.playerName}</td>
+                  <td>
+                    <span className="nba-comp-player-cell">
+                      {row.isNew ? (
+                        <span className="nba-comp-new-marker" aria-label="New comparison">
+                          <span className="nba-comp-new-star" aria-hidden>
+                            ★
+                          </span>
+                          <span className="pill pill-small nba-comp-new-pill">New</span>
+                        </span>
+                      ) : null}
+                      <span>{row.playerName}</span>
+                    </span>
+                  </td>
                   <td>{row.nbaMatchName}</td>
                   <td>
                     <span className={valueClass}>{row.fitScore.toFixed(2)}</span>

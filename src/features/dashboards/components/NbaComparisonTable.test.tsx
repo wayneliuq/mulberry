@@ -31,4 +31,22 @@ describe("NbaComparisonTable", () => {
     );
     expect(screen.queryByText(/Previously:/)).not.toBeInTheDocument();
   });
+
+  it("renders a subtle New pill and star for isNew rows", () => {
+    render(
+      <NbaComparisonTable
+        rows={[
+          {
+            playerName: "Jordan",
+            nbaMatchName: "Michael Jordan",
+            fitScore: 0.8,
+            isNew: true,
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByLabelText("New comparison")).toBeInTheDocument();
+    expect(screen.getByText("New")).toBeInTheDocument();
+    expect(screen.getByText("Jordan")).toBeInTheDocument();
+  });
 });

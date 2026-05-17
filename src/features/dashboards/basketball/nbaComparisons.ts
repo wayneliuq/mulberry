@@ -23,6 +23,7 @@ import {
   CLUTCH_MIN_ROUNDS,
   NBA_COMP_ANCHOR_STORAGE_KEY,
   NBA_COMP_HYSTERESIS_TAU,
+  NBA_COMP_NEW_HIGHLIGHT_COUNT,
   NBA_COMP_STICKINESS,
   PAIR_MIN_APART,
   PAIR_MIN_TOGETHER,
@@ -112,11 +113,15 @@ function fitScoreFromDistance(distance: number): number {
   return 1 / (1 + distance);
 }
 
-/** Persisted anchor: vector baseline for hysteresis + current NBA pool id. */
+/** Persisted anchor: vector baseline for hysteresis + current / previous NBA pool ids. */
 export type NbaCompAnchor = {
   vector: ComparisonVector;
   nbaId: string;
   anchoredAt: number;
+  /** Last pro match before the current one (persists until the next change). */
+  previousNbaId?: string;
+  /** When this friend first appeared in the pro-comparison table. */
+  firstComparedAt?: number;
 };
 
 export type NbaCompAnchorStore = Record<number, NbaCompAnchor>;
@@ -153,13 +158,63 @@ function parseAnchorStore(raw: unknown): NbaCompAnchorStore | null {
     if (typeof nbaId !== "string" || nbaId.length === 0) continue;
     if (typeof anchoredAt !== "number" || !Number.isFinite(anchoredAt)) continue;
     if (!isComparisonVector(entry.vector)) continue;
-    out[id] = {
+    const previousNbaId = entry.previousNbaId;
+    const firstComparedAt = entry.firstComparedAt;
+    const anchor: NbaCompAnchor = {
       vector: cloneVector(entry.vector as ComparisonVector),
       nbaId,
       anchoredAt,
     };
+    if (typeof previousNbaId === "string" && previousNbaId.length > 0) {
+      anchor.previousNbaId = previousNbaId;
+    }
+    if (typeof firstComparedAt === "number" && Number.isFinite(firstComparedAt)) {
+      anchor.firstComparedAt = firstComparedAt;
+    }
+    out[id] = anchor;
   }
   return Object.keys(out).length > 0 ? out : {};
+}
+
+function resolvePreviousNbaId(
+  old: NbaCompAnchor | undefined,
+  newNbaId: string,
+): string | undefined {
+  if (!old) return undefined;
+  if (old.nbaId !== newNbaId) return old.nbaId;
+  return old.previousNbaId;
+}
+
+function buildNextAnchor(
+  old: NbaCompAnchor | undefined,
+  fresh: ComparisonVector,
+  newNbaId: string,
+  locked: boolean,
+): NbaCompAnchor {
+  const now = Date.now();
+  if (locked && old) {
+    return {
+      vector: cloneVector(old.vector),
+      nbaId: old.nbaId,
+      anchoredAt: old.anchoredAt,
+      previousNbaId: old.previousNbaId,
+      firstComparedAt: old.firstComparedAt ?? old.anchoredAt,
+    };
+  }
+
+  const firstComparedAt = old?.firstComparedAt ?? now;
+  const matchChanged = old !== undefined && old.nbaId !== newNbaId;
+  const previousNbaId = resolvePreviousNbaId(old, newNbaId);
+  const anchoredAt = matchChanged || !old ? now : old.anchoredAt;
+
+  return {
+    vector: cloneVector(fresh),
+    nbaId: newNbaId,
+    anchoredAt,
+    previousNbaId:
+      previousNbaId && previousNbaId !== newNbaId ? previousNbaId : undefined,
+    firstComparedAt,
+  };
 }
 
 export function createLocalStorageNbaCompAdapter(): NbaCompStorageAdapter {
@@ -711,6 +766,7 @@ export function computeNbaComparisonRows(
 
   const nextStore: NbaCompAnchorStore = {};
   const rows: NbaComparisonRow[] = [];
+  const rowPlayerIds: number[] = [];
 
   for (const id of friendIds) {
     const m = matchByPlayer.get(id);
@@ -719,6 +775,8 @@ export function computeNbaComparisonRows(
     const playerName = playerNameById.get(id) ?? String(id);
     const fit = fitScoreFromDistance(m.distance);
     const old = anchors[id];
+    const locked = lockedMatches.has(id);
+    const fresh = friendVectors.get(id)!;
 
     const row: NbaComparisonRow = {
       playerName,
@@ -726,33 +784,39 @@ export function computeNbaComparisonRows(
       fitScore: fit,
     };
 
-    if (!lockedMatches.has(id) && old && poolById.has(old.nbaId) && old.nbaId !== m.nba.id) {
-      row.previousMatchName = poolById.get(old.nbaId)!.displayName;
+    const previousNbaId = resolvePreviousNbaId(old, m.nba.id);
+    if (
+      previousNbaId &&
+      previousNbaId !== m.nba.id &&
+      poolById.has(previousNbaId)
+    ) {
+      row.previousMatchName = poolById.get(previousNbaId)!.displayName;
     }
 
     rows.push(row);
+    rowPlayerIds.push(id);
+    nextStore[id] = buildNextAnchor(old, fresh, m.nba.id, locked);
+  }
 
-    const fresh = friendVectors.get(id)!;
-    if (lockedMatches.has(id) && anchors[id]) {
-      nextStore[id] = {
-        vector: cloneVector(anchors[id]!.vector),
-        nbaId: anchors[id]!.nbaId,
-        anchoredAt: anchors[id]!.anchoredAt,
-      };
-    } else {
-      nextStore[id] = {
-        vector: cloneVector(fresh),
-        nbaId: m.nba.id,
-        anchoredAt: old?.nbaId === m.nba.id ? old.anchoredAt : Date.now(),
-      };
+  const newHighlightIds = new Set(
+    rowPlayerIds
+      .map((id) => ({ id, at: nextStore[id]?.firstComparedAt ?? 0 }))
+      .sort((a, b) => b.at - a.at)
+      .slice(0, NBA_COMP_NEW_HIGHLIGHT_COUNT)
+      .map((e) => e.id),
+  );
+  for (let i = 0; i < rows.length; i += 1) {
+    if (newHighlightIds.has(rowPlayerIds[i]!)) {
+      rows[i]!.isNew = true;
     }
   }
 
   storage.save(nextStore);
 
-  rows.sort((a, b) => {
-    if (b.fitScore !== a.fitScore) return b.fitScore - a.fitScore;
-    return a.playerName.localeCompare(b.playerName);
+  const paired = rows.map((row, i) => ({ row, playerId: rowPlayerIds[i]! }));
+  paired.sort((a, b) => {
+    if (b.row.fitScore !== a.row.fitScore) return b.row.fitScore - a.row.fitScore;
+    return a.row.playerName.localeCompare(b.row.playerName);
   });
-  return rows;
+  return paired.map((p) => p.row);
 }

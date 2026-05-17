@@ -472,5 +472,50 @@ describe("buildBasketballDashboardMetrics", () => {
     const rowA = second.nbaComparisons.find((r) => r.playerName === "A");
     expect(rowA?.previousMatchName).toBe("Patrick Beverley");
     expect(rowA?.nbaMatchName).not.toBe("Patrick Beverley");
+
+    const third = buildBasketballDashboardMetrics(
+      { data, maxRounds: 500 },
+      { nbaCompStorage: storage, nbaCompHysteresisTau: 0.08, nbaCompStickiness: 0 },
+    );
+    const rowAThird = third.nbaComparisons.find((r) => r.playerName === "A");
+    expect(rowAThird?.previousMatchName).toBe("Patrick Beverley");
+    expect(rowAThird?.nbaMatchName).toBe(rowA?.nbaMatchName);
+  });
+
+  it("marks the most recently added pro-comparison rows as isNew", () => {
+    const storage = createMemoryNbaCompStorage(null);
+    const players = Array.from({ length: 6 }).map((_, i) => ({
+      id: i + 1,
+      displayName: `P${i + 1}`,
+      familyId: `f${i + 1}`,
+    }));
+    const rounds = Array.from({ length: 30 }).map((_, idx) => ({
+      roundId: `r-${idx + 1}`,
+      gameId: "g-1",
+      roundNumber: idx + 1,
+      createdAt: `2026-03-${String((idx % 28) + 1).padStart(2, "0")}T10:00:00.000Z`,
+      teamAPlayerIds: [1, 2, 3],
+      teamBPlayerIds: [4, 5, 6],
+      scoreTeamA: idx % 2 === 0 ? 11 : 8,
+      scoreTeamB: idx % 2 === 0 ? 8 : 11,
+    }));
+    const roundEntries = rounds.flatMap((r, idx) => {
+      const aWon = idx % 2 === 0;
+      const ids = [...r.teamAPlayerIds, ...r.teamBPlayerIds];
+      return ids.map((playerId) => ({
+        roundId: r.roundId,
+        playerId,
+        pointDelta:
+          r.teamAPlayerIds.includes(playerId) ? (aWon ? 1 : -1) : aWon ? -1 : 1,
+      }));
+    });
+    const data: BasketballDashboardData = { players, rounds, roundEntries };
+    const metrics = buildBasketballDashboardMetrics(
+      { data, maxRounds: 500 },
+      { nbaCompStorage: storage },
+    );
+    const newRows = metrics.nbaComparisons.filter((r) => r.isNew);
+    expect(newRows.length).toBeLessThanOrEqual(3);
+    expect(newRows.length).toBeGreaterThan(0);
   });
 });

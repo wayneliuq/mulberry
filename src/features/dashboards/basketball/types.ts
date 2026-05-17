@@ -22,6 +22,8 @@ export type NbaComparisonRow = {
   nbaMatchName: string;
   previousMatchName?: string | null;
   fitScore: number;
+  /** Among the most recently added pro-comparison rows (see `NBA_COMP_NEW_HIGHLIGHT_COUNT`). */
+  isNew?: boolean;
 };
 
 export type DashboardMetricSection = DashboardMetricMeta & {

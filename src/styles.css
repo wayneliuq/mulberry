@@ -836,6 +836,36 @@ tbody tr:last-child td {
   font-size: var(--font-size-small);
 }
 
+.nba-comp-player-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.nba-comp-new-marker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.nba-comp-new-star {
+  color: color-mix(in srgb, var(--score-win) 55%, var(--text-muted));
+  font-size: 0.65rem;
+  line-height: 1;
+}
+
+.nba-comp-new-pill {
+  padding: 0.12rem 0.4rem;
+  font-size: var(--font-size-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--surface-3) 65%, transparent);
+  border-color: color-mix(in srgb, var(--border-subtle) 40%, transparent);
+}
+
 .form-grid {
   display: grid;
   gap: var(--space-md);

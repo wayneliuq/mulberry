@@ -111,3 +111,6 @@ export const NBA_COMP_HYSTERESIS_TAU = 0.08;
  * effectiveDistance = distance × (1 − stickiness).
  */
 export const NBA_COMP_STICKINESS = 0.15;
+
+/** How many most-recently-added pro-comparison rows get the “New” pill. */
+export const NBA_COMP_NEW_HIGHLIGHT_COUNT = 3;
