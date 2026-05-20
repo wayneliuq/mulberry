@@ -3,7 +3,7 @@
  *
  * Curated pool entries live in `nbaComparisonPool.source.json` (prime window + split
  * `statsPrime` vs `narrative` priors). `nbaComparisonPool.build.ts` merges them into
- * the single 8-axis `ComparisonVector` used for distance (stats half: within-pool
+ * the single 12-axis `ComparisonVector` used for distance (stats half: within-pool
  * percentile spread; narrative half: direct [0, 1] priors).
  *
  * Research refresh (Feb 2026): All-Star fan-vote reporting highlighted Luka Dončić
@@ -18,9 +18,16 @@ import {
 } from "../../game-types/basketball";
 import type { NbaComparisonRow, NormalizedRound } from "./types";
 import {
+  BLOWOUT_MARGIN,
+  BLOWOUT_MIN_ROUNDS,
   CARRY_MIN_SIDE_SAMPLES,
+  CHALK_MIN_OPPORTUNITIES,
+  CHALK_PROBABILITY_THRESHOLD,
   CLUTCH_MARGIN,
   CLUTCH_MIN_ROUNDS,
+  LEDGER_ASYM_MIN_LOSSES,
+  LEDGER_ASYM_MIN_WINS,
+  LEDGER_ASYM_RANGE,
   NBA_COMP_ANCHOR_STORAGE_KEY,
   NBA_COMP_HYSTERESIS_TAU,
   NBA_COMP_NEW_HIGHLIGHT_COUNT,
@@ -28,6 +35,7 @@ import {
   PAIR_MIN_APART,
   PAIR_MIN_TOGETHER,
   PLAYER_MIN_ROUNDS,
+  SWING_MIN_ROUNDS,
   UPSET_MIN_OPPORTUNITIES,
   UPSET_PROBABILITY_THRESHOLD,
 } from "./constants";
@@ -48,6 +56,10 @@ const VECTOR_KEYS = [
   "chemistryBias",
   "personaIntensity",
   "overperformance",
+  "swingMagnitude",
+  "marginSpread",
+  "chalkReliability",
+  "ledgerAsymmetry",
 ] as const satisfies readonly (keyof ComparisonVector)[];
 
 const DISTANCE_WEIGHTS: Record<keyof ComparisonVector, number> = {
@@ -57,8 +69,12 @@ const DISTANCE_WEIGHTS: Record<keyof ComparisonVector, number> = {
   clutchDelta: 1.0,
   upsetFactor: 1.15,
   chemistryBias: 0.9,
-  personaIntensity: 0.45,
+  personaIntensity: 0.35,
   overperformance: 1.05,
+  swingMagnitude: 1.05,
+  marginSpread: 0.95,
+  chalkReliability: 1.1,
+  ledgerAsymmetry: 0.9,
 };
 
 function stdev(values: number[]): number {
@@ -277,6 +293,15 @@ type FriendRaw = {
   teammateEntropy: number;
   overperformance: number | null;
   overperformanceSampleSize: number;
+  meanAbsPointDelta: number;
+  marginSpread: number | null;
+  marginSpreadTightSampleSize: number;
+  marginSpreadWideSampleSize: number;
+  chalkWinRate: number | null;
+  chalkSampleSize: number;
+  ledgerAsymmetry: number | null;
+  ledgerAsymWinSampleSize: number;
+  ledgerAsymLossSampleSize: number;
 };
 
 function computeRoundCountByPlayer(rounds: NormalizedRound[]): Map<number, number> {
@@ -320,6 +345,12 @@ function gatherFriendRawStats(
   const higher = new Map<number, WinLoss>();
   const deltasByPlayer = new Map<number, number[]>();
   const opportunities = new Map<number, WinLoss>();
+  const chalkSpots = new Map<number, WinLoss>();
+  const wideMargin = new Map<number, WinLoss>();
+  const absDeltaSum = new Map<number, number>();
+  const absDeltaCount = new Map<number, number>();
+  const winDeltas = new Map<number, number[]>();
+  const lossDeltas = new Map<number, number[]>();
   const teammateCounts = new Map<number, Map<number, number>>();
   const overperformanceSum = new Map<number, number>();
   const overperformanceCount = new Map<number, number>();
@@ -338,6 +369,12 @@ function gatherFriendRawStats(
         if (win) c.wins += 1;
         else c.losses += 1;
         close.set(playerId, c);
+      }
+      if (round.scoreMargin >= BLOWOUT_MARGIN) {
+        const w = wideMargin.get(playerId) ?? { wins: 0, losses: 0 };
+        if (win) w.wins += 1;
+        else w.losses += 1;
+        wideMargin.set(playerId, w);
       }
 
       const teammatesLineup = round.teamASet.has(playerId)
@@ -374,6 +411,18 @@ function gatherFriendRawStats(
       const list = deltasByPlayer.get(playerId) ?? [];
       list.push(delta);
       deltasByPlayer.set(playerId, list);
+      absDeltaSum.set(playerId, (absDeltaSum.get(playerId) ?? 0) + Math.abs(delta));
+      absDeltaCount.set(playerId, (absDeltaCount.get(playerId) ?? 0) + 1);
+      const win = didPlayerWin(round, playerId);
+      if (win === true) {
+        const wins = winDeltas.get(playerId) ?? [];
+        wins.push(delta);
+        winDeltas.set(playerId, wins);
+      } else if (win === false) {
+        const losses = lossDeltas.get(playerId) ?? [];
+        losses.push(delta);
+        lossDeltas.set(playerId, losses);
+      }
     }
 
     const match: BasketballMatchInput = {
@@ -404,6 +453,12 @@ function gatherFriendRawStats(
           if (w === true) wl.wins += 1;
           else if (w === false) wl.losses += 1;
           opportunities.set(playerId, wl);
+        }
+        if (skillWinProb >= CHALK_PROBABILITY_THRESHOLD) {
+          const chalk = chalkSpots.get(playerId) ?? { wins: 0, losses: 0 };
+          if (w === true) chalk.wins += 1;
+          else if (w === false) chalk.losses += 1;
+          chalkSpots.set(playerId, chalk);
         }
       }
     }
@@ -529,6 +584,33 @@ function gatherFriendRawStats(
     const overSum = overperformanceSum.get(playerId) ?? 0;
     const overperformance = overCount > 0 ? overSum / overCount : null;
 
+    const absCount = absDeltaCount.get(playerId) ?? 0;
+    const meanAbsPointDelta =
+      absCount > 0 ? (absDeltaSum.get(playerId) ?? 0) / absCount : 0;
+
+    const wideWL = wideMargin.get(playerId) ?? { wins: 0, losses: 0 };
+    const wideGames = wideWL.wins + wideWL.losses;
+    let marginSpread: number | null = null;
+    if (closeGames > 0 && wideGames > 0) {
+      marginSpread = wideWL.wins / wideGames - c.wins / closeGames;
+    }
+
+    const chalkWL = chalkSpots.get(playerId) ?? { wins: 0, losses: 0 };
+    const chalkGames = chalkWL.wins + chalkWL.losses;
+    const chalkWinRate: number | null =
+      chalkGames > 0 ? chalkWL.wins / chalkGames : null;
+
+    const wDeltas = winDeltas.get(playerId) ?? [];
+    const lDeltas = lossDeltas.get(playerId) ?? [];
+    let ledgerAsymmetry: number | null = null;
+    if (wDeltas.length >= LEDGER_ASYM_MIN_WINS && lDeltas.length >= LEDGER_ASYM_MIN_LOSSES) {
+      const meanWin =
+        wDeltas.reduce((sum, d) => sum + d, 0) / wDeltas.length;
+      const meanLossAbs =
+        lDeltas.reduce((sum, d) => sum + Math.abs(d), 0) / lDeltas.length;
+      ledgerAsymmetry = meanWin - meanLossAbs;
+    }
+
     out.set(playerId, {
       playerId,
       displayName: playerNameById.get(playerId) ?? String(playerId),
@@ -545,6 +627,15 @@ function gatherFriendRawStats(
       teammateEntropy,
       overperformance,
       overperformanceSampleSize: overCount,
+      meanAbsPointDelta,
+      marginSpread,
+      marginSpreadTightSampleSize: closeGames,
+      marginSpreadWideSampleSize: wideGames,
+      chalkWinRate,
+      chalkSampleSize: chalkGames,
+      ledgerAsymmetry,
+      ledgerAsymWinSampleSize: wDeltas.length,
+      ledgerAsymLossSampleSize: lDeltas.length,
     });
   }
   return out;
@@ -561,6 +652,7 @@ function rawToComparisonVector(
   cohort: {
     volatilityMax: number;
     entropyMax: number;
+    swingMax: number;
   },
 ): ComparisonVector {
   const winImpact = clamp01(raw.winRate);
@@ -611,6 +703,38 @@ function rawToComparisonVector(
       ? 0.5
       : clamp01((raw.overperformance + 0.25) / 0.5);
 
+  const swingMax = cohort.swingMax || 1;
+  const swingMagnitude = shrinkTowardNeutral(
+    clamp01(raw.meanAbsPointDelta / swingMax),
+    raw.roundsPlayed,
+    SWING_MIN_ROUNDS,
+  );
+
+  const marginScaled =
+    raw.marginSpread === null ? 0.5 : clamp01((raw.marginSpread + 0.35) / 0.7);
+  const marginSpread = shrinkTowardNeutral(
+    marginScaled,
+    Math.min(raw.marginSpreadTightSampleSize, raw.marginSpreadWideSampleSize),
+    BLOWOUT_MIN_ROUNDS,
+  );
+
+  const chalkScaled = raw.chalkWinRate === null ? 0.5 : clamp01(raw.chalkWinRate);
+  const chalkReliability = shrinkTowardNeutral(
+    chalkScaled,
+    raw.chalkSampleSize,
+    CHALK_MIN_OPPORTUNITIES,
+  );
+
+  const ledgerScaled =
+    raw.ledgerAsymmetry === null
+      ? 0.5
+      : clamp01((raw.ledgerAsymmetry + LEDGER_ASYM_RANGE) / (2 * LEDGER_ASYM_RANGE));
+  const ledgerAsymmetry = shrinkTowardNeutral(
+    ledgerScaled,
+    Math.min(raw.ledgerAsymWinSampleSize, raw.ledgerAsymLossSampleSize),
+    Math.min(LEDGER_ASYM_MIN_WINS, LEDGER_ASYM_MIN_LOSSES),
+  );
+
   return {
     winImpact,
     carryBias,
@@ -620,6 +744,10 @@ function rawToComparisonVector(
     chemistryBias: chemBlend,
     personaIntensity,
     overperformance,
+    swingMagnitude,
+    marginSpread,
+    chalkReliability,
+    ledgerAsymmetry,
   };
 }
 
@@ -697,9 +825,11 @@ export function computeNbaComparisonRows(
 
   const volatilities = Array.from(rawMap.values()).map((r) => r.volatility);
   const entropies = Array.from(rawMap.values()).map((r) => r.teammateEntropy);
+  const swings = Array.from(rawMap.values()).map((r) => r.meanAbsPointDelta);
   const cohort = {
     volatilityMax: Math.max(...volatilities, 1e-6),
     entropyMax: Math.max(...entropies, 1e-6),
+    swingMax: Math.max(...swings, 1e-6),
   };
 
   const friendVectors = new Map<number, ComparisonVector>();

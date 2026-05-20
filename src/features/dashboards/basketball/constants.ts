@@ -12,6 +12,17 @@ export const RIVALRY_VOLUME_REFERENCE = 20;
 export const CARRY_MIN_SIDE_SAMPLES = 8;
 export const UPSET_PROBABILITY_THRESHOLD = 0.4;
 export const UPSET_MIN_OPPORTUNITIES = 6;
+/** Pre-round team win prob at or above this counts as a favorite spot (chalk). */
+export const CHALK_PROBABILITY_THRESHOLD = 0.55;
+export const CHALK_MIN_OPPORTUNITIES = 6;
+/** Margin at or above this is a comfortable/blowout script (vs tight clutch band). */
+export const BLOWOUT_MARGIN = 4;
+export const BLOWOUT_MIN_ROUNDS = 6;
+export const SWING_MIN_ROUNDS = 8;
+export const LEDGER_ASYM_MIN_WINS = 4;
+export const LEDGER_ASYM_MIN_LOSSES = 4;
+/** Maps ledgerAsymmetry raw delta to [0, 1] via (raw + range) / (2 * range). */
+export const LEDGER_ASYM_RANGE = 2;
 export const TRIO_MIN_TOGETHER = 6;
 export const FAMILY_PAIR_MIN_TOGETHER = 6;
 export const BALANCED_MIN_TEAMMATES = 6;

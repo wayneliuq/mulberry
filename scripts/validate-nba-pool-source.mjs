@@ -20,6 +20,23 @@ if (!Array.isArray(raw)) {
   process.exit(1);
 }
 
+const STATS_KEYS = [
+  "winImpact",
+  "overperformance",
+  "clutchDelta",
+  "consistency",
+  "swingMagnitude",
+  "marginSpread",
+  "chalkReliability",
+  "ledgerAsymmetry",
+];
+const NARRATIVE_KEYS = [
+  "carryBias",
+  "upsetFactor",
+  "chemistryBias",
+  "personaIntensity",
+];
+
 const ids = new Set();
 for (const e of raw) {
   if (!e || typeof e !== "object") {
@@ -35,6 +52,20 @@ for (const e of raw) {
   ]) {
     if (!(k in e)) {
       console.error("Missing", k, "on", e.id);
+      process.exit(1);
+    }
+  }
+  for (const sk of STATS_KEYS) {
+    const v = e.statsPrime?.[sk];
+    if (typeof v !== "number" || v < 0 || v > 1) {
+      console.error("Bad statsPrime." + sk, "on", e.id, v);
+      process.exit(1);
+    }
+  }
+  for (const nk of NARRATIVE_KEYS) {
+    const v = e.narrative?.[nk];
+    if (typeof v !== "number" || v < 0 || v > 1) {
+      console.error("Bad narrative." + nk, "on", e.id, v);
       process.exit(1);
     }
   }

@@ -11,6 +11,10 @@ export type NbaPoolSourceEntry = {
     overperformance: number;
     clutchDelta: number;
     consistency: number;
+    swingMagnitude: number;
+    marginSpread: number;
+    chalkReliability: number;
+    ledgerAsymmetry: number;
   };
   narrative: {
     carryBias: number;
@@ -25,6 +29,10 @@ const STATS_DIMS = [
   "overperformance",
   "clutchDelta",
   "consistency",
+  "swingMagnitude",
+  "marginSpread",
+  "chalkReliability",
+  "ledgerAsymmetry",
 ] as const satisfies readonly (keyof NbaPoolSourceEntry["statsPrime"])[];
 
 function clamp01(value: number): number {
@@ -66,6 +74,10 @@ function mergeEntry(
     overperformance: statsPct.overperformance,
     clutchDelta: statsPct.clutchDelta,
     consistency: statsPct.consistency,
+    swingMagnitude: statsPct.swingMagnitude,
+    marginSpread: statsPct.marginSpread,
+    chalkReliability: statsPct.chalkReliability,
+    ledgerAsymmetry: statsPct.ledgerAsymmetry,
     carryBias: clamp01(n.carryBias),
     upsetFactor: clamp01(n.upsetFactor),
     chemistryBias: clamp01(n.chemistryBias),
@@ -74,8 +86,8 @@ function mergeEntry(
 }
 
 /**
- * Builds runtime pool vectors: **stats half** (`winImpact`, `overperformance`,
- * `clutchDelta`, `consistency`) is each pro’s curator `statsPrime` score re-mapped to
+ * Builds runtime pool vectors: **stats half** (eight axes including `swingMagnitude`,
+ * `marginSpread`, `chalkReliability`, `ledgerAsymmetry`) is each pro’s curator `statsPrime`
  * average-rank percentiles **within the pool** so those four axes use the full [0, 1]
  * spread. **Narrative half** is taken directly from `narrative` (still [0, 1] priors).
  */
@@ -85,29 +97,23 @@ export function buildNbaComparisonPlayerPool(
   const n = source.length;
   if (n === 0) return [];
 
-  const byDim: Record<(typeof STATS_DIMS)[number], number[]> = {
-    winImpact: source.map((e) => e.statsPrime.winImpact),
-    overperformance: source.map((e) => e.statsPrime.overperformance),
-    clutchDelta: source.map((e) => e.statsPrime.clutchDelta),
-    consistency: source.map((e) => e.statsPrime.consistency),
-  };
+  const byDim = Object.fromEntries(
+    STATS_DIMS.map((dim) => [dim, source.map((e) => e.statsPrime[dim])]),
+  ) as Record<(typeof STATS_DIMS)[number], number[]>;
 
-  const pctByDim: Record<(typeof STATS_DIMS)[number], number[]> = {
-    winImpact: averageRankPercentiles(byDim.winImpact),
-    overperformance: averageRankPercentiles(byDim.overperformance),
-    clutchDelta: averageRankPercentiles(byDim.clutchDelta),
-    consistency: averageRankPercentiles(byDim.consistency),
-  };
+  const pctByDim = Object.fromEntries(
+    STATS_DIMS.map((dim) => [dim, averageRankPercentiles(byDim[dim])]),
+  ) as Record<(typeof STATS_DIMS)[number], number[]>;
 
   return source.map((entry, i) => ({
     id: entry.id,
     displayName: entry.displayName,
-    vector: mergeEntry(entry, {
-      winImpact: pctByDim.winImpact[i]!,
-      overperformance: pctByDim.overperformance[i]!,
-      clutchDelta: pctByDim.clutchDelta[i]!,
-      consistency: pctByDim.consistency[i]!,
-    }),
+    vector: mergeEntry(
+      entry,
+      Object.fromEntries(
+        STATS_DIMS.map((dim) => [dim, pctByDim[dim][i]!]),
+      ) as Record<(typeof STATS_DIMS)[number], number>,
+    ),
   }));
 }
 

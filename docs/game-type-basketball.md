@@ -98,14 +98,15 @@ names. Curator input is stored in
 has a human-readable **`primeWindow`** plus two halves:
 
 - **Stats-like half** (`statsPrime`): `winImpact`, `overperformance`,
-  `clutchDelta`, `consistency` — intended to summarize a **best three-season
+  `clutchDelta`, `consistency`, `swingMagnitude`, `marginSpread`,
+  `chalkReliability`, `ledgerAsymmetry` — intended to summarize a **best three-season
   prime** in plain language, still as hand priors (not live API stats).
 - **Narrative half** (`narrative`): `carryBias`, `upsetFactor`, `chemistryBias`,
   `personaIntensity` — loose archetype / roleplay vibe for the same eight axes
   on the friend side.
 
 `src/features/dashboards/basketball/nbaComparisonPool.build.ts` **merges** those
-into the runtime `ComparisonVector`: the four stats priors become **within-pool
+into the runtime `ComparisonVector`: the eight stats priors become **within-pool
 percentile ranks** (average-rank tie handling) so pros spread across the stats
 axes; the four narrative priors are used **directly** (clamped to \([0, 1]\)).
 Matching is **closest weighted Euclidean** distance, with **one pro per friend**

@@ -53,7 +53,7 @@ Computed from `NormalizedRound[]`:
 We also emit sample sizes for clutch / carry / upset / overperformance so
 the next stage can shrink toward neutral instead of using a hard 0.5 fallback.
 
-### 3. Normalize to 8-dim style vector in [0, 1] (`rawToComparisonVector`)
+### 3. Normalize to 12-dim style vector in [0, 1] (`rawToComparisonVector`)
 
 ```
 winImpact        = clamp01(winRate)
@@ -66,6 +66,12 @@ chemistryBias    = 0.55·(teammateEntropy / cohort_max_entropy)
 personaIntensity = 0.35·upsetIntensity + 0.25·volNorm
                    + 0.20·|carryExtreme| + 0.20·|clutchExtreme|
 overperformance  = clamp01( (overperformance + 0.25) / 0.5 )
+
+swingMagnitude   = shrink( mean(|pointDelta|) / cohort_max_swing,     roundsPlayed,          8 )
+marginSpread     = shrink( winRate(margin≥4) − winRate(margin≤2),    min(tight,wide samples), 6 )
+chalkReliability = shrink( winRate(teamWinProb≥0.55),                 chalkOpportunities,      6 )
+ledgerAsymmetry  = shrink( mean(δ|win) − mean(|δ|loss),             min(wins,losses),        4 )
+                   mapped via (raw + 2) / 4
 ```
 
 Where `shrink(scaled, n, threshold) = clamp01( w·scaled + (1−w)·0.5 )`
@@ -92,10 +98,14 @@ Weights (current):
 | carryBias | 1.20 |
 | upsetFactor | 1.15 |
 | overperformance | 1.05 |
+| chalkReliability | 1.10 |
+| swingMagnitude | 1.05 |
 | clutchDelta | 1.00 |
+| marginSpread | 0.95 |
 | consistency | 0.95 |
 | chemistryBias | 0.90 |
-| personaIntensity | 0.45 |
+| ledgerAsymmetry | 0.90 |
+| personaIntensity | 0.35 |
 
 UI color thresholds (`NbaComparisonTable.tsx`):
 green > 0.66, neutral 0.45–0.66, red < 0.45.
@@ -115,16 +125,36 @@ system” / implemented hysteresis in code). Unanchored friends still use pure g
 
 Curated **source** lives in `nbaComparisonPool.source.json` (~60 pros). Each
 entry has a `primeWindow` label, a **stats-half** prior (`statsPrime`: winImpact,
-overperformance, clutchDelta, consistency) meant to reflect a **best contiguous
+overperformance, clutchDelta, consistency, swingMagnitude, marginSpread,
+chalkReliability, ledgerAsymmetry) meant to reflect a **best contiguous
 three-season prime** (curator judgment, not automated box scores), and a
 **narrative-half** prior (`narrative`: carryBias, upsetFactor, chemistryBias,
 personaIntensity) for archetype / vibe.
 
 `nbaComparisonPool.build.ts` exports `NBA_COMPARISON_PLAYER_POOL`: the stats
 half is re-mapped to **average-rank percentiles within the pool** on each of
-those four axes (full [0, 1] spread across the cohort); the narrative half is
-passed through clamped to [0, 1]. Runtime matching still uses one 8-dimensional
+those eight axes (full [0, 1] spread across the cohort); the narrative half is
+passed through clamped to [0, 1]. Runtime matching uses one 12-dimensional
 weighted Euclidean distance against the friend vector from `rawToComparisonVector`.
+
+### Pool research refresh (May 2026)
+
+**Sources used for GOAT roster + axis priors**
+
+- [Basketball-Reference — Shaquille O'Neal](https://www.basketball-reference.com/players/o/onealsh01.html) — peak Laker seasons, MVPs, Finals MVPs
+- [StatMuse — Shaq 1999–00 to 2002–03](https://www.statmuse.com/nba/ask?q=shaq+1999-00+to+2002-03+stats) — prime scoring/rebound span
+- [HoopHype GOAT cheat sheet](https://hoopshype.com/lists/goat-debate-cheat-sheet-where-nba-legends-rank-no-1/) — consensus top-tier placement (Jordan, LeBron, Kareem, Magic)
+- Existing pool GOATs: Jordan, Kobe, LeBron, Curry, Yao, WNBA stars
+
+**Roster changes (pool stays at 60)**
+
+| Action | Entry |
+|--------|--------|
+| Added | Shaquille O'Neal (`oneal`, prime 1999–00 — 2002–03) — replaced Kyle Kuzma |
+| Added | Kareem Abdul-Jabbar (`kareem`) — replaced Nikola Vučević |
+| Added | Magic Johnson (`magic`) — replaced Grayson Allen |
+
+Migration script: `scripts/migrate-nba-pool-stats-axes.mjs` (heuristic priors for all entries + curator overrides for GOATs).
 
 ## Recent changes (commit `9156430`)
 
