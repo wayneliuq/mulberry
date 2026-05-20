@@ -524,6 +524,10 @@ describe("buildBasketballDashboardMetrics", () => {
     expect(newRows.length).toBeGreaterThan(0);
   });
 
+  it("pool has 80 curated entries after archetype expansion", () => {
+    expect(NBA_COMPARISON_PLAYER_POOL.length).toBe(80);
+  });
+
   it("includes researched GOAT pool entries with twelve-axis runtime vectors", () => {
     const shaq = NBA_COMPARISON_PLAYER_POOL.find((p) => p.id === "oneal");
     const kareem = NBA_COMPARISON_PLAYER_POOL.find((p) => p.id === "kareem");

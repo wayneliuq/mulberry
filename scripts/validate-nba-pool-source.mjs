@@ -1,5 +1,5 @@
 /**
- * Validates `nbaComparisonPool.source.json`: 60 entries, unique ids, required fields.
+ * Validates `nbaComparisonPool.source.json`: pool size, unique ids, required fields.
  *
  * Run: node scripts/validate-nba-pool-source.mjs
  */
@@ -76,8 +76,10 @@ for (const e of raw) {
   ids.add(e.id);
 }
 
-if (raw.length !== 60) {
-  console.error("Expected 60 entries, got", raw.length);
+const EXPECTED_POOL_SIZE = 80;
+
+if (raw.length !== EXPECTED_POOL_SIZE) {
+  console.error("Expected", EXPECTED_POOL_SIZE, "entries, got", raw.length);
   process.exit(1);
 }
 

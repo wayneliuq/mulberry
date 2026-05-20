@@ -123,7 +123,7 @@ system” / implemented hysteresis in code). Unanchored friends still use pure g
 
 ### 6. NBA pool
 
-Curated **source** lives in `nbaComparisonPool.source.json` (~60 pros). Each
+Curated **source** lives in `nbaComparisonPool.source.json` (~80 pros). Each
 entry has a `primeWindow` label, a **stats-half** prior (`statsPrime`: winImpact,
 overperformance, clutchDelta, consistency, swingMagnitude, marginSpread,
 chalkReliability, ledgerAsymmetry) meant to reflect a **best contiguous
@@ -146,15 +146,16 @@ weighted Euclidean distance against the friend vector from `rawToComparisonVecto
 - [HoopHype GOAT cheat sheet](https://hoopshype.com/lists/goat-debate-cheat-sheet-where-nba-legends-rank-no-1/) — consensus top-tier placement (Jordan, LeBron, Kareem, Magic)
 - Existing pool GOATs: Jordan, Kobe, LeBron, Curry, Yao, WNBA stars
 
-**Roster changes (pool stays at 60)**
+**Roster changes**
 
 | Action | Entry |
 |--------|--------|
 | Added | Shaquille O'Neal (`oneal`, prime 1999–00 — 2002–03) — replaced Kyle Kuzma |
 | Added | Kareem Abdul-Jabbar (`kareem`) — replaced Nikola Vučević |
 | Added | Magic Johnson (`magic`) — replaced Grayson Allen |
+| Expanded (+20) | Famous 2024–26 archetypes (Jaylen Brown, Paul George, Mikal Bridges, Porzingis, Brook Lopez, Paolo Banchero, Chet Holmgren, Jarrett Allen, Tyler Herro, Jalen Williams, Sengun, LaMelo, Ingram, Randle, VanVleet, Derrick White, JJJ, Aaron Gordon, Cade Cunningham, Cooper Flagg) |
 
-Migration script: `scripts/migrate-nba-pool-stats-axes.mjs` (heuristic priors for all entries + curator overrides for GOATs).
+Pool target size: **80** entries. Scripts: `scripts/migrate-nba-pool-stats-axes.mjs`, `scripts/append-pool-archetype-expansion.mjs`.
 
 ## Recent changes (commit `9156430`)
 

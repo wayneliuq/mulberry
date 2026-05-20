@@ -1258,5 +1258,425 @@
       "chemistryBias": 0.78,
       "personaIntensity": 0.38
     }
+  },
+  {
+    "id": "brown",
+    "displayName": "Jaylen Brown",
+    "primeWindow": "2023–24 — 2025–26",
+    "statsPrime": {
+      "winImpact": 0.86,
+      "overperformance": 0.76,
+      "clutchDelta": 0.8,
+      "consistency": 0.82,
+      "swingMagnitude": 0.8,
+      "marginSpread": 0.74,
+      "chalkReliability": 0.9,
+      "ledgerAsymmetry": 0.76
+    },
+    "narrative": {
+      "carryBias": 0.68,
+      "upsetFactor": 0.54,
+      "chemistryBias": 0.72,
+      "personaIntensity": 0.42
+    }
+  },
+  {
+    "id": "paul_george",
+    "displayName": "Paul George",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.84,
+      "overperformance": 0.72,
+      "clutchDelta": 0.82,
+      "consistency": 0.72,
+      "swingMagnitude": 0.78,
+      "marginSpread": 0.7,
+      "chalkReliability": 0.86,
+      "ledgerAsymmetry": 0.74
+    },
+    "narrative": {
+      "carryBias": 0.74,
+      "upsetFactor": 0.55,
+      "chemistryBias": 0.6,
+      "personaIntensity": 0.48
+    }
+  },
+  {
+    "id": "bridges",
+    "displayName": "Mikal Bridges",
+    "primeWindow": "2023–24 — 2025–26",
+    "statsPrime": {
+      "winImpact": 0.8,
+      "overperformance": 0.68,
+      "clutchDelta": 0.72,
+      "consistency": 0.9,
+      "swingMagnitude": 0.68,
+      "marginSpread": 0.66,
+      "chalkReliability": 0.88,
+      "ledgerAsymmetry": 0.62
+    },
+    "narrative": {
+      "carryBias": 0.48,
+      "upsetFactor": 0.5,
+      "chemistryBias": 0.7,
+      "personaIntensity": 0.32
+    }
+  },
+  {
+    "id": "porzingis",
+    "displayName": "Kristaps Porzingis",
+    "primeWindow": "2023–24 — 2025–26",
+    "statsPrime": {
+      "winImpact": 0.82,
+      "overperformance": 0.7,
+      "clutchDelta": 0.76,
+      "consistency": 0.68,
+      "swingMagnitude": 0.76,
+      "marginSpread": 0.72,
+      "chalkReliability": 0.84,
+      "ledgerAsymmetry": 0.72
+    },
+    "narrative": {
+      "carryBias": 0.62,
+      "upsetFactor": 0.52,
+      "chemistryBias": 0.58,
+      "personaIntensity": 0.4
+    }
+  },
+  {
+    "id": "lopez",
+    "displayName": "Brook Lopez",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.84,
+      "overperformance": 0.72,
+      "clutchDelta": 0.74,
+      "consistency": 0.86,
+      "swingMagnitude": 0.72,
+      "marginSpread": 0.76,
+      "chalkReliability": 0.9,
+      "ledgerAsymmetry": 0.68
+    },
+    "narrative": {
+      "carryBias": 0.52,
+      "upsetFactor": 0.48,
+      "chemistryBias": 0.74,
+      "personaIntensity": 0.36
+    }
+  },
+  {
+    "id": "banchero",
+    "displayName": "Paolo Banchero",
+    "primeWindow": "2023–24 — 2025–26",
+    "statsPrime": {
+      "winImpact": 0.8,
+      "overperformance": 0.74,
+      "clutchDelta": 0.78,
+      "consistency": 0.74,
+      "swingMagnitude": 0.82,
+      "marginSpread": 0.7,
+      "chalkReliability": 0.82,
+      "ledgerAsymmetry": 0.78
+    },
+    "narrative": {
+      "carryBias": 0.76,
+      "upsetFactor": 0.56,
+      "chemistryBias": 0.62,
+      "personaIntensity": 0.5
+    }
+  },
+  {
+    "id": "chet",
+    "displayName": "Chet Holmgren",
+    "primeWindow": "2023–24 — 2025–26",
+    "statsPrime": {
+      "winImpact": 0.86,
+      "overperformance": 0.8,
+      "clutchDelta": 0.74,
+      "consistency": 0.8,
+      "swingMagnitude": 0.78,
+      "marginSpread": 0.78,
+      "chalkReliability": 0.9,
+      "ledgerAsymmetry": 0.74
+    },
+    "narrative": {
+      "carryBias": 0.58,
+      "upsetFactor": 0.52,
+      "chemistryBias": 0.68,
+      "personaIntensity": 0.38
+    }
+  },
+  {
+    "id": "allen",
+    "displayName": "Jarrett Allen",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.82,
+      "overperformance": 0.74,
+      "clutchDelta": 0.7,
+      "consistency": 0.88,
+      "swingMagnitude": 0.7,
+      "marginSpread": 0.72,
+      "chalkReliability": 0.88,
+      "ledgerAsymmetry": 0.7
+    },
+    "narrative": {
+      "carryBias": 0.5,
+      "upsetFactor": 0.49,
+      "chemistryBias": 0.76,
+      "personaIntensity": 0.34
+    }
+  },
+  {
+    "id": "herro",
+    "displayName": "Tyler Herro",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.78,
+      "overperformance": 0.66,
+      "clutchDelta": 0.8,
+      "consistency": 0.68,
+      "swingMagnitude": 0.84,
+      "marginSpread": 0.64,
+      "chalkReliability": 0.8,
+      "ledgerAsymmetry": 0.76
+    },
+    "narrative": {
+      "carryBias": 0.7,
+      "upsetFactor": 0.54,
+      "chemistryBias": 0.58,
+      "personaIntensity": 0.52
+    }
+  },
+  {
+    "id": "jwilliams",
+    "displayName": "Jalen Williams",
+    "primeWindow": "2023–24 — 2025–26",
+    "statsPrime": {
+      "winImpact": 0.86,
+      "overperformance": 0.82,
+      "clutchDelta": 0.76,
+      "consistency": 0.84,
+      "swingMagnitude": 0.76,
+      "marginSpread": 0.74,
+      "chalkReliability": 0.9,
+      "ledgerAsymmetry": 0.74
+    },
+    "narrative": {
+      "carryBias": 0.66,
+      "upsetFactor": 0.53,
+      "chemistryBias": 0.7,
+      "personaIntensity": 0.4
+    }
+  },
+  {
+    "id": "sengun",
+    "displayName": "Alperen Sengun",
+    "primeWindow": "2023–24 — 2025–26",
+    "statsPrime": {
+      "winImpact": 0.8,
+      "overperformance": 0.76,
+      "clutchDelta": 0.74,
+      "consistency": 0.76,
+      "swingMagnitude": 0.74,
+      "marginSpread": 0.68,
+      "chalkReliability": 0.82,
+      "ledgerAsymmetry": 0.72
+    },
+    "narrative": {
+      "carryBias": 0.72,
+      "upsetFactor": 0.55,
+      "chemistryBias": 0.8,
+      "personaIntensity": 0.46
+    }
+  },
+  {
+    "id": "lamelo",
+    "displayName": "LaMelo Ball",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.74,
+      "overperformance": 0.62,
+      "clutchDelta": 0.76,
+      "consistency": 0.58,
+      "swingMagnitude": 0.82,
+      "marginSpread": 0.62,
+      "chalkReliability": 0.74,
+      "ledgerAsymmetry": 0.7
+    },
+    "narrative": {
+      "carryBias": 0.74,
+      "upsetFactor": 0.56,
+      "chemistryBias": 0.64,
+      "personaIntensity": 0.72
+    }
+  },
+  {
+    "id": "ingram",
+    "displayName": "Brandon Ingram",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.76,
+      "overperformance": 0.64,
+      "clutchDelta": 0.78,
+      "consistency": 0.7,
+      "swingMagnitude": 0.8,
+      "marginSpread": 0.66,
+      "chalkReliability": 0.78,
+      "ledgerAsymmetry": 0.74
+    },
+    "narrative": {
+      "carryBias": 0.72,
+      "upsetFactor": 0.52,
+      "chemistryBias": 0.56,
+      "personaIntensity": 0.44
+    }
+  },
+  {
+    "id": "randle",
+    "displayName": "Julius Randle",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.78,
+      "overperformance": 0.68,
+      "clutchDelta": 0.72,
+      "consistency": 0.66,
+      "swingMagnitude": 0.86,
+      "marginSpread": 0.68,
+      "chalkReliability": 0.8,
+      "ledgerAsymmetry": 0.8
+    },
+    "narrative": {
+      "carryBias": 0.76,
+      "upsetFactor": 0.54,
+      "chemistryBias": 0.6,
+      "personaIntensity": 0.56
+    }
+  },
+  {
+    "id": "vanvleet",
+    "displayName": "Fred VanVleet",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.76,
+      "overperformance": 0.72,
+      "clutchDelta": 0.8,
+      "consistency": 0.82,
+      "swingMagnitude": 0.66,
+      "marginSpread": 0.64,
+      "chalkReliability": 0.84,
+      "ledgerAsymmetry": 0.64
+    },
+    "narrative": {
+      "carryBias": 0.62,
+      "upsetFactor": 0.56,
+      "chemistryBias": 0.78,
+      "personaIntensity": 0.58
+    }
+  },
+  {
+    "id": "dwhite",
+    "displayName": "Derrick White",
+    "primeWindow": "2023–24 — 2025–26",
+    "statsPrime": {
+      "winImpact": 0.84,
+      "overperformance": 0.76,
+      "clutchDelta": 0.82,
+      "consistency": 0.86,
+      "swingMagnitude": 0.68,
+      "marginSpread": 0.7,
+      "chalkReliability": 0.9,
+      "ledgerAsymmetry": 0.66
+    },
+    "narrative": {
+      "carryBias": 0.52,
+      "upsetFactor": 0.52,
+      "chemistryBias": 0.82,
+      "personaIntensity": 0.38
+    }
+  },
+  {
+    "id": "jjj",
+    "displayName": "Jaren Jackson Jr.",
+    "primeWindow": "2022–23 — 2024–25",
+    "statsPrime": {
+      "winImpact": 0.82,
+      "overperformance": 0.74,
+      "clutchDelta": 0.76,
+      "consistency": 0.78,
+      "swingMagnitude": 0.74,
+      "marginSpread": 0.76,
+      "chalkReliability": 0.86,
+      "ledgerAsymmetry": 0.7
+    },
+    "narrative": {
+      "carryBias": 0.54,
+      "upsetFactor": 0.5,
+      "chemistryBias": 0.62,
+      "personaIntensity": 0.4
+    }
+  },
+  {
+    "id": "gordon",
+    "displayName": "Aaron Gordon",
+    "primeWindow": "2023–24 — 2025–26",
+    "statsPrime": {
+      "winImpact": 0.84,
+      "overperformance": 0.78,
+      "clutchDelta": 0.72,
+      "consistency": 0.84,
+      "swingMagnitude": 0.72,
+      "marginSpread": 0.74,
+      "chalkReliability": 0.9,
+      "ledgerAsymmetry": 0.68
+    },
+    "narrative": {
+      "carryBias": 0.48,
+      "upsetFactor": 0.48,
+      "chemistryBias": 0.8,
+      "personaIntensity": 0.36
+    }
+  },
+  {
+    "id": "cade",
+    "displayName": "Cade Cunningham",
+    "primeWindow": "2023–24 — 2025–26",
+    "statsPrime": {
+      "winImpact": 0.8,
+      "overperformance": 0.76,
+      "clutchDelta": 0.78,
+      "consistency": 0.74,
+      "swingMagnitude": 0.8,
+      "marginSpread": 0.68,
+      "chalkReliability": 0.82,
+      "ledgerAsymmetry": 0.76
+    },
+    "narrative": {
+      "carryBias": 0.78,
+      "upsetFactor": 0.55,
+      "chemistryBias": 0.68,
+      "personaIntensity": 0.5
+    }
+  },
+  {
+    "id": "flagg",
+    "displayName": "Cooper Flagg",
+    "primeWindow": "2025–26 (rookie season)",
+    "statsPrime": {
+      "winImpact": 0.76,
+      "overperformance": 0.74,
+      "clutchDelta": 0.72,
+      "consistency": 0.7,
+      "swingMagnitude": 0.78,
+      "marginSpread": 0.66,
+      "chalkReliability": 0.76,
+      "ledgerAsymmetry": 0.72
+    },
+    "narrative": {
+      "carryBias": 0.7,
+      "upsetFactor": 0.54,
+      "chemistryBias": 0.6,
+      "personaIntensity": 0.48
+    }
   }
 ]

@@ -92,7 +92,7 @@ window (not league-wide NBA stats). The implementation lives in
 
 ### Pro pool and distance
 
-The app compares each friend vector to a **static pool** of ~60 NBA and WNBA
+The app compares each friend vector to a **static pool** of ~80 NBA and WNBA
 names. Curator input is stored in
 `src/features/dashboards/basketball/nbaComparisonPool.source.json`: each row
 has a human-readable **`primeWindow`** plus two halves:
@@ -129,7 +129,7 @@ assignment** (first time in the table or a rematch) get a subtle ★ and **New**
 
 ### Editing or refreshing the pro list
 
-1. Edit `nbaComparisonPool.source.json` (keep ~60 entries unless you also tune
+1. Edit `nbaComparisonPool.source.json` (keep ~80 entries unless you also tune
    thresholds and copy).
 2. Run `node scripts/validate-nba-pool-source.mjs` to sanity-check shape, ids,
    and count.
