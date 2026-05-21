@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { fetchBasketballSeasons } from "../../lib/api/read";
 import type { BasketballSeasonSummary } from "../../lib/api/types";
 import {
@@ -8,6 +9,7 @@ import {
 } from "./seasons";
 
 export function useBasketballSeasons(enabled = true) {
+  const location = useLocation();
   const seasonsQuery = useQuery({
     queryKey: ["basketball-seasons"],
     queryFn: fetchBasketballSeasons,
@@ -17,11 +19,17 @@ export function useBasketballSeasons(enabled = true) {
 
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null);
 
+  // Snap to the current season on each route load; preserve choice until navigation away.
   useEffect(() => {
-    if (seasonsQuery.data && selectedSeasonId === null) {
-      setSelectedSeasonId(seasonsQuery.data.activeSeasonId);
+    if (!enabled) {
+      setSelectedSeasonId(null);
+      return;
     }
-  }, [seasonsQuery.data, selectedSeasonId]);
+    const activeId = seasonsQuery.data?.activeSeasonId;
+    if (activeId != null) {
+      setSelectedSeasonId(activeId);
+    }
+  }, [enabled, location.key, seasonsQuery.data?.activeSeasonId]);
 
   const resolvedSeasonId =
     selectedSeasonId ?? seasonsQuery.data?.activeSeasonId ?? null;
