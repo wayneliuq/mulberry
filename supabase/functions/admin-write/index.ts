@@ -119,6 +119,11 @@ const actionSchema = z.discriminatedUnion("action", [
     password: z.string(),
     gameId: uuidSchema,
   }),
+  z.object({
+    action: z.literal("rollover_basketball_season"),
+    password: z.string(),
+    force: z.boolean().optional(),
+  }),
 ]);
 
 type AdminAction = z.infer<typeof actionSchema>;
@@ -826,12 +831,24 @@ async function handleCreateRound(
 
   const nextRoundNumber = (existingRounds?.[0]?.round_number ?? 0) + 1;
 
+  let basketballSeasonId: number | null = null;
+  if (action.gameTypeId === "basketball") {
+    const { data: activeSeasonId, error: seasonError } = await supabase.rpc(
+      "ensure_basketball_season_active",
+    );
+    if (seasonError) {
+      throw new Error(seasonError.message);
+    }
+    basketballSeasonId = Number(activeSeasonId);
+  }
+
   const { data: round, error: roundError } = await supabase
     .from("rounds")
     .insert({
       game_id: action.gameId,
       round_number: nextRoundNumber,
       game_type_id: action.gameTypeId,
+      basketball_season_id: basketballSeasonId,
       settings_snapshot: {
         pointBasis: game.point_basis,
         moneyPerPointCents: game.money_per_point_cents,
@@ -882,6 +899,30 @@ async function handleCreateRound(
   });
 
   return jsonResponse({ roundId: round.id, roundNumber: round.round_number }, 201);
+}
+
+async function handleRolloverBasketballSeason(
+  supabase: Awaited<ReturnType<typeof createVerifiedAdminClient>>["supabase"],
+  action: Extract<AdminAction, { action: "rollover_basketball_season" }>,
+) {
+  const rpcName = action.force
+    ? "force_basketball_season_rollover"
+    : "ensure_basketball_season_active";
+
+  const { data: seasonId, error } = await supabase.rpc(rpcName);
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  await insertAuditLog(
+    supabase,
+    "rollover_basketball_season",
+    "basketball_season",
+    String(seasonId),
+    { force: Boolean(action.force) },
+  );
+
+  return jsonResponse({ activeSeasonId: Number(seasonId) });
 }
 
 async function handleDeleteRound(
@@ -1278,6 +1319,8 @@ Deno.serve(async (request) => {
         return await handleCalculateSettlement(supabase, action);
       case "undo_settlement":
         return await handleUndoSettlement(supabase, action);
+      case "rollover_basketball_season":
+        return await handleRolloverBasketballSeason(supabase, action);
       default:
         return jsonResponse({ error: "Unsupported action" }, 400);
     }

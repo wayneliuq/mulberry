@@ -1,6 +1,9 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import { BasketballSeasonToolbar } from "../features/basketball/BasketballSeasonToolbar";
+import { useBasketballSeasons } from "../features/basketball/useBasketballSeasons";
+import { nbaCompStorageKeyForSeason } from "../features/basketball/seasons";
 import { buildBasketballDashboardMetricsFromData } from "../features/dashboards/basketball/compute";
 import {
   METRIC_META,
@@ -10,6 +13,7 @@ import type {
   DashboardMetricSection,
   DashboardMetricSplitSection,
 } from "../features/dashboards/basketball/types";
+import { createLocalStorageNbaCompAdapter } from "../features/dashboards/basketball/nbaComparisons";
 import { MetricCard } from "../features/dashboards/components/MetricCard";
 import { NbaComparisonTable } from "../features/dashboards/components/NbaComparisonTable";
 import { RankedTable } from "../features/dashboards/components/RankedTable";
@@ -30,15 +34,28 @@ function findSection(
 }
 
 export function DashboardsPage() {
+  const {
+    seasons,
+    selectedSeasonId,
+    setSelectedSeasonId,
+    noticeText,
+    seasonsQuery,
+  } = useBasketballSeasons();
+
   const dashboardQuery = useQuery({
-    queryKey: ["dashboards", "basketball"],
-    queryFn: fetchBasketballDashboardData,
+    queryKey: ["dashboards", "basketball", selectedSeasonId],
+    queryFn: () => fetchBasketballDashboardData(selectedSeasonId!),
+    enabled: selectedSeasonId !== null,
   });
 
   const metrics = useMemo(() => {
-    if (!dashboardQuery.data) return null;
-    return buildBasketballDashboardMetricsFromData(dashboardQuery.data);
-  }, [dashboardQuery.data]);
+    if (!dashboardQuery.data || selectedSeasonId === null) return null;
+    return buildBasketballDashboardMetricsFromData(dashboardQuery.data, {
+      nbaCompStorage: createLocalStorageNbaCompAdapter(
+        nbaCompStorageKeyForSeason(selectedSeasonId),
+      ),
+    });
+  }, [dashboardQuery.data, selectedSeasonId]);
 
   const sectionOrder = useMemo(
     () => [
@@ -80,11 +97,37 @@ export function DashboardsPage() {
     ].filter((item): item is { label: string; value: string; detail: string } => item !== null);
   }, [metrics]);
 
+  if (seasonsQuery.isLoading) {
+    return (
+      <section className="stack-lg">
+        <p className="muted">Loading basketball seasons…</p>
+      </section>
+    );
+  }
+
+  if (seasonsQuery.isError) {
+    return (
+      <section className="stack-lg">
+        <p className="form-error">
+          {seasonsQuery.error instanceof Error
+            ? seasonsQuery.error.message
+            : "Could not load seasons."}
+        </p>
+      </section>
+    );
+  }
+
   if (dashboardQuery.isLoading) {
     return (
       <section className="stack-lg">
+        <BasketballSeasonToolbar
+          seasons={seasons}
+          selectedSeasonId={selectedSeasonId}
+          onSeasonChange={setSelectedSeasonId}
+          noticeText={noticeText}
+        />
         <div className="inline-actions space-between">
-          <Link to="/leaderboards" className="secondary-button link-button">
+          <Link to="/leaderboards/basketball" className="secondary-button link-button">
             Back to leaderboards
           </Link>
         </div>
@@ -100,8 +143,14 @@ export function DashboardsPage() {
   if (dashboardQuery.isError || !metrics) {
     return (
       <section className="stack-lg">
+        <BasketballSeasonToolbar
+          seasons={seasons}
+          selectedSeasonId={selectedSeasonId}
+          onSeasonChange={setSelectedSeasonId}
+          noticeText={noticeText}
+        />
         <div className="inline-actions space-between">
-          <Link to="/leaderboards" className="secondary-button link-button">
+          <Link to="/leaderboards/basketball" className="secondary-button link-button">
             Back to leaderboards
           </Link>
         </div>
@@ -125,8 +174,15 @@ export function DashboardsPage() {
 
   return (
     <section className="stack-lg">
+      <BasketballSeasonToolbar
+        seasons={seasons}
+        selectedSeasonId={selectedSeasonId}
+        onSeasonChange={setSelectedSeasonId}
+        noticeText={noticeText}
+      />
+
       <div className="inline-actions space-between">
-        <Link to="/leaderboards" className="secondary-button link-button">
+        <Link to="/leaderboards/basketball" className="secondary-button link-button">
           Back to leaderboards
         </Link>
         <span className="pill">

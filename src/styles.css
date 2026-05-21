@@ -1001,6 +1001,32 @@ tbody tr:last-child td {
   align-items: end;
 }
 
+.basketball-season-toolbar {
+  margin-bottom: var(--space-sm);
+}
+
+.basketball-season-notice {
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-2) 88%, var(--brand-500) 12%);
+  color: var(--text-body);
+  font-size: var(--font-size-small);
+  line-height: 1.45;
+}
+
+.basketball-season-select-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-size-small);
+}
+
+.basketball-season-select {
+  min-width: 10rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tab-link,
   .primary-button,

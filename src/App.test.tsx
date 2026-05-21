@@ -13,6 +13,7 @@ const {
   fetchGameDetailsMock,
   fetchLeaderboardsMock,
   fetchBasketballDashboardDataMock,
+  fetchBasketballSeasonsMock,
 } = vi.hoisted(() => ({
   verifyAdminPasswordMock: vi.fn(),
   fetchGamesMock: vi.fn(),
@@ -20,6 +21,7 @@ const {
   fetchGameDetailsMock: vi.fn(),
   fetchLeaderboardsMock: vi.fn(),
   fetchBasketballDashboardDataMock: vi.fn(),
+  fetchBasketballSeasonsMock: vi.fn(),
 }));
 
 vi.mock("./lib/api/admin", () => ({
@@ -33,6 +35,7 @@ vi.mock("./lib/api/read", () => ({
   fetchGameDetails: fetchGameDetailsMock,
   fetchLeaderboards: fetchLeaderboardsMock,
   fetchBasketballDashboardData: fetchBasketballDashboardDataMock,
+  fetchBasketballSeasons: fetchBasketballSeasonsMock,
 }));
 
 function renderApp(initialEntries = ["/"]) {
@@ -64,7 +67,22 @@ describe("app shell", () => {
       players: [],
       families: [],
     });
+    fetchBasketballSeasonsMock.mockResolvedValue({
+      seasons: [
+        {
+          id: 1,
+          seasonNumber: 1,
+          displayName: "Season 1",
+          startsAt: "1970-01-01T00:00:00.000Z",
+          endsAt: "2026-06-21T07:00:00.000Z",
+          isActive: true,
+          schemaVersion: 1,
+        },
+      ],
+      activeSeasonId: 1,
+    });
     fetchBasketballDashboardDataMock.mockResolvedValue({
+      seasonId: 1,
       players: [],
       rounds: [],
       roundEntries: [],

@@ -4,6 +4,8 @@ import type {
   BasketballDashboardData,
   BasketballDashboardRound,
   BasketballDashboardRoundEntry,
+  BasketballSeasonSummary,
+  BasketballSeasonsPayload,
   FamilyLeaderboardRow,
   GameDetails,
   GameSummary,
@@ -490,12 +492,74 @@ export type BasketballRoundHistoryRow = {
   settingsSnapshot?: Record<string, unknown>;
 };
 
-export async function fetchBasketballRoundHistory(): Promise<BasketballRoundHistoryRow[]> {
+type RawBasketballSeason = {
+  id: number;
+  season_number: number;
+  display_name: string;
+  starts_at: string;
+  ends_at: string;
+  is_active: boolean;
+  schema_version: number;
+};
+
+function mapBasketballSeason(row: RawBasketballSeason): BasketballSeasonSummary {
+  return {
+    id: row.id,
+    seasonNumber: row.season_number,
+    displayName: row.display_name,
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    isActive: row.is_active,
+    schemaVersion: row.schema_version,
+  };
+}
+
+export async function syncBasketballSeasonActive(): Promise<number> {
+  const { data, error } = await supabase.rpc("ensure_basketball_season_active");
+  if (error) {
+    throw new Error(error.message);
+  }
+  return Number(data);
+}
+
+export async function fetchBasketballSeasons(): Promise<BasketballSeasonsPayload> {
+  await syncBasketballSeasonActive();
+
+  const { data, error } = await selectAll<RawBasketballSeason>((from, to) =>
+    supabase
+      .from("basketball_seasons")
+      .select(
+        "id, season_number, display_name, starts_at, ends_at, is_active, schema_version",
+      )
+      .order("season_number", { ascending: true })
+      .range(from, to),
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const seasons = data.map(mapBasketballSeason);
+  const active = seasons.find((season) => season.isActive);
+  if (!active) {
+    throw new Error("No active basketball season configured.");
+  }
+
+  return {
+    seasons,
+    activeSeasonId: active.id,
+  };
+}
+
+export async function fetchBasketballRoundHistory(
+  seasonId: number,
+): Promise<BasketballRoundHistoryRow[]> {
   const { data, error } = await selectAll<RawRound>((from, to) =>
     supabase
       .from("rounds")
       .select("id, game_id, round_number, created_at, settings_snapshot")
       .eq("game_type_id", "basketball")
+      .eq("basketball_season_id", seasonId)
       .order("created_at", { ascending: true })
       .order("id", { ascending: true })
       .range(from, to),
@@ -571,13 +635,16 @@ function parseBasketballRound(
   };
 }
 
-export async function fetchBasketballDashboardData(): Promise<BasketballDashboardData> {
+export async function fetchBasketballDashboardData(
+  seasonId: number,
+): Promise<BasketballDashboardData> {
   const [roundsResult, entriesResult, playersResult] = await Promise.all([
     selectAll<RawRound>((from, to) =>
       supabase
         .from("rounds")
         .select("id, game_id, round_number, created_at, settings_snapshot")
         .eq("game_type_id", "basketball")
+        .eq("basketball_season_id", seasonId)
         .order("created_at", { ascending: true })
         .order("id", { ascending: true })
         .range(from, to),
@@ -632,8 +699,16 @@ export async function fetchBasketballDashboardData(): Promise<BasketballDashboar
       }),
     );
 
+  const activePlayerIds = new Set(
+    roundEntries.map((entry) => entry.playerId),
+  );
+  const filteredPlayers = players.filter((player) =>
+    activePlayerIds.has(player.id),
+  );
+
   return {
-    players,
+    seasonId,
+    players: filteredPlayers,
     rounds,
     roundEntries,
   };
@@ -643,6 +718,7 @@ type RawRoundEntryRow = {
   player_id: number;
   point_delta: number;
   game_id: string;
+  round_id: string;
 };
 
 type RawMoneySettlementPlayer = {
@@ -653,6 +729,7 @@ type RawMoneySettlementPlayer = {
 
 export async function fetchLeaderboards(
   gameTypeFilter: GameTypeId | "all" = "all",
+  options?: { basketballSeasonId?: number },
 ): Promise<LeaderboardData> {
   const [gamesResult, totalsResult, playersResult, familiesResult] = await Promise.all([
     selectAll<{ id: string; game_type_id: GameTypeId }>((from, to) =>
@@ -691,18 +768,38 @@ export async function fetchLeaderboards(
 
   const games = gamesResult.data;
   const gameTypeByGameId = new Map(games.map((g) => [g.id, g.game_type_id]));
-  const filteredGameIds = new Set(
+  let filteredGameIds = new Set(
     gameTypeFilter === "all"
       ? games.map((g) => g.id)
       : games.filter((g) => g.game_type_id === gameTypeFilter).map((g) => g.id),
   );
+
+  let basketballSeasonRoundIds: Set<string> | null = null;
+  if (gameTypeFilter === "basketball" && options?.basketballSeasonId != null) {
+    const { data: seasonRounds, error: seasonRoundsError } = await selectAll<{
+      id: string;
+      game_id: string;
+    }>((from, to) =>
+      supabase
+        .from("rounds")
+        .select("id, game_id")
+        .eq("game_type_id", "basketball")
+        .eq("basketball_season_id", options.basketballSeasonId!)
+        .range(from, to),
+    );
+    if (seasonRoundsError) {
+      throw new Error(seasonRoundsError.message);
+    }
+    basketballSeasonRoundIds = new Set(seasonRounds.map((row) => row.id));
+    filteredGameIds = new Set(seasonRounds.map((row) => row.game_id));
+  }
 
   const [roundEntriesResult, moneyResult] = await Promise.all([
     filteredGameIds.size > 0
       ? selectAll<RawRoundEntryRow>((from, to) =>
           supabase
             .from("round_entries")
-            .select("player_id, point_delta, game_id")
+            .select("player_id, point_delta, game_id, round_id")
             .in("game_id", Array.from(filteredGameIds))
             .range(from, to),
         )
@@ -722,7 +819,12 @@ export async function fetchLeaderboards(
     throw new Error(moneyResult.error.message);
   }
 
-  const roundEntries = roundEntriesResult.data ?? [];
+  let roundEntries = roundEntriesResult.data ?? [];
+  if (basketballSeasonRoundIds) {
+    roundEntries = roundEntries.filter((entry) =>
+      basketballSeasonRoundIds!.has(entry.round_id),
+    );
+  }
   const moneyRows = moneyResult.data ?? [];
 
   const moneyByPlayerId = new Map<number, number>();
@@ -753,19 +855,45 @@ export async function fetchLeaderboards(
     pointsByPlayerId.set(entry.player_id, existing);
   }
 
-  const filteredGameTotals = totalsResult.data.filter((row) =>
-    filteredGameIds.has(row.game_id),
-  );
-
   const gameWinLossByPlayerId = new Map<number, { gamesWon: number; gamesLost: number }>();
-  for (const total of filteredGameTotals) {
-    const existing = gameWinLossByPlayerId.get(total.player_id) ?? {
-      gamesWon: 0,
-      gamesLost: 0,
-    };
-    if (total.point_total > 0) existing.gamesWon += 1;
-    else if (total.point_total < 0) existing.gamesLost += 1;
-    gameWinLossByPlayerId.set(total.player_id, existing);
+
+  if (basketballSeasonRoundIds) {
+    const gameTotalsByPlayer = new Map<
+      string,
+      Map<number, number>
+    >();
+    for (const entry of roundEntries) {
+      if (!filteredGameIds.has(entry.game_id)) continue;
+      const byPlayer =
+        gameTotalsByPlayer.get(entry.game_id) ?? new Map<number, number>();
+      const current = byPlayer.get(entry.player_id) ?? 0;
+      byPlayer.set(entry.player_id, current + entry.point_delta);
+      gameTotalsByPlayer.set(entry.game_id, byPlayer);
+    }
+    for (const [, byPlayer] of gameTotalsByPlayer) {
+      for (const [playerId, total] of byPlayer) {
+        const existing = gameWinLossByPlayerId.get(playerId) ?? {
+          gamesWon: 0,
+          gamesLost: 0,
+        };
+        if (total > 0) existing.gamesWon += 1;
+        else if (total < 0) existing.gamesLost += 1;
+        gameWinLossByPlayerId.set(playerId, existing);
+      }
+    }
+  } else {
+    const filteredGameTotals = totalsResult.data.filter((row) =>
+      filteredGameIds.has(row.game_id),
+    );
+    for (const total of filteredGameTotals) {
+      const existing = gameWinLossByPlayerId.get(total.player_id) ?? {
+        gamesWon: 0,
+        gamesLost: 0,
+      };
+      if (total.point_total > 0) existing.gamesWon += 1;
+      else if (total.point_total < 0) existing.gamesLost += 1;
+      gameWinLossByPlayerId.set(total.player_id, existing);
+    }
   }
 
   const allPlayers = playersResult.data;
@@ -779,6 +907,15 @@ export async function fetchLeaderboards(
 
   const playerRows: PlayerLeaderboardRow[] = Array.from(allPlayerIds)
     .filter((id) => activePlayerIds.has(id))
+    .filter((id) => {
+      if (!basketballSeasonRoundIds) return true;
+      const points = pointsByPlayerId.get(id);
+      return (
+        (points?.totalPoints ?? 0) !== 0 ||
+        (points?.roundsWon ?? 0) > 0 ||
+        (points?.roundsLost ?? 0) > 0
+      );
+    })
     .map((playerId): PlayerLeaderboardRow => {
       const player = playerById.get(playerId);
       const points = pointsByPlayerId.get(playerId) ?? {
@@ -838,6 +975,7 @@ export async function fetchLeaderboards(
     .sort((left, right) => right.totalPoints - left.totalPoints);
 
   return {
+    seasonId: options?.basketballSeasonId,
     players: playerRows,
     families: familyRows,
   };

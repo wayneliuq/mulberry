@@ -4,6 +4,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { gameTypeOptions } from "../features/game-types";
 import type { GameTypeId } from "../features/game-types/types";
 import { IconGlyph } from "../features/ui/IconGlyph";
+import { BasketballSeasonToolbar } from "../features/basketball/BasketballSeasonToolbar";
+import { useBasketballSeasons } from "../features/basketball/useBasketballSeasons";
 import { fetchLeaderboards } from "../lib/api/read";
 import { formatMoneyCents, formatPoints } from "../lib/format";
 import type {
@@ -133,9 +135,25 @@ export function LeaderboardsPage() {
     [navigate],
   );
 
+  const isBasketballLeaderboard = selectedGameType === "basketball";
+  const {
+    seasons,
+    selectedSeasonId,
+    setSelectedSeasonId,
+    noticeText,
+    seasonsQuery,
+  } = useBasketballSeasons(isBasketballLeaderboard);
+
   const leaderboardsQuery = useQuery({
-    queryKey: ["leaderboards", selectedGameType],
-    queryFn: () => fetchLeaderboards(selectedGameType),
+    queryKey: ["leaderboards", selectedGameType, selectedSeasonId],
+    queryFn: () =>
+      fetchLeaderboards(
+        selectedGameType,
+        isBasketballLeaderboard && selectedSeasonId != null
+          ? { basketballSeasonId: selectedSeasonId }
+          : undefined,
+      ),
+    enabled: !isBasketballLeaderboard || selectedSeasonId !== null,
   });
   const rawPlayerRows = leaderboardsQuery.data?.players ?? [];
   const rawFamilyRows = leaderboardsQuery.data?.families ?? [];
@@ -254,6 +272,15 @@ export function LeaderboardsPage() {
 
   return (
     <section className="stack-lg">
+      {isBasketballLeaderboard ? (
+        <BasketballSeasonToolbar
+          seasons={seasons}
+          selectedSeasonId={selectedSeasonId}
+          onSeasonChange={setSelectedSeasonId}
+          noticeText={noticeText}
+          isLoading={seasonsQuery.isLoading}
+        />
+      ) : null}
       <article className="card stack-sm">
         <div className="card-header leaderboard-card-header">
           <div>

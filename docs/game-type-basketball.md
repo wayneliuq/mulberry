@@ -74,6 +74,23 @@ The machine summary includes the scoreline and per‑player deltas (by id). The 
 
 ---
 
+## Basketball seasons
+
+Basketball stats (rounds, leaderboards, dashboards, skills, rankings) are scoped to **seasons**.
+
+- **Season 1** contains all historical basketball data through the first rollout boundary.
+- Later seasons follow fixed solstice windows in `America/Los_Angeles`:
+  - Summer: **Jun 21 → Dec 20** (half-open; next season starts Dec 21)
+  - Winter: **Dec 21 → Jun 20** (half-open; next season starts Jun 21)
+- Each basketball round stores `basketball_season_id` on `rounds`.
+- Player identity is global; leaderboards/dashboards only list players with activity in the selected season.
+- Season UI (selector, next-season notice, admin rollover) appears only in basketball views.
+- NBA comp anchor `localStorage` is namespaced per season (`mulberry:nba-comp:v1:season-<id>`).
+
+Auto-rollover runs via `ensure_basketball_season_active()` when seasons are loaded. Admins can force early rollover with **Start next season** (calls `force_basketball_season_rollover()`).
+
+---
+
 ## Basketball dashboard (pickup analytics)
 
 Beyond OpenSkill and Mulberry points, the **basketball game dashboard** can show

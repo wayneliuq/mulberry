@@ -233,14 +233,16 @@ function buildNextAnchor(
   };
 }
 
-export function createLocalStorageNbaCompAdapter(): NbaCompStorageAdapter {
+export function createLocalStorageNbaCompAdapter(
+  storageKey: string = NBA_COMP_ANCHOR_STORAGE_KEY,
+): NbaCompStorageAdapter {
   return {
     load(): NbaCompAnchorStore | null {
       if (typeof globalThis === "undefined") return null;
       const ls = (globalThis as { localStorage?: Storage }).localStorage;
       if (!ls) return null;
       try {
-        const raw = ls.getItem(NBA_COMP_ANCHOR_STORAGE_KEY);
+        const raw = ls.getItem(storageKey);
         if (raw === null || raw === "") return null;
         const parsed: unknown = JSON.parse(raw);
         return parseAnchorStore(parsed);
@@ -253,7 +255,7 @@ export function createLocalStorageNbaCompAdapter(): NbaCompStorageAdapter {
       const ls = (globalThis as { localStorage?: Storage }).localStorage;
       if (!ls) return;
       try {
-        ls.setItem(NBA_COMP_ANCHOR_STORAGE_KEY, JSON.stringify(store));
+        ls.setItem(storageKey, JSON.stringify(store));
       } catch {
         // ignore quota / private mode
       }

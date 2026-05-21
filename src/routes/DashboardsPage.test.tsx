@@ -2,18 +2,39 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchBasketballDashboardData } from "../lib/api/read";
+import {
+  fetchBasketballDashboardData,
+  fetchBasketballSeasons,
+} from "../lib/api/read";
 import {
   NBA_COMP_ANCHOR_STORAGE_KEY,
   NBA_COMPARISON_SECTION_TITLE,
 } from "../features/dashboards/basketball/constants";
+import { AdminSessionProvider } from "../features/admin/AdminSessionContext";
 import { DashboardsPage } from "./DashboardsPage";
 
 vi.mock("../lib/api/read", () => ({
   fetchBasketballDashboardData: vi.fn(),
+  fetchBasketballSeasons: vi.fn(),
 }));
 
 const fetchBasketballDashboardDataMock = vi.mocked(fetchBasketballDashboardData);
+const fetchBasketballSeasonsMock = vi.mocked(fetchBasketballSeasons);
+
+const mockSeasonsPayload = {
+  seasons: [
+    {
+      id: 1,
+      seasonNumber: 1,
+      displayName: "Season 1",
+      startsAt: "1970-01-01T00:00:00.000Z",
+      endsAt: "2026-06-21T07:00:00.000Z",
+      isActive: true,
+      schemaVersion: 1,
+    },
+  ],
+  activeSeasonId: 1,
+};
 
 function renderDashboardsPage() {
   const queryClient = new QueryClient({
@@ -21,9 +42,11 @@ function renderDashboardsPage() {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <DashboardsPage />
-      </MemoryRouter>
+      <AdminSessionProvider>
+        <MemoryRouter>
+          <DashboardsPage />
+        </MemoryRouter>
+      </AdminSessionProvider>
     </QueryClientProvider>,
   );
 }
@@ -33,10 +56,12 @@ describe("DashboardsPage", () => {
     if (typeof localStorage !== "undefined") {
       localStorage.removeItem(NBA_COMP_ANCHOR_STORAGE_KEY);
     }
+    fetchBasketballSeasonsMock.mockResolvedValue(mockSeasonsPayload);
   });
 
   it("renders basketball sections and jump chips", async () => {
     fetchBasketballDashboardDataMock.mockResolvedValue({
+      seasonId: 1,
       players: [
         { id: 1, displayName: "A", familyId: "f1" },
         { id: 2, displayName: "B", familyId: "f2" },
@@ -77,6 +102,7 @@ describe("DashboardsPage", () => {
     expect(screen.getByRole("link", { name: "Back to leaderboards" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "nbaComp" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Upset Machine" })).toBeInTheDocument();
+    expect(screen.getByText(/New season starts on/i)).toBeInTheDocument();
   });
 
   it("shows an error state when data fetch fails", async () => {

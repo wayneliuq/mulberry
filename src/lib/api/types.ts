@@ -14,7 +14,8 @@ export type AdminWriteAction =
   | "create_round"
   | "delete_round"
   | "calculate_settlement"
-  | "undo_settlement";
+  | "undo_settlement"
+  | "rollover_basketball_season";
 
 export type PlayerSummary = {
   id: number;
@@ -117,6 +118,7 @@ export type FamilyLeaderboardRow = {
 };
 
 export type LeaderboardData = {
+  seasonId?: number;
   players: PlayerLeaderboardRow[];
   families: FamilyLeaderboardRow[];
 };
@@ -144,7 +146,23 @@ export type BasketballDashboardRoundEntry = {
   pointDelta: number;
 };
 
+export type BasketballSeasonSummary = {
+  id: number;
+  seasonNumber: number;
+  displayName: string;
+  startsAt: string;
+  endsAt: string;
+  isActive: boolean;
+  schemaVersion: number;
+};
+
+export type BasketballSeasonsPayload = {
+  seasons: BasketballSeasonSummary[];
+  activeSeasonId: number;
+};
+
 export type BasketballDashboardData = {
+  seasonId: number;
   players: BasketballDashboardPlayer[];
   rounds: BasketballDashboardRound[];
   roundEntries: BasketballDashboardRoundEntry[];

@@ -12,6 +12,8 @@ import {
 } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { useAdminSession } from "../features/admin/AdminSessionContext";
+import { BasketballSeasonToolbar } from "../features/basketball/BasketballSeasonToolbar";
+import { useBasketballSeasons } from "../features/basketball/useBasketballSeasons";
 import { calculateDixitRound } from "../features/game-types/dixit";
 import { calculateFightTheLandlordRound } from "../features/game-types/fightTheLandlord";
 import { getGameTypeOption } from "../features/game-types";
@@ -41,6 +43,7 @@ import { IconGlyph } from "../features/ui/IconGlyph";
 import { adminWrite } from "../lib/api/admin";
 import {
   fetchBasketballRoundHistory,
+  syncBasketballSeasonActive,
   fetchGameDetails,
   fetchPlayers,
 } from "../lib/api/read";
@@ -121,10 +124,19 @@ export function GameViewPage() {
     queryKey: ["players"],
     queryFn: fetchPlayers,
   });
+  const isBasketballGame = gameQuery.data?.gameTypeId === "basketball";
+  const {
+    seasons,
+    selectedSeasonId,
+    setSelectedSeasonId,
+    noticeText,
+    seasonsQuery,
+  } = useBasketballSeasons(Boolean(isBasketballGame));
+
   const basketballHistoryQuery = useQuery({
-    queryKey: ["basketball-round-history"],
-    queryFn: fetchBasketballRoundHistory,
-    enabled: gameQuery.data?.gameTypeId === "basketball",
+    queryKey: ["basketball-round-history", selectedSeasonId],
+    queryFn: () => fetchBasketballRoundHistory(selectedSeasonId!),
+    enabled: isBasketballGame && selectedSeasonId !== null,
   });
 
   const game = gameQuery.data;
@@ -175,8 +187,11 @@ export function GameViewPage() {
       queryClient.invalidateQueries({ queryKey: ["games"] }),
       queryClient.invalidateQueries({ queryKey: ["game", gameId] }),
       queryClient.invalidateQueries({ queryKey: ["basketball-round-history"] }),
+      queryClient.invalidateQueries({ queryKey: ["basketball-seasons"] }),
       queryClient.invalidateQueries({ queryKey: ["players"] }),
       queryClient.invalidateQueries({ queryKey: ["leaderboards"] }),
+      queryClient.invalidateQueries({ queryKey: ["dashboards"] }),
+      syncBasketballSeasonActive().catch(() => undefined),
     ]);
   };
 
@@ -837,6 +852,15 @@ export function GameViewPage() {
 
   return (
     <section className="stack-lg">
+      {game.gameTypeId === "basketball" ? (
+        <BasketballSeasonToolbar
+          seasons={seasons}
+          selectedSeasonId={selectedSeasonId}
+          onSeasonChange={setSelectedSeasonId}
+          noticeText={noticeText}
+          isLoading={seasonsQuery.isLoading}
+        />
+      ) : null}
       <div className="inline-actions space-between">
         <Link to="/" className="secondary-button link-button">
           Back to games

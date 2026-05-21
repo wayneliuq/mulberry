@@ -62,6 +62,7 @@ describe("upset section probability source", () => {
       ];
     });
     const data: BasketballDashboardData = {
+      seasonId: 1,
       players: [
         { id: 1, displayName: "Alice", familyId: "red" },
         { id: 2, displayName: "Bob", familyId: "blue" },

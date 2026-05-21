@@ -9,6 +9,7 @@ import { LeaderboardsPage } from "./LeaderboardsPage";
 
 vi.mock("../lib/api/read", () => ({
   fetchLeaderboards: vi.fn(),
+  fetchBasketballSeasons: vi.fn(),
 }));
 
 const fetchLeaderboardsMock = vi.mocked(fetchLeaderboards);
