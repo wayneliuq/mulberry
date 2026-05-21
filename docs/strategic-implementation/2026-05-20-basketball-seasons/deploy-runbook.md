@@ -8,7 +8,8 @@
 | Edge function | `git checkout 18afd31 -- supabase/functions/admin-write && supabase functions deploy admin-write --no-verify-jwt` |
 | Frontend | `git revert <deploy-commit>` on `main` and push, or reset to `18afd31` and force-push only if coordinated |
 
-**Pre-deploy git SHA (last known good before seasons):** `18afd31`
+**Pre-deploy git SHA (last known good before seasons):** `18afd31`  
+**Deploy commit (seasons feature):** `452932b`
 
 **Rollback order (safest):** frontend → edge function → database.
 
