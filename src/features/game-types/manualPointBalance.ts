@@ -11,6 +11,43 @@ export function clampToTwoDecimals(value: number): number {
   return round2(value);
 }
 
+/** Adjusts rounded entries so their total is within one cent of zero. */
+export function normalizePointEntriesZeroSum<
+  T extends { playerId: number; pointDelta: number },
+>(entries: T[], adjustPlayerIds: number[]): T[] {
+  if (entries.length === 0 || adjustPlayerIds.length === 0) {
+    return entries.map((entry) => ({ ...entry, pointDelta: round2(entry.pointDelta) }));
+  }
+
+  const result = entries.map((entry) => ({
+    ...entry,
+    pointDelta: round2(entry.pointDelta),
+  }));
+
+  let total = round2(result.reduce((sum, entry) => sum + entry.pointDelta, 0));
+  if (Math.abs(total) <= 0.01) {
+    return result;
+  }
+
+  const share = round2(-total / adjustPlayerIds.length);
+  for (const playerId of adjustPlayerIds) {
+    const entry = result.find((row) => row.playerId === playerId);
+    if (entry) {
+      entry.pointDelta = round2(entry.pointDelta + share);
+    }
+  }
+
+  total = round2(result.reduce((sum, entry) => sum + entry.pointDelta, 0));
+  if (Math.abs(total) > 0.01) {
+    const target = result.find((entry) => entry.playerId === adjustPlayerIds[0]);
+    if (target) {
+      target.pointDelta = round2(target.pointDelta - total);
+    }
+  }
+
+  return result;
+}
+
 export function isAutoEligible(pointDelta: number): boolean {
   return Math.abs(round2(pointDelta)) < 0.01;
 }

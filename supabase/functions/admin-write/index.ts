@@ -829,10 +829,9 @@ async function handleCreateRound(
     throw new Error("Round game type does not match the game.");
   }
 
-  const entryTotal = action.entries.reduce(
-    (sum, entry) => sum + entry.pointDelta,
-    0,
-  );
+  const entryTotal = Math.round(
+    action.entries.reduce((sum, entry) => sum + entry.pointDelta, 0) * 100,
+  ) / 100;
 
   if (Math.abs(entryTotal) > 0.01) {
     throw new Error("Round entries must sum to zero.");

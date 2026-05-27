@@ -34,6 +34,7 @@ import {
   calculateBasketballRound,
   parseBasketballMatchFromRoundSnapshot,
   predictBasketballMatchWinProbabilities,
+  priorBasketballMatchesFromRoundSnapshots,
 } from "../features/game-types/basketball";
 import {
   PlayerSortButtons,
@@ -805,14 +806,12 @@ export function GameViewPage() {
       return;
     }
 
-    if (basketballHistoryQuery.isLoading) {
-      window.alert("Basketball history is still loading. Please try again.");
-      return;
-    }
-
-    const priorRounds = (basketballHistoryQuery.data ?? [])
-      .map((row) => parseBasketballMatchFromRoundSnapshot(row.settingsSnapshot))
-      .filter((m): m is NonNullable<typeof m> => m !== null);
+    const priorRounds = priorBasketballMatchesFromRoundSnapshots(
+      game.rounds.map((round) => ({
+        roundNumber: round.roundNumber,
+        settingsSnapshot: round.settingsSnapshot,
+      })),
+    );
     const result = calculateBasketballRound({
       priorRounds,
       match: {
@@ -827,15 +826,27 @@ export function GameViewPage() {
     for (const id of teamA) teamByPlayerId.set(id, "A");
     for (const id of teamB) teamByPlayerId.set(id, "B");
 
+    const rosterIds = [...teamA, ...teamB];
     const entries = mergeCalculatedEntriesWithGhostZeros(
       result.entries.map((entry) => ({
         playerId: Number(entry.playerId),
-        pointDelta: clampToTwoDecimals(entry.pointDelta),
+        pointDelta: entry.pointDelta,
       })),
-      [...teamA, ...teamB],
+      rosterIds,
       ghostPlayerIds,
       { teamByPlayerId },
-    );
+    ).map((entry) => ({
+      playerId: entry.playerId,
+      pointDelta: clampToTwoDecimals(entry.pointDelta),
+    }));
+
+    const entryTotal = entries.reduce((sum, entry) => sum + entry.pointDelta, 0);
+    if (Math.abs(entryTotal) > 0.01) {
+      window.alert(
+        `Round entries do not balance (total ${entryTotal.toFixed(2)}). Adjust teams or report this game.`,
+      );
+      return;
+    }
 
     const playerNameById = new Map(
       sortedUnlockedPlayers.map((player) => [

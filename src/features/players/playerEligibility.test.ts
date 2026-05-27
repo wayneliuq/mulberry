@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyGhostPlayerZeroDeltas,
   balanceManualEntriesExcludingGhosts,
   isLeaderboardEligible,
   isNearZeroPointDelta,
@@ -62,6 +63,30 @@ describe("playerEligibility", () => {
     expect(Math.abs(total)).toBeLessThanOrEqual(0.01);
     expect(merged.find((e) => e.playerId === 1)?.pointDelta).toBe(1.5);
     expect(merged.find((e) => e.playerId === 2)?.pointDelta).toBe(-4.5);
+  });
+
+  it("redistributes ghost-only team drain to all scorers", () => {
+    const merged = applyGhostPlayerZeroDeltas(
+      [
+        { playerId: 99, pointDelta: -12 },
+        { playerId: 2, pointDelta: 6 },
+        { playerId: 3, pointDelta: 6 },
+      ],
+      new Set([99]),
+      {
+        teamByPlayerId: new Map([
+          [99, "A"],
+          [2, "B"],
+          [3, "B"],
+        ]),
+      },
+    );
+
+    expect(merged.find((e) => e.playerId === 99)?.pointDelta).toBe(0);
+    const total = merged.reduce((sum, entry) => sum + entry.pointDelta, 0);
+    expect(Math.abs(total)).toBeLessThanOrEqual(0.01);
+    expect(merged.find((e) => e.playerId === 2)?.pointDelta).toBe(0);
+    expect(merged.find((e) => e.playerId === 3)?.pointDelta).toBe(0);
   });
 
   it("balances manual entries without assigning points to ghosts", () => {
