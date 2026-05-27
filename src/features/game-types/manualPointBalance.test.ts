@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   balanceManualPointEntries,
   isAutoEligible,
+  isRoundEntryTotalBalanced,
+  normalizePointEntriesZeroSum,
   round2,
+  roundEntryTotal,
 } from "./manualPointBalance";
 
 function expectZeroSum(entries: { pointDelta: number }[]) {
@@ -18,6 +21,31 @@ describe("isAutoEligible", () => {
     expect(isAutoEligible(0.004)).toBe(true);
     expect(isAutoEligible(0.01)).toBe(false);
     expect(isAutoEligible(-10)).toBe(false);
+  });
+});
+
+describe("normalizePointEntriesZeroSum", () => {
+  it("snaps a one-cent residual to zero on a low-magnitude scorer", () => {
+    const normalized = normalizePointEntriesZeroSum(
+      [
+        { playerId: 1, pointDelta: 12.5 },
+        { playerId: 2, pointDelta: -12.5 },
+        { playerId: 3, pointDelta: 0.33 },
+        { playerId: 4, pointDelta: -0.34 },
+      ],
+      [1, 2, 3, 4],
+    );
+    expect(isRoundEntryTotalBalanced(roundEntryTotal(normalized))).toBe(true);
+    expect(normalized.find((e) => e.playerId === 3)?.pointDelta).toBe(0.34);
+  });
+
+  it("does not alter imbalances of one point or more", () => {
+    const input = [
+      { playerId: 1, pointDelta: 1 },
+      { playerId: 2, pointDelta: 0 },
+    ];
+    const normalized = normalizePointEntriesZeroSum(input, [1, 2]);
+    expect(roundEntryTotal(normalized)).toBe(1);
   });
 });
 

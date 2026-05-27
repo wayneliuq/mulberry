@@ -19,8 +19,10 @@ import { calculateFightTheLandlordRound } from "../features/game-types/fightTheL
 import { getGameTypeOption } from "../features/game-types";
 import {
   MANUAL_BALANCE_NO_AUTO_SLOTS_MESSAGE,
+  ZERO_SUM_AUTO_FIX_MAX,
   balanceManualPointEntries,
   clampToTwoDecimals,
+  finalizeRoundPointEntriesForSubmit,
   parseManualPointInputs,
 } from "../features/game-types/manualPointBalance";
 import { ManualRoundForm } from "../features/rounds/ManualRoundForm";
@@ -492,10 +494,20 @@ export function GameViewPage() {
       return;
     }
 
-    const entries = balance.entries.map((entry) => ({
-      playerId: entry.playerId,
-      pointDelta: entry.pointDelta,
-    }));
+    const scoringPlayerIds = playerIds.filter((id) => !ghostPlayerIds.has(id));
+    const { entries, total, balanced } = finalizeRoundPointEntriesForSubmit(
+      balance.entries.map((entry) => ({
+        playerId: entry.playerId,
+        pointDelta: entry.pointDelta,
+      })),
+      scoringPlayerIds.length > 0 ? scoringPlayerIds : playerIds,
+    );
+    if (!balanced) {
+      window.alert(
+        `Round entries do not balance (total ${total.toFixed(2)}). Adjust teams or report this game.`,
+      );
+      return;
+    }
     const summaryText = entries
       .map((entry) => {
         const name = nameById.get(entry.playerId) ?? entry.playerId;
@@ -829,23 +841,22 @@ export function GameViewPage() {
     for (const id of teamB) teamByPlayerId.set(id, "B");
 
     const rosterIds = [...teamA, ...teamB];
-    const entries = mergeCalculatedEntriesWithGhostZeros(
-      result.entries.map((entry) => ({
-        playerId: Number(entry.playerId),
-        pointDelta: entry.pointDelta,
-      })),
-      rosterIds,
-      ghostPlayerIds,
-      { teamByPlayerId },
-    ).map((entry) => ({
-      playerId: entry.playerId,
-      pointDelta: clampToTwoDecimals(entry.pointDelta),
-    }));
-
-    const entryTotal = entries.reduce((sum, entry) => sum + entry.pointDelta, 0);
-    if (Math.abs(entryTotal) > 0.01) {
+    const scoringPlayerIds = rosterIds.filter((id) => !ghostPlayerIds.has(id));
+    const { entries, total, balanced } = finalizeRoundPointEntriesForSubmit(
+      mergeCalculatedEntriesWithGhostZeros(
+        result.entries.map((entry) => ({
+          playerId: Number(entry.playerId),
+          pointDelta: entry.pointDelta,
+        })),
+        rosterIds,
+        ghostPlayerIds,
+        { teamByPlayerId },
+      ),
+      scoringPlayerIds.length > 0 ? scoringPlayerIds : rosterIds,
+    );
+    if (!balanced) {
       window.alert(
-        `Round entries do not balance (total ${entryTotal.toFixed(2)}). Adjust teams or report this game.`,
+        `Round entries do not balance (total ${total.toFixed(2)}). Adjust teams or report this game.`,
       );
       return;
     }

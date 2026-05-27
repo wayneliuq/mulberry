@@ -11,10 +11,43 @@ export function clampToTwoDecimals(value: number): number {
   return round2(value);
 }
 
-/** Adjusts rounded entries so their total is within one cent of zero. */
+/** Server and client agree a round balances within one cent. */
+export const ZERO_SUM_ROUND_TOLERANCE = 0.01;
+
+/** Only auto-correct sub-point rounding drift; larger gaps are real errors. */
+export const ZERO_SUM_AUTO_FIX_MAX = 1;
+
+export function roundEntryTotal(entries: Array<{ pointDelta: number }>): number {
+  return round2(entries.reduce((sum, entry) => sum + entry.pointDelta, 0));
+}
+
+export function isRoundEntryTotalBalanced(
+  total: number,
+  tolerance = ZERO_SUM_ROUND_TOLERANCE,
+): boolean {
+  return Math.abs(total) <= tolerance;
+}
+
+export type NormalizeZeroSumOptions = {
+  maxImbalance?: number;
+  /** Apply remainder to players with |pointDelta| below this when possible (default 1). */
+  preferAdjustBelow?: number;
+};
+
+/**
+ * Rounds entries and absorbs |total| < maxImbalance (default 1) so the set is zero-sum.
+ * Cent-level residuals go to a low-magnitude scorer when possible.
+ */
 export function normalizePointEntriesZeroSum<
   T extends { playerId: number; pointDelta: number },
->(entries: T[], adjustPlayerIds: number[]): T[] {
+>(
+  entries: T[],
+  adjustPlayerIds: number[],
+  options?: NormalizeZeroSumOptions,
+): T[] {
+  const maxImbalance = options?.maxImbalance ?? ZERO_SUM_AUTO_FIX_MAX;
+  const preferAdjustBelow = options?.preferAdjustBelow ?? 1;
+
   if (entries.length === 0 || adjustPlayerIds.length === 0) {
     return entries.map((entry) => ({ ...entry, pointDelta: round2(entry.pointDelta) }));
   }
@@ -24,28 +57,62 @@ export function normalizePointEntriesZeroSum<
     pointDelta: round2(entry.pointDelta),
   }));
 
-  let total = round2(result.reduce((sum, entry) => sum + entry.pointDelta, 0));
-  if (Math.abs(total) <= 0.01) {
+  let total = roundEntryTotal(result);
+  if (Math.abs(total) < 0.0001) {
+    return result;
+  }
+  if (Math.abs(total) >= maxImbalance) {
     return result;
   }
 
-  const share = round2(-total / adjustPlayerIds.length);
-  for (const playerId of adjustPlayerIds) {
+  let targets = adjustPlayerIds.filter((playerId) => {
+    const entry = result.find((row) => row.playerId === playerId);
+    return entry !== undefined && Math.abs(entry.pointDelta) < preferAdjustBelow;
+  });
+  if (targets.length === 0) {
+    targets = [...adjustPlayerIds];
+  }
+  targets.sort((left, right) => left - right);
+
+  if (Math.abs(total) <= ZERO_SUM_ROUND_TOLERANCE || targets.length === 1) {
+    const entry = result.find((row) => row.playerId === targets[0]);
+    if (entry) {
+      entry.pointDelta = round2(entry.pointDelta - total);
+    }
+    return result;
+  }
+
+  const share = round2(-total / targets.length);
+  for (const playerId of targets) {
     const entry = result.find((row) => row.playerId === playerId);
     if (entry) {
       entry.pointDelta = round2(entry.pointDelta + share);
     }
   }
 
-  total = round2(result.reduce((sum, entry) => sum + entry.pointDelta, 0));
-  if (Math.abs(total) > 0.01) {
-    const target = result.find((entry) => entry.playerId === adjustPlayerIds[0]);
-    if (target) {
-      target.pointDelta = round2(target.pointDelta - total);
+  const remainder = roundEntryTotal(result);
+  if (Math.abs(remainder) > 0.0001) {
+    const entry = result.find((row) => row.playerId === targets[0]);
+    if (entry) {
+      entry.pointDelta = round2(entry.pointDelta - remainder);
     }
   }
 
   return result;
+}
+
+export function finalizeRoundPointEntriesForSubmit<
+  T extends { playerId: number; pointDelta: number },
+>(entries: T[], adjustPlayerIds: number[]): { entries: T[]; total: number; balanced: boolean } {
+  const normalized = normalizePointEntriesZeroSum(entries, adjustPlayerIds);
+  const total = roundEntryTotal(normalized);
+  return {
+    entries: normalized,
+    total,
+    balanced:
+      Math.abs(total) < ZERO_SUM_AUTO_FIX_MAX &&
+      isRoundEntryTotalBalanced(total),
+  };
 }
 
 export function isAutoEligible(pointDelta: number): boolean {
