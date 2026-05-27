@@ -823,6 +823,10 @@ export function GameViewPage() {
       },
     });
 
+    const teamByPlayerId = new Map<number, "A" | "B">();
+    for (const id of teamA) teamByPlayerId.set(id, "A");
+    for (const id of teamB) teamByPlayerId.set(id, "B");
+
     const entries = mergeCalculatedEntriesWithGhostZeros(
       result.entries.map((entry) => ({
         playerId: Number(entry.playerId),
@@ -830,6 +834,7 @@ export function GameViewPage() {
       })),
       [...teamA, ...teamB],
       ghostPlayerIds,
+      { teamByPlayerId },
     );
 
     const playerNameById = new Map(

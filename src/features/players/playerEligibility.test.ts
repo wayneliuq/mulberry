@@ -37,6 +37,33 @@ describe("playerEligibility", () => {
     ]);
   });
 
+  it("redistributes ghost basketball deltas within team to preserve zero-sum", () => {
+    const merged = mergeCalculatedEntriesWithGhostZeros(
+      [
+        { playerId: 1, pointDelta: 3 },
+        { playerId: 2, pointDelta: -3 },
+        { playerId: 3, pointDelta: 3 },
+        { playerId: 99, pointDelta: -3 },
+      ],
+      [1, 2, 3, 99],
+      new Set([99]),
+      {
+        teamByPlayerId: new Map([
+          [1, "A"],
+          [2, "A"],
+          [3, "B"],
+          [99, "A"],
+        ]),
+      },
+    );
+
+    expect(merged.find((e) => e.playerId === 99)?.pointDelta).toBe(0);
+    const total = merged.reduce((sum, entry) => sum + entry.pointDelta, 0);
+    expect(Math.abs(total)).toBeLessThanOrEqual(0.01);
+    expect(merged.find((e) => e.playerId === 1)?.pointDelta).toBe(1.5);
+    expect(merged.find((e) => e.playerId === 2)?.pointDelta).toBe(-4.5);
+  });
+
   it("balances manual entries without assigning points to ghosts", () => {
     const result = balanceManualEntriesExcludingGhosts(
       [
