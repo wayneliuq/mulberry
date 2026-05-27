@@ -17,15 +17,19 @@ import { useBasketballSeasons } from "../features/basketball/useBasketballSeason
 import { calculateDixitRound } from "../features/game-types/dixit";
 import { calculateFightTheLandlordRound } from "../features/game-types/fightTheLandlord";
 import { getGameTypeOption } from "../features/game-types";
+import { buildBasketballScoredRoundEntries } from "../features/game-types/basketballRoundDraft";
 import {
   MANUAL_BALANCE_NO_AUTO_SLOTS_MESSAGE,
-  ZERO_SUM_AUTO_FIX_MAX,
   balanceManualPointEntries,
   clampToTwoDecimals,
   finalizeRoundPointEntriesForSubmit,
+  isRoundEntryTotalBalanced,
   parseManualPointInputs,
+  roundEntryTotal,
+  shiftPointEntriesToZeroSum,
 } from "../features/game-types/manualPointBalance";
 import { ManualRoundForm } from "../features/rounds/ManualRoundForm";
+import { RoundFormFooter } from "../features/rounds/RoundFormFooter";
 import {
   type WerewolfTeamId,
   WEREWOLF_TEAMS,
@@ -33,10 +37,8 @@ import {
 } from "../features/game-types/werewolves";
 import {
   DEFAULT_BASKETBALL_LEDGER_SCALE,
-  calculateBasketballRound,
   parseBasketballMatchFromRoundSnapshot,
   predictBasketballMatchWinProbabilities,
-  priorBasketballMatchesFromSeasonHistory,
 } from "../features/game-types/basketball";
 import {
   PlayerSortButtons,
@@ -121,6 +123,9 @@ export function GameViewPage() {
     teamA: "",
     teamB: "",
   });
+  const [basketballBalancedEntries, setBasketballBalancedEntries] = useState<
+    Array<{ playerId: number; pointDelta: number }> | null
+  >(null);
 
   const gameQuery = useQuery({
     queryKey: ["game", gameId],
@@ -197,6 +202,57 @@ export function GameViewPage() {
     });
     setBasketballTeamByPlayerId(next);
   }, [game?.gameTypeId, showRoundForm, basketballRosterKey]);
+
+  useEffect(() => {
+    setBasketballBalancedEntries(null);
+  }, [
+    basketballScores.teamA,
+    basketballScores.teamB,
+    basketballTeamByPlayerId,
+    basketballRosterKey,
+    basketballHistoryQuery.dataUpdatedAt,
+  ]);
+
+  const basketballDraft = useMemo(() => {
+    if (
+      !game ||
+      game.gameTypeId !== "basketball" ||
+      basketballHistoryQuery.isLoading
+    ) {
+      return null;
+    }
+
+    const teamA = sortedUnlockedPlayers
+      .filter((player) => basketballTeamByPlayerId[player.playerId] === "A")
+      .map((player) => player.playerId);
+    const teamB = sortedUnlockedPlayers
+      .filter((player) => basketballTeamByPlayerId[player.playerId] === "B")
+      .map((player) => player.playerId);
+
+    return buildBasketballScoredRoundEntries({
+      seasonHistory: basketballHistoryQuery.data ?? [],
+      teamAPlayerIds: teamA,
+      teamBPlayerIds: teamB,
+      scoreTeamA: Number(basketballScores.teamA),
+      scoreTeamB: Number(basketballScores.teamB),
+      ghostPlayerIds,
+    });
+  }, [
+    game,
+    basketballHistoryQuery.isLoading,
+    basketballHistoryQuery.data,
+    basketballTeamByPlayerId,
+    basketballScores.teamA,
+    basketballScores.teamB,
+    sortedUnlockedPlayers,
+    ghostPlayerIds,
+  ]);
+
+  const basketballDisplayEntries =
+    basketballBalancedEntries ?? basketballDraft?.entries ?? null;
+  const basketballDisplayTotal = basketballDisplayEntries
+    ? roundEntryTotal(basketballDisplayEntries)
+    : null;
 
   const invalidateGameData = async () => {
     await Promise.all([
@@ -504,7 +560,7 @@ export function GameViewPage() {
     );
     if (!balanced) {
       window.alert(
-        `Round entries do not balance (total ${total.toFixed(2)}). Adjust teams or report this game.`,
+        `Round entries do not balance (total ${total.toFixed(2)}). Use Balance to zero, then save.`,
       );
       return;
     }
@@ -786,6 +842,31 @@ export function GameViewPage() {
     });
   }
 
+  function handleBasketballBalanceToZero() {
+    const source = basketballBalancedEntries ?? basketballDraft?.entries;
+    if (!source) {
+      return;
+    }
+
+    const teamA = sortedUnlockedPlayers
+      .filter((player) => basketballTeamByPlayerId[player.playerId] === "A")
+      .map((player) => player.playerId);
+    const teamB = sortedUnlockedPlayers
+      .filter((player) => basketballTeamByPlayerId[player.playerId] === "B")
+      .map((player) => player.playerId);
+    const rosterIds = [...teamA, ...teamB];
+    const scoringPlayerIds = rosterIds.filter((id) => !ghostPlayerIds.has(id));
+    const adjustIds =
+      scoringPlayerIds.length > 0 ? scoringPlayerIds : rosterIds;
+
+    setBasketballBalancedEntries(
+      shiftPointEntriesToZeroSum(
+        source.map((entry) => ({ ...entry })),
+        adjustIds,
+      ),
+    );
+  }
+
   async function handleBasketballRoundSubmit() {
     if (!game) {
       return;
@@ -823,40 +904,39 @@ export function GameViewPage() {
       return;
     }
 
-    const priorRounds = priorBasketballMatchesFromSeasonHistory(
-      basketballHistoryQuery.data ?? [],
-    );
-    const result = calculateBasketballRound({
-      priorRounds,
-      match: {
+    const rosterIds = [...teamA, ...teamB];
+    const scoringPlayerIds = rosterIds.filter((id) => !ghostPlayerIds.has(id));
+    const adjustIds =
+      scoringPlayerIds.length > 0 ? scoringPlayerIds : rosterIds;
+
+    let entries = basketballBalancedEntries;
+    if (!entries) {
+      const draft = buildBasketballScoredRoundEntries({
+        seasonHistory: basketballHistoryQuery.data ?? [],
         teamAPlayerIds: teamA,
         teamBPlayerIds: teamB,
         scoreTeamA,
         scoreTeamB,
-      },
-    });
-
-    const teamByPlayerId = new Map<number, "A" | "B">();
-    for (const id of teamA) teamByPlayerId.set(id, "A");
-    for (const id of teamB) teamByPlayerId.set(id, "B");
-
-    const rosterIds = [...teamA, ...teamB];
-    const scoringPlayerIds = rosterIds.filter((id) => !ghostPlayerIds.has(id));
-    const { entries, total, balanced } = finalizeRoundPointEntriesForSubmit(
-      mergeCalculatedEntriesWithGhostZeros(
-        result.entries.map((entry) => ({
-          playerId: Number(entry.playerId),
-          pointDelta: entry.pointDelta,
-        })),
-        rosterIds,
         ghostPlayerIds,
-        { teamByPlayerId },
-      ),
-      scoringPlayerIds.length > 0 ? scoringPlayerIds : rosterIds,
-    );
-    if (!balanced) {
+      });
+      if (!draft) {
+        window.alert("Could not calculate points for this matchup.");
+        return;
+      }
+      const finalized = finalizeRoundPointEntriesForSubmit(
+        draft.entries,
+        adjustIds,
+      );
+      if (!finalized.balanced) {
+        window.alert(
+          `Round entries do not balance (total ${finalized.total.toFixed(2)}). Use Balance to zero, then save.`,
+        );
+        return;
+      }
+      entries = finalized.entries;
+    } else if (!isRoundEntryTotalBalanced(roundEntryTotal(entries))) {
       window.alert(
-        `Round entries do not balance (total ${total.toFixed(2)}). Adjust teams or report this game.`,
+        "Round still does not balance. Use Balance to zero, then save.",
       );
       return;
     }
@@ -889,6 +969,7 @@ export function GameViewPage() {
       },
     });
     setBasketballScores({ teamA: "", teamB: "" });
+    setBasketballBalancedEntries(null);
   }
 
   const manualPointStep =
@@ -1580,21 +1661,33 @@ export function GameViewPage() {
                     ))}
                   </div>
                 </div>
-                {createRoundMutation.error ? (
-                  <p className="form-error">{createRoundMutation.error.message}</p>
+                {basketballDisplayEntries && basketballDisplayEntries.length > 0 ? (
+                  <div className="stack-xs">
+                    <span className="muted">Point preview</span>
+                    <ul className="stack-xs muted basketball-point-preview">
+                      {basketballDisplayEntries.map((entry) => {
+                        const displayName =
+                          sortedUnlockedPlayers.find(
+                            (player) => player.playerId === entry.playerId,
+                          )?.displayName ?? entry.playerId;
+                        const rounded = clampToTwoDecimals(entry.pointDelta);
+                        return (
+                          <li key={entry.playerId}>
+                            {displayName}{" "}
+                            {rounded > 0 ? "+" : ""}
+                            {formatPoints(rounded)}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
                 ) : null}
-                <div className="inline-actions">
-                  <button type="submit" className="primary-button">
-                    Save round
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => setShowRoundForm(false)}
-                  >
-                    Cancel
-                  </button>
-                </div>
+                <RoundFormFooter
+                  imbalanceTotal={basketballDisplayTotal}
+                  onBalanceToZero={handleBasketballBalanceToZero}
+                  onCancel={() => setShowRoundForm(false)}
+                  submitError={createRoundMutation.error?.message}
+                />
               </form>
               </>
               )

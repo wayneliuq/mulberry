@@ -1,8 +1,14 @@
-import type { Dispatch, FormEvent, SetStateAction } from "react";
+import { useMemo, type Dispatch, FormEvent, SetStateAction } from "react";
+import {
+  parseManualPointInputs,
+  roundEntryTotal,
+  shiftPointEntriesToZeroSum,
+} from "../game-types/manualPointBalance";
 import {
   PlayerSortButtons,
   type PlayerSortMode,
 } from "../players/SortablePlayerList";
+import { RoundFormFooter } from "./RoundFormFooter";
 
 export type ManualRoundPlayer = {
   playerId: number;
@@ -54,6 +60,38 @@ export function ManualRoundForm({
   onBack,
 }: ManualRoundFormProps) {
   const clampToTwoDecimals = (value: number) => Math.round(value * 100) / 100;
+
+  const playerIds = players.map((player) => player.playerId);
+  const scoringPlayerIds = players
+    .filter((player) => !player.forceZero)
+    .map((player) => player.playerId);
+
+  const previewTotal = useMemo(() => {
+    const entries = parseManualPointInputs(inputs, playerIds).map((entry) => ({
+      playerId: entry.playerId,
+      pointDelta: players.find((p) => p.playerId === entry.playerId)?.forceZero
+        ? 0
+        : entry.pointDelta,
+    }));
+    return roundEntryTotal(entries);
+  }, [inputs, playerIds, players]);
+
+  function handleBalanceToZero() {
+    const entries = parseManualPointInputs(inputs, playerIds).map((entry) => ({
+      playerId: entry.playerId,
+      pointDelta: players.find((p) => p.playerId === entry.playerId)?.forceZero
+        ? 0
+        : entry.pointDelta,
+    }));
+    const adjustIds =
+      scoringPlayerIds.length > 0 ? scoringPlayerIds : playerIds;
+    const shifted = shiftPointEntriesToZeroSum(entries, adjustIds);
+    const nextInputs: Record<number, string> = {};
+    for (const entry of shifted) {
+      nextInputs[entry.playerId] = String(entry.pointDelta);
+    }
+    onInputsChange(nextInputs);
+  }
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -124,20 +162,14 @@ export function ManualRoundForm({
           </label>
         );
       })}
-      {submitError ? <p className="form-error">{submitError}</p> : null}
-      <div className="inline-actions">
-        <button type="submit" className="primary-button">
-          Save round
-        </button>
-        {backLabel && onBack ? (
-          <button type="button" className="secondary-button" onClick={onBack}>
-            {backLabel}
-          </button>
-        ) : null}
-        <button type="button" className="secondary-button" onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
+      <RoundFormFooter
+        imbalanceTotal={previewTotal}
+        onBalanceToZero={handleBalanceToZero}
+        onCancel={onCancel}
+        submitError={submitError}
+        backLabel={backLabel}
+        onBack={onBack}
+      />
     </form>
   );
 }

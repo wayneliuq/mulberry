@@ -889,6 +889,12 @@ tbody tr:last-child td {
   gap: var(--space-sm);
 }
 
+.basketball-point-preview {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
 .player-id-muted {
   font-size: 0.85em;
   color: var(--text-muted);

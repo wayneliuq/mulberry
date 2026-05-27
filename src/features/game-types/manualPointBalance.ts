@@ -115,6 +115,47 @@ export function finalizeRoundPointEntriesForSubmit<
   };
 }
 
+/**
+ * Spreads the current imbalance evenly across adjustPlayerIds (user opt-in).
+ * Ghost / force-zero players should be omitted from adjustPlayerIds.
+ */
+export function shiftPointEntriesToZeroSum<
+  T extends { playerId: number; pointDelta: number },
+>(entries: T[], adjustPlayerIds: number[]): T[] {
+  if (entries.length === 0 || adjustPlayerIds.length === 0) {
+    return entries.map((entry) => ({ ...entry, pointDelta: round2(entry.pointDelta) }));
+  }
+
+  const result = entries.map((entry) => ({
+    ...entry,
+    pointDelta: round2(entry.pointDelta),
+  }));
+
+  let total = roundEntryTotal(result);
+  if (Math.abs(total) < 0.0001) {
+    return result;
+  }
+
+  const targets = [...adjustPlayerIds].sort((left, right) => left - right);
+  const share = round2(-total / targets.length);
+  for (const playerId of targets) {
+    const entry = result.find((row) => row.playerId === playerId);
+    if (entry) {
+      entry.pointDelta = round2(entry.pointDelta + share);
+    }
+  }
+
+  const remainder = roundEntryTotal(result);
+  if (Math.abs(remainder) > 0.0001) {
+    const entry = result.find((row) => row.playerId === targets[0]);
+    if (entry) {
+      entry.pointDelta = round2(entry.pointDelta - remainder);
+    }
+  }
+
+  return result;
+}
+
 export function isAutoEligible(pointDelta: number): boolean {
   return Math.abs(round2(pointDelta)) < 0.01;
 }

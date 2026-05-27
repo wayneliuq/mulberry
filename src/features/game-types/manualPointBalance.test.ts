@@ -6,6 +6,7 @@ import {
   normalizePointEntriesZeroSum,
   round2,
   roundEntryTotal,
+  shiftPointEntriesToZeroSum,
 } from "./manualPointBalance";
 
 function expectZeroSum(entries: { pointDelta: number }[]) {
@@ -37,6 +38,21 @@ describe("normalizePointEntriesZeroSum", () => {
     );
     expect(isRoundEntryTotalBalanced(roundEntryTotal(normalized))).toBe(true);
     expect(normalized.find((e) => e.playerId === 3)?.pointDelta).toBe(0.34);
+  });
+
+  it("shiftPointEntriesToZeroSum spreads any imbalance evenly", () => {
+    const shifted = shiftPointEntriesToZeroSum(
+      [
+        { playerId: 1, pointDelta: 10 },
+        { playerId: 2, pointDelta: 5 },
+        { playerId: 3, pointDelta: 0 },
+      ],
+      [1, 2, 3],
+    );
+    expect(isRoundEntryTotalBalanced(roundEntryTotal(shifted))).toBe(true);
+    expect(shifted.find((e) => e.playerId === 1)?.pointDelta).toBe(5);
+    expect(shifted.find((e) => e.playerId === 2)?.pointDelta).toBe(0);
+    expect(shifted.find((e) => e.playerId === 3)?.pointDelta).toBe(-5);
   });
 
   it("does not alter imbalances of one point or more", () => {
