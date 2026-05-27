@@ -37,6 +37,7 @@ type RawGamePlayer = {
     display_name: string;
     family_id: string | null;
     is_active?: boolean;
+    is_score_neutral_hidden?: boolean;
   }> | null;
 };
 
@@ -154,6 +155,7 @@ type RawPlayer = {
   id: number;
   display_name: string;
   family_id: string | null;
+  is_score_neutral_hidden?: boolean;
 };
 
 function assertData<T>(data: T | null, error: { message: string } | null) {
@@ -172,7 +174,7 @@ export async function fetchPlayers() {
   const { data, error } = await selectAll<RawPlayer>((from, to) =>
     supabase
       .from("players")
-      .select("id, display_name, family_id")
+      .select("id, display_name, family_id, is_score_neutral_hidden")
       .eq("is_active", true)
       .order("display_name", { ascending: true })
       .range(from, to),
@@ -186,6 +188,7 @@ export async function fetchPlayers() {
     id: player.id,
     displayName: player.display_name,
     familyId: player.family_id,
+    isScoreNeutralHidden: Boolean(player.is_score_neutral_hidden),
   }));
 }
 
@@ -365,7 +368,9 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
       .single(),
     supabase
       .from("game_players")
-      .select("id, player_id, join_order, is_locked, players(id, display_name, family_id, is_active)")
+      .select(
+        "id, player_id, join_order, is_locked, players(id, display_name, family_id, is_active, is_score_neutral_hidden)",
+      )
       .eq("game_id", gameId)
       .order("join_order", { ascending: true }),
     supabase
@@ -466,6 +471,7 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
         familyId: nested?.family_id ?? null,
         joinOrder: player.join_order,
         isLocked: player.is_locked,
+        isScoreNeutralHidden: Boolean(nested?.is_score_neutral_hidden),
         total: totalByGamePlayerId.get(player.id) ?? 0,
       };
     }),
@@ -658,7 +664,7 @@ export async function fetchBasketballDashboardData(
     selectAll<RawPlayer>((from, to) =>
       supabase
         .from("players")
-        .select("id, display_name, family_id")
+        .select("id, display_name, family_id, is_score_neutral_hidden")
         .eq("is_active", true)
         .range(from, to),
     ),
@@ -687,7 +693,14 @@ export async function fetchBasketballDashboardData(
       pointDelta: entry.point_delta,
     }));
 
+  const activePlayerIds = new Set(
+    roundEntries.map((entry) => entry.playerId),
+  );
   const players = playersResult.data
+    .filter(
+      (player) =>
+        activePlayerIds.has(player.id) && !player.is_score_neutral_hidden,
+    )
     .map((player) => ({
       id: player.id,
       displayName: player.display_name,
@@ -699,16 +712,9 @@ export async function fetchBasketballDashboardData(
       }),
     );
 
-  const activePlayerIds = new Set(
-    roundEntries.map((entry) => entry.playerId),
-  );
-  const filteredPlayers = players.filter((player) =>
-    activePlayerIds.has(player.id),
-  );
-
   return {
     seasonId,
-    players: filteredPlayers,
+    players,
     rounds,
     roundEntries,
   };
@@ -744,7 +750,7 @@ export async function fetchLeaderboards(
     selectAll<RawPlayer>((from, to) =>
       supabase
         .from("players")
-        .select("id, display_name, family_id")
+        .select("id, display_name, family_id, is_score_neutral_hidden")
         .eq("is_active", true)
         .range(from, to),
     ),
@@ -765,6 +771,13 @@ export async function fetchLeaderboards(
   if (familiesResult.error) {
     throw new Error(familiesResult.error.message);
   }
+
+  const allPlayers = playersResult.data;
+  const hiddenPlayerIds = new Set(
+    allPlayers
+      .filter((p) => p.is_score_neutral_hidden)
+      .map((p) => p.id),
+  );
 
   const games = gamesResult.data;
   const gameTypeByGameId = new Map(games.map((g) => [g.id, g.game_type_id]));
@@ -829,6 +842,9 @@ export async function fetchLeaderboards(
 
   const moneyByPlayerId = new Map<number, number>();
   for (const row of moneyRows) {
+    if (hiddenPlayerIds.has(row.player_id)) {
+      continue;
+    }
     const settlement = row.money_settlements;
     const gameId = Array.isArray(settlement)
       ? settlement[0]?.game_id
@@ -844,6 +860,9 @@ export async function fetchLeaderboards(
     { totalPoints: number; roundsWon: number; roundsLost: number }
   >();
   for (const entry of roundEntries) {
+    if (hiddenPlayerIds.has(entry.player_id)) {
+      continue;
+    }
     const existing = pointsByPlayerId.get(entry.player_id) ?? {
       totalPoints: 0,
       roundsWon: 0,
@@ -864,6 +883,7 @@ export async function fetchLeaderboards(
     >();
     for (const entry of roundEntries) {
       if (!filteredGameIds.has(entry.game_id)) continue;
+      if (hiddenPlayerIds.has(entry.player_id)) continue;
       const byPlayer =
         gameTotalsByPlayer.get(entry.game_id) ?? new Map<number, number>();
       const current = byPlayer.get(entry.player_id) ?? 0;
@@ -886,6 +906,7 @@ export async function fetchLeaderboards(
       filteredGameIds.has(row.game_id),
     );
     for (const total of filteredGameTotals) {
+      if (hiddenPlayerIds.has(total.player_id)) continue;
       const existing = gameWinLossByPlayerId.get(total.player_id) ?? {
         gamesWon: 0,
         gamesLost: 0,
@@ -896,7 +917,6 @@ export async function fetchLeaderboards(
     }
   }
 
-  const allPlayers = playersResult.data;
   const activePlayerIds = new Set(allPlayers.map((p) => p.id));
   const playerById = new Map(allPlayers.map((p) => [p.id, p]));
 
@@ -907,6 +927,7 @@ export async function fetchLeaderboards(
 
   const playerRows: PlayerLeaderboardRow[] = Array.from(allPlayerIds)
     .filter((id) => activePlayerIds.has(id))
+    .filter((id) => !hiddenPlayerIds.has(id))
     .filter((id) => {
       if (!basketballSeasonRoundIds) return true;
       const points = pointsByPlayerId.get(id);
@@ -946,7 +967,9 @@ export async function fetchLeaderboards(
   const familyRows: FamilyLeaderboardRow[] = families
     .map((family) => {
       const members = allPlayers.filter(
-        (player) => player.family_id === family.id,
+        (player) =>
+          player.family_id === family.id &&
+          !player.is_score_neutral_hidden,
       );
       if (members.length < 2) {
         return null;

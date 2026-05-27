@@ -7,6 +7,8 @@ import {
 export type ManualRoundPlayer = {
   playerId: number;
   displayName: string;
+  /** Locked to 0 points (ghost / score-neutral hidden). */
+  forceZero?: boolean;
 };
 
 type ManualRoundFormProps = {
@@ -62,54 +64,66 @@ export function ManualRoundForm({
     <form className="stack-sm" onSubmit={handleSubmit}>
       <p className="muted">{helperText}</p>
       <PlayerSortButtons sortMode={sortMode} onSortChange={onSortChange} />
-      {players.map((player) => (
-        <label key={player.playerId} className="stack-xs">
-          <span>{player.displayName}</span>
-          <div className="inline-actions point-input-row">
-            <button
-              type="button"
-              className="icon-button"
-              aria-label={`Decrease ${player.displayName} by ${pointStep}`}
-              onClick={() =>
-                adjustPointInput(
-                  onInputsChange,
-                  player.playerId,
-                  -pointStep,
-                  clampToTwoDecimals,
-                )
-              }
-            >
-              −
-            </button>
-            <input
-              type="number"
-              step="0.01"
-              value={inputs[player.playerId] ?? "0"}
-              onChange={(event) =>
-                onInputsChange((current) => ({
-                  ...current,
-                  [player.playerId]: event.target.value,
-                }))
-              }
-            />
-            <button
-              type="button"
-              className="icon-button"
-              aria-label={`Increase ${player.displayName} by ${pointStep}`}
-              onClick={() =>
-                adjustPointInput(
-                  onInputsChange,
-                  player.playerId,
-                  pointStep,
-                  clampToTwoDecimals,
-                )
-              }
-            >
-              +
-            </button>
-          </div>
-        </label>
-      ))}
+      {players.map((player) => {
+        const forceZero = Boolean(player.forceZero);
+        return (
+          <label key={player.playerId} className="stack-xs">
+            <span>
+              {player.displayName}
+              {forceZero ? (
+                <span className="pill pill-small"> Ghost · always 0</span>
+              ) : null}
+            </span>
+            <div className="inline-actions point-input-row">
+              <button
+                type="button"
+                className="icon-button"
+                disabled={forceZero}
+                aria-label={`Decrease ${player.displayName} by ${pointStep}`}
+                onClick={() =>
+                  adjustPointInput(
+                    onInputsChange,
+                    player.playerId,
+                    -pointStep,
+                    clampToTwoDecimals,
+                  )
+                }
+              >
+                −
+              </button>
+              <input
+                type="number"
+                step="0.01"
+                value={forceZero ? "0" : (inputs[player.playerId] ?? "0")}
+                readOnly={forceZero}
+                disabled={forceZero}
+                onChange={(event) =>
+                  onInputsChange((current) => ({
+                    ...current,
+                    [player.playerId]: event.target.value,
+                  }))
+                }
+              />
+              <button
+                type="button"
+                className="icon-button"
+                disabled={forceZero}
+                aria-label={`Increase ${player.displayName} by ${pointStep}`}
+                onClick={() =>
+                  adjustPointInput(
+                    onInputsChange,
+                    player.playerId,
+                    pointStep,
+                    clampToTwoDecimals,
+                  )
+                }
+              >
+                +
+              </button>
+            </div>
+          </label>
+        );
+      })}
       {submitError ? <p className="form-error">{submitError}</p> : null}
       <div className="inline-actions">
         <button type="submit" className="primary-button">

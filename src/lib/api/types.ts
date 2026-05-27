@@ -15,12 +15,15 @@ export type AdminWriteAction =
   | "delete_round"
   | "calculate_settlement"
   | "undo_settlement"
-  | "rollover_basketball_season";
+  | "rollover_basketball_season"
+  | "toggle_player_score_neutral_hidden";
 
 export type PlayerSummary = {
   id: number;
   displayName: string;
   familyId: string | null;
+  /** When true, player is hidden from leaderboards and treated as score-neutral. */
+  isScoreNeutralHidden: boolean;
 };
 
 export type GameSummary = {
@@ -41,6 +44,7 @@ export type GamePlayerSummary = {
   familyId: string | null;
   joinOrder: number;
   isLocked: boolean;
+  isScoreNeutralHidden: boolean;
   total: number;
 };
 

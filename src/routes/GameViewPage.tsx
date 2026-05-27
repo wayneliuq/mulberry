@@ -39,6 +39,10 @@ import {
   PlayerSortButtons,
   useSortedPlayers,
 } from "../features/players/SortablePlayerList";
+import {
+  balanceManualEntriesExcludingGhosts,
+  mergeCalculatedEntriesWithGhostZeros,
+} from "../features/players/playerEligibility";
 import { IconGlyph } from "../features/ui/IconGlyph";
 import { adminWrite } from "../lib/api/admin";
 import {
@@ -141,6 +145,15 @@ export function GameViewPage() {
 
   const game = gameQuery.data;
   const allPlayers = playersQuery.data ?? [];
+  const ghostPlayerIds = useMemo(
+    () =>
+      new Set(
+        allPlayers
+          .filter((player) => player.isScoreNeutralHidden)
+          .map((player) => player.id),
+      ),
+    [allPlayers],
+  );
   const currentGamePlayerIds = new Set(game?.players.map((player) => player.playerId) ?? []);
   const availablePlayers = allPlayers.filter(
     (player) => !currentGamePlayerIds.has(player.id),
@@ -469,8 +482,9 @@ export function GameViewPage() {
     metadata: Record<string, unknown>;
     nameById: Map<number, string>;
   }) {
-    const balance = balanceManualPointEntries(
+    const balance = balanceManualEntriesExcludingGhosts(
       parseManualPointInputs(inputs, playerIds),
+      ghostPlayerIds,
     );
     if (!balance.ok) {
       window.alert(MANUAL_BALANCE_NO_AUTO_SLOTS_MESSAGE);
@@ -510,7 +524,10 @@ export function GameViewPage() {
   }
 
   async function handleDixitRoundSubmit() {
-    const entries = unlockedPlayers.map((player) => ({
+    const scoringPlayers = unlockedPlayers.filter(
+      (player) => !ghostPlayerIds.has(player.playerId),
+    );
+    const entries = scoringPlayers.map((player) => ({
       playerId: player.playerId,
       pointDelta: clampToTwoDecimals(
         Number(dixitPointInputs[player.playerId] ?? 0),
@@ -518,10 +535,14 @@ export function GameViewPage() {
       joinOrder: player.joinOrder,
     }));
     const result = calculateDixitRound({ entries });
-    const outbound = result.entries.map((entry) => ({
-      playerId: Number(entry.playerId),
-      pointDelta: clampToTwoDecimals(entry.pointDelta),
-    }));
+    const outbound = mergeCalculatedEntriesWithGhostZeros(
+      result.entries.map((entry) => ({
+        playerId: Number(entry.playerId),
+        pointDelta: clampToTwoDecimals(entry.pointDelta),
+      })),
+      unlockedPlayers.map((player) => player.playerId),
+      ghostPlayerIds,
+    );
     const byPlayerId = new Map(
       outbound.map((entry) => [entry.playerId, entry.pointDelta]),
     );
@@ -551,11 +572,14 @@ export function GameViewPage() {
       return;
     }
 
-    const activePlayerIds = unlockedPlayers.map((player) =>
+    const scoringPlayers = unlockedPlayers.filter(
+      (player) => !ghostPlayerIds.has(player.playerId),
+    );
+    const activePlayerIds = scoringPlayers.map((player) =>
       String(player.playerId),
     );
     const landlordSideSelections: string[] = [];
-    for (const player of unlockedPlayers) {
+    for (const player of scoringPlayers) {
       const count = landlordValues.selections[player.playerId] ?? 0;
       for (let i = 0; i < count; i += 1) {
         landlordSideSelections.push(String(player.playerId));
@@ -579,10 +603,14 @@ export function GameViewPage() {
     const playerNameById = new Map(
       unlockedPlayers.map((player) => [String(player.playerId), player.displayName]),
     );
-    const entries = result.entries.map((entry) => ({
-      playerId: Number(entry.playerId),
-      pointDelta: entry.pointDelta,
-    }));
+    const entries = mergeCalculatedEntriesWithGhostZeros(
+      result.entries.map((entry) => ({
+        playerId: Number(entry.playerId),
+        pointDelta: entry.pointDelta,
+      })),
+      unlockedPlayers.map((player) => player.playerId),
+      ghostPlayerIds,
+    );
     const summaryText = entries
       .map((entry) => {
         const displayName = playerNameById.get(String(entry.playerId)) ?? entry.playerId;
@@ -696,7 +724,14 @@ export function GameViewPage() {
 
   async function handleWerewolvesRoundSubmit() {
     if (!game || unlockedPlayers.length < 3) return;
-    const activePlayerIds = unlockedPlayers.map((p) => String(p.playerId));
+    const scoringPlayers = unlockedPlayers.filter(
+      (player) => !ghostPlayerIds.has(player.playerId),
+    );
+    if (scoringPlayers.length < 3) {
+      window.alert("Need at least three scoring (non-ghost) unlocked players.");
+      return;
+    }
+    const activePlayerIds = scoringPlayers.map((p) => String(p.playerId));
     const playerAssignments = activePlayerIds.map((playerId) => ({
       playerId,
       team: (werewolfValues.playerTeams[Number(playerId)] ??
@@ -706,16 +741,22 @@ export function GameViewPage() {
       activePlayerIds,
       pointBasis: game.pointBasis,
       playerAssignments,
-      survivedPlayerIds: werewolfValues.survivedIds.map(String),
+      survivedPlayerIds: werewolfValues.survivedIds
+        .filter((id) => !ghostPlayerIds.has(id))
+        .map(String),
       winningTeamIds: werewolfValues.winningTeamIds,
     });
     const playerNameById = new Map(
       unlockedPlayers.map((p) => [String(p.playerId), p.displayName]),
     );
-    const entries = result.entries.map((entry) => ({
-      playerId: Number(entry.playerId),
-      pointDelta: entry.pointDelta,
-    }));
+    const entries = mergeCalculatedEntriesWithGhostZeros(
+      result.entries.map((entry) => ({
+        playerId: Number(entry.playerId),
+        pointDelta: entry.pointDelta,
+      })),
+      unlockedPlayers.map((player) => player.playerId),
+      ghostPlayerIds,
+    );
     const summaryText = entries
       .map(
         (e) =>
@@ -782,10 +823,14 @@ export function GameViewPage() {
       },
     });
 
-    const entries = result.entries.map((entry) => ({
-      playerId: Number(entry.playerId),
-      pointDelta: clampToTwoDecimals(entry.pointDelta),
-    }));
+    const entries = mergeCalculatedEntriesWithGhostZeros(
+      result.entries.map((entry) => ({
+        playerId: Number(entry.playerId),
+        pointDelta: clampToTwoDecimals(entry.pointDelta),
+      })),
+      [...teamA, ...teamB],
+      ghostPlayerIds,
+    );
 
     const playerNameById = new Map(
       sortedUnlockedPlayers.map((player) => [
@@ -825,6 +870,7 @@ export function GameViewPage() {
   const manualRoundPlayers = sortedUnlockedPlayers.map((player) => ({
     playerId: player.playerId,
     displayName: player.displayName,
+    forceZero: ghostPlayerIds.has(player.playerId),
   }));
 
   const basketballManualPlayers = sortedUnlockedPlayers
@@ -836,6 +882,7 @@ export function GameViewPage() {
     .map((player) => ({
       playerId: player.playerId,
       displayName: player.displayName,
+      forceZero: ghostPlayerIds.has(player.playerId),
     }));
 
   function adjustPointInput(
@@ -1776,17 +1823,28 @@ export function GameViewPage() {
                 className={player.isLocked ? "list-item player-list-item-locked" : "list-item"}
               >
                 <div className="stack-xs">
-                  <strong className="text-wrap-safe">{player.displayName}</strong>
+                  <strong className="text-wrap-safe">
+                    {player.displayName}
+                    {player.isScoreNeutralHidden ? (
+                      <span className="pill pill-small"> Ghost</span>
+                    ) : null}
+                  </strong>
                   <p
                     className={
-                      player.total > 0
-                        ? "score-positive"
-                        : player.total < 0
-                          ? "score-negative"
-                          : "score-neutral"
+                      player.isScoreNeutralHidden
+                        ? "score-neutral"
+                        : player.total > 0
+                          ? "score-positive"
+                          : player.total < 0
+                            ? "score-negative"
+                            : "score-neutral"
                     }
                   >
-                    {player.total > 0 ? `+${formattedTotal}` : formattedTotal}
+                    {player.isScoreNeutralHidden
+                      ? "0 (ghost)"
+                      : player.total > 0
+                        ? `+${formattedTotal}`
+                        : formattedTotal}
                   </p>
                 </div>
                 <div className="inline-actions player-row-actions">

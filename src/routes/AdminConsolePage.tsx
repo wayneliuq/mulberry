@@ -107,6 +107,35 @@ export function AdminConsolePage() {
     },
   });
 
+  const toggleGhostMutation = useMutation({
+    mutationFn: async ({
+      playerId,
+      isScoreNeutralHidden,
+    }: {
+      playerId: number;
+      isScoreNeutralHidden: boolean;
+    }) => {
+      if (!password) {
+        throw new Error("Admin session has expired. Please log in again.");
+      }
+
+      return adminWrite({
+        action: "toggle_player_score_neutral_hidden",
+        password,
+        playerId,
+        isScoreNeutralHidden,
+      });
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["players"] }),
+        queryClient.invalidateQueries({ queryKey: ["game"] }),
+        queryClient.invalidateQueries({ queryKey: ["leaderboards"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboards"] }),
+      ]);
+    },
+  });
+
   const deletePlayerMutation = useMutation({
     mutationFn: async (playerId: number) => {
       if (!password) {
@@ -237,9 +266,27 @@ export function AdminConsolePage() {
                     </div>
                     <p className="muted">
                       {player.familyId ? `Family linked` : "No family set"}
+                      {player.isScoreNeutralHidden ? " · Ghost (0 pts, hidden)" : ""}
                     </p>
                   </div>
                 </div>
+
+              <label className="checkbox-item">
+                <input
+                  type="checkbox"
+                  checked={player.isScoreNeutralHidden}
+                  disabled={!isAdmin || toggleGhostMutation.isPending}
+                  onChange={(event) => {
+                    void toggleGhostMutation.mutateAsync({
+                      playerId: player.id,
+                      isScoreNeutralHidden: event.target.checked,
+                    });
+                  }}
+                />
+                <span>
+                  Ghost player (always 0 points, hidden from leaderboards)
+                </span>
+              </label>
 
               <form
                 className="form-grid"
@@ -323,6 +370,9 @@ export function AdminConsolePage() {
         ) : null}
         {setFamilyMutation.error ? (
           <p className="form-error">{setFamilyMutation.error.message}</p>
+        ) : null}
+        {toggleGhostMutation.error ? (
+          <p className="form-error">{toggleGhostMutation.error.message}</p>
         ) : null}
         {deletePlayerMutation.error ? (
           <p className="form-error">{deletePlayerMutation.error.message}</p>

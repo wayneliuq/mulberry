@@ -124,6 +124,12 @@ const actionSchema = z.discriminatedUnion("action", [
     password: z.string(),
     force: z.boolean().optional(),
   }),
+  z.object({
+    action: z.literal("toggle_player_score_neutral_hidden"),
+    password: z.string(),
+    playerId: z.number().int().positive(),
+    isScoreNeutralHidden: z.boolean(),
+  }),
 ]);
 
 type AdminAction = z.infer<typeof actionSchema>;
@@ -132,7 +138,86 @@ type PlayerRow = {
   id: number;
   display_name: string;
   family_id: string | null;
+  is_score_neutral_hidden?: boolean;
 };
+
+const SCORE_NEUTRAL_EPSILON = 0.01;
+
+function isNearZeroPointDelta(value: number): boolean {
+  return Math.abs(value) <= SCORE_NEUTRAL_EPSILON;
+}
+
+async function fetchScoreNeutralHiddenPlayerIds(
+  supabase: Awaited<ReturnType<typeof createVerifiedAdminClient>>["supabase"],
+  playerIds: number[],
+): Promise<Set<number>> {
+  if (playerIds.length === 0) {
+    return new Set();
+  }
+
+  const { data, error } = await supabase
+    .from("players")
+    .select("id, is_score_neutral_hidden")
+    .in("id", playerIds);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return new Set(
+    (data ?? [])
+      .filter((row) => row.is_score_neutral_hidden === true)
+      .map((row) => row.id as number),
+  );
+}
+
+async function assertCanEnableScoreNeutralHidden(
+  supabase: Awaited<ReturnType<typeof createVerifiedAdminClient>>["supabase"],
+  playerId: number,
+) {
+  const { data: openGames, error: openGamesError } = await supabase
+    .from("games")
+    .select("id")
+    .eq("status", "open");
+
+  if (openGamesError) {
+    throw new Error(openGamesError.message);
+  }
+
+  const openGameIds = (openGames ?? []).map((game) => game.id as string);
+  if (openGameIds.length === 0) {
+    return;
+  }
+
+  const { count, error: roundEntriesError } = await supabase
+    .from("round_entries")
+    .select("id", { count: "exact", head: true })
+    .eq("player_id", playerId)
+    .in("game_id", openGameIds);
+
+  if (roundEntriesError) {
+    throw new Error(roundEntriesError.message);
+  }
+
+  if ((count ?? 0) > 0) {
+    throw new Error(
+      "Cannot enable ghost mode while this player has round history in an open game. Settle or clear those rounds first.",
+    );
+  }
+}
+
+function assertScoreNeutralRoundEntries(
+  entries: Array<{ playerId: number; pointDelta: number }>,
+  hiddenPlayerIds: Set<number>,
+) {
+  for (const entry of entries) {
+    if (hiddenPlayerIds.has(entry.playerId) && !isNearZeroPointDelta(entry.pointDelta)) {
+      throw new Error(
+        "Ghost players must receive exactly zero points in every round.",
+      );
+    }
+  }
+}
 
 type GamePlayerRow = {
   id: string;
@@ -410,6 +495,40 @@ async function handleSetPlayerFamily(
     {
       family_id: familyId,
       family_name: action.familyName?.trim() || null,
+    },
+  );
+
+  return jsonResponse({ player: data });
+}
+
+async function handleTogglePlayerScoreNeutralHidden(
+  supabase: Awaited<ReturnType<typeof createVerifiedAdminClient>>["supabase"],
+  action: Extract<AdminAction, { action: "toggle_player_score_neutral_hidden" }>,
+) {
+  if (action.isScoreNeutralHidden) {
+    await assertCanEnableScoreNeutralHidden(supabase, action.playerId);
+  }
+
+  const { data, error } = await supabase
+    .from("players")
+    .update({
+      is_score_neutral_hidden: action.isScoreNeutralHidden,
+    })
+    .eq("id", action.playerId)
+    .select("id, display_name, family_id, is_score_neutral_hidden")
+    .single<PlayerRow>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  await insertAuditLog(
+    supabase,
+    "toggle_player_score_neutral_hidden",
+    "player",
+    String(data.id),
+    {
+      is_score_neutral_hidden: data.is_score_neutral_hidden ?? false,
     },
   );
 
@@ -739,6 +858,12 @@ async function handleCreateRound(
     throw new Error("Round entries must not repeat players.");
   }
 
+  const hiddenPlayerIds = await fetchScoreNeutralHiddenPlayerIds(
+    supabase,
+    entryPlayerIds,
+  );
+  assertScoreNeutralRoundEntries(action.entries, hiddenPlayerIds);
+
   const unlockedPlayerIds = new Set(
     unlockedGamePlayers.map((gamePlayer) => gamePlayer.player_id),
   );
@@ -986,25 +1111,49 @@ async function handleCalculateSettlement(
     throw new Error("Cannot settle a game with no players.");
   }
 
+  const hiddenPlayerIds = await fetchScoreNeutralHiddenPlayerIds(
+    supabase,
+    typedTotals.map((row) => row.player_id),
+  );
+
+  for (const total of typedTotals) {
+    if (
+      hiddenPlayerIds.has(total.player_id) &&
+      !isNearZeroPointDelta(Number(total.point_total))
+    ) {
+      throw new Error(
+        "Cannot settle while a ghost player has non-zero points in this game.",
+      );
+    }
+  }
+
+  const settlingTotals = typedTotals.filter(
+    (row) => !hiddenPlayerIds.has(row.player_id),
+  );
+
+  if (settlingTotals.length === 0) {
+    throw new Error("Cannot settle a game with no scoring players.");
+  }
+
   const isZeroMoneySettlement = game.money_per_point_cents === 0;
 
   if (!isZeroMoneySettlement) {
-    const totalPoints = typedTotals.reduce(
+    const totalPoints = settlingTotals.reduce(
       (sum, total) => sum + Number(total.point_total),
       0,
     );
 
-    if (Math.abs(totalPoints) > 0.01) {
+    if (Math.abs(totalPoints) > SCORE_NEUTRAL_EPSILON) {
       throw new Error("Game totals must sum to zero before settlement.");
     }
   }
 
   const { data: players, error: playersError } = await supabase
     .from("players")
-    .select("id, display_name, family_id")
+    .select("id, display_name, family_id, is_score_neutral_hidden")
     .in(
       "id",
-      typedTotals.map((row) => row.player_id),
+      settlingTotals.map((row) => row.player_id),
     );
 
   if (playersError) {
@@ -1045,7 +1194,7 @@ async function handleCalculateSettlement(
   > = new Map();
 
   if (isZeroMoneySettlement) {
-    perPlayerImpacts = typedTotals.map((row) => ({
+    perPlayerImpacts = settlingTotals.map((row) => ({
       playerId: row.player_id,
       amountCents: 0,
       displayName: playerById.get(row.player_id)?.display_name ?? String(row.player_id),
@@ -1054,7 +1203,7 @@ async function handleCalculateSettlement(
     groupedUnits = [];
   } else {
     const moneyPerPoint = game.money_per_point_cents;
-    const rawAmounts = typedTotals.map((row) => {
+    const rawAmounts = settlingTotals.map((row) => {
       const pointTotal = Number(row.point_total);
       const rawCents = pointTotal * moneyPerPoint;
       return {
@@ -1299,6 +1448,8 @@ Deno.serve(async (request) => {
         return await handleSetPlayerFamily(supabase, action);
       case "delete_player":
         return await handleDeletePlayer(supabase, action);
+      case "toggle_player_score_neutral_hidden":
+        return await handleTogglePlayerScoreNeutralHidden(supabase, action);
       case "create_game":
         return await handleCreateGame(supabase, action);
       case "add_players_to_game":
