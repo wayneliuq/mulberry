@@ -65,7 +65,7 @@ describe("playerEligibility", () => {
     expect(merged.find((e) => e.playerId === 2)?.pointDelta).toBe(-4.5);
   });
 
-  it("redistributes ghost-only team drain to all scorers", () => {
+  it("redistributes ghost-only team drain to opposing scorers", () => {
     const merged = applyGhostPlayerZeroDeltas(
       [
         { playerId: 99, pointDelta: -12 },

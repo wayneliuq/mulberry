@@ -123,6 +123,19 @@ export function priorBasketballMatchesFromRoundSnapshots(
 }
 
 /**
+ * Prior matches from season history rows already ordered chronologically
+ * (e.g. `fetchBasketballRoundHistory` by `created_at`). Used for new-round scoring
+ * and aligned with win-probability replay in the game view.
+ */
+export function priorBasketballMatchesFromSeasonHistory(
+  rounds: Array<{ settingsSnapshot?: Record<string, unknown> }>,
+): BasketballMatchInput[] {
+  return rounds
+    .map((round) => parseBasketballMatchFromRoundSnapshot(round.settingsSnapshot))
+    .filter((m): m is BasketballMatchInput => m !== null);
+}
+
+/**
  * Basketball rounds strictly before `beforeRoundNumber`, parsed and ordered for replay.
  */
 export function priorBasketballMatchesStrictlyBeforeRound(

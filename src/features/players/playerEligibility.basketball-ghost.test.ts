@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateBasketballRound,
-  priorBasketballMatchesFromRoundSnapshots,
+  priorBasketballMatchesFromSeasonHistory,
 } from "../game-types/basketball";
 import { clampToTwoDecimals } from "../game-types/manualPointBalance";
 import { mergeCalculatedEntriesWithGhostZeros } from "./playerEligibility";
@@ -40,9 +40,9 @@ describe("basketball ghost merge zero-sum", () => {
     scoreTeamB: 7,
   };
 
-  it("stays zero-sum on second round with ghost (game-scoped priors)", () => {
-    const priorRounds = priorBasketballMatchesFromRoundSnapshots([
-      { roundNumber: 1, settingsSnapshot: { metadata: { mode: "basketball", ...firstMatch } } },
+  it("stays zero-sum on second round with ghost (season-scoped priors)", () => {
+    const priorRounds = priorBasketballMatchesFromSeasonHistory([
+      { settingsSnapshot: { metadata: { mode: "basketball", ...firstMatch } } },
     ]);
     const { total } = mergeBasketballWithGhost(
       priorRounds,

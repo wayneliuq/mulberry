@@ -101,6 +101,11 @@ export function applyGhostPlayerZeroDeltas<
       }
       let recipients = groups.get(team) ?? [];
       if (recipients.length === 0) {
+        recipients = scoringPlayerIds.filter(
+          (playerId) => teamByPlayerId.get(playerId) !== team,
+        );
+      }
+      if (recipients.length === 0) {
         recipients = scoringPlayerIds;
       }
       distributeAmountAmong(result, recipients, round2(teamGhostDrain));

@@ -34,7 +34,7 @@ import {
   calculateBasketballRound,
   parseBasketballMatchFromRoundSnapshot,
   predictBasketballMatchWinProbabilities,
-  priorBasketballMatchesFromRoundSnapshots,
+  priorBasketballMatchesFromSeasonHistory,
 } from "../features/game-types/basketball";
 import {
   PlayerSortButtons,
@@ -806,11 +806,13 @@ export function GameViewPage() {
       return;
     }
 
-    const priorRounds = priorBasketballMatchesFromRoundSnapshots(
-      game.rounds.map((round) => ({
-        roundNumber: round.roundNumber,
-        settingsSnapshot: round.settingsSnapshot,
-      })),
+    if (basketballHistoryQuery.isLoading) {
+      window.alert("Basketball history is still loading. Please try again.");
+      return;
+    }
+
+    const priorRounds = priorBasketballMatchesFromSeasonHistory(
+      basketballHistoryQuery.data ?? [],
     );
     const result = calculateBasketballRound({
       priorRounds,

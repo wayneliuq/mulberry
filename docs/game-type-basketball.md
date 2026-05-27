@@ -44,7 +44,7 @@ Validation rules:
 Skill is tracked with **openskill.js** (default prior: `mu = 25`, `sigma ≈ 8.33` per player).
 
 1. Start with an empty rating map.
-2. For each **prior** basketball round in this game, in **ascending `round_number`**, apply one two‑team update with
+2. For each **prior** scored basketball round in the **active season** (chronological order across all games), apply one two‑team update with
   `rate([teamA, teamB], { score: [scoreTeamA, scoreTeamB] })`.
 3. For the **new** round, record each participant’s **ordinal** before the update (`ordinal = mu − 3·sigma`, same as `openskill.ordinal`).
 4. Apply the same `rate` call for the new match and read ordinals **after** the update.

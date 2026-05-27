@@ -4,6 +4,7 @@ import {
   parseBasketballMatchFromRoundSnapshot,
   predictBasketballMatchWinProbabilities,
   priorBasketballMatchesFromRoundSnapshots,
+  priorBasketballMatchesFromSeasonHistory,
   priorBasketballMatchesStrictlyBeforeRound,
 } from "./basketball";
 
@@ -129,6 +130,28 @@ describe("parseBasketballMatchFromRoundSnapshot", () => {
         metadata: { mode: "werewolves" },
       }),
     ).toBeNull();
+  });
+});
+
+describe("priorBasketballMatchesFromSeasonHistory", () => {
+  it("preserves caller order and skips non-scored rounds", () => {
+    const meta = (teamA: number[], teamB: number[]) => ({
+      metadata: {
+        mode: "basketball" as const,
+        teamAPlayerIds: teamA,
+        teamBPlayerIds: teamB,
+        scoreTeamA: 11,
+        scoreTeamB: 0,
+      },
+    });
+    const prior = priorBasketballMatchesFromSeasonHistory([
+      { settingsSnapshot: meta([1], [2]) },
+      { settingsSnapshot: { metadata: { mode: "basketball", manualInput: true } } },
+      { settingsSnapshot: meta([2], [3]) },
+    ]);
+    expect(prior).toHaveLength(2);
+    expect(prior[0]!.teamAPlayerIds).toEqual([1]);
+    expect(prior[1]!.teamAPlayerIds).toEqual([2]);
   });
 });
 
