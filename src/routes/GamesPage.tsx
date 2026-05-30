@@ -16,6 +16,8 @@ import { useAdminSession } from "../features/admin/AdminSessionContext";
 import { gameTypeOptions, getGameTypeOption } from "../features/game-types";
 import type { GameTypeId } from "../features/game-types/types";
 import { IconGlyph } from "../features/ui/IconGlyph";
+import { SectionHeader } from "../features/ui/SectionHeader";
+import { copy } from "../features/ui/copy";
 import { adminWrite } from "../lib/api/admin";
 import { fetchGames } from "../lib/api/read";
 import { formatRelativeDate } from "../lib/format";
@@ -129,26 +131,29 @@ export function GamesPage() {
   return (
     <section className="stack-lg">
       <article className="card stack-sm">
-        <div className="card-header">
-          <div>
-            <p className="card-eyebrow">Admin access</p>
-          </div>
-          <span className={isAdmin ? "pill pill-success" : "pill"}>
-            {isAdmin ? "Editing enabled" : "View only"}
-          </span>
-        </div>
+        <SectionHeader
+          eyebrow="Sign in"
+          title="Edit mode"
+          subtitle={
+            isAdmin ? copy.editMode.signedIn : "Unlock editing to create games and change scores"
+          }
+          status={
+            <span className={isAdmin ? "pill pill-success" : "pill"}>
+              {isAdmin ? copy.editMode.editing : copy.editMode.viewOnly}
+            </span>
+          }
+        />
 
         {isAdmin ? (
           <div className="inline-actions">
-            <p className="muted">Admin logged in</p>
             <button type="button" className="secondary-button" onClick={logout}>
-              Log out
+              {copy.editMode.signOut}
             </button>
           </div>
         ) : (
           <form className="stack-sm" onSubmit={handleSubmit}>
             <label className="stack-xs" htmlFor="admin-password">
-              <span>Shared admin password</span>
+              <span>{copy.editMode.passwordLabel}</span>
               <input
                 id="admin-password"
                 name="admin-password"
@@ -156,40 +161,40 @@ export function GamesPage() {
                 autoComplete="current-password"
                 value={passwordInput}
                 onChange={(event) => setPasswordInput(event.target.value)}
-                placeholder="Enter password"
+                placeholder={copy.editMode.passwordPlaceholder}
               />
             </label>
             {error ? <p className="form-error">{error}</p> : null}
             {status === "checking" ? (
-              <p className="muted">Checking saved admin session...</p>
+              <p className="muted">{copy.editMode.checkingSession}</p>
             ) : null}
             <button
               type="submit"
               className="primary-button"
               disabled={isSubmitting || status === "checking"}
             >
-              Unlock admin actions
+              {copy.editMode.unlock}
             </button>
           </form>
         )}
       </article>
 
       <article className="card stack-sm">
-        <div className="card-header">
-          <div>
-            <p className="card-eyebrow">Games</p>
-            <h2>Recent games</h2>
-          </div>
-          <button
-            type="button"
-            className="primary-button"
-            disabled={!isAdmin}
-            aria-label="Create new game"
-            onClick={() => setCreateFormOpen((current) => !current)}
-          >
-            New game
-          </button>
-        </div>
+        <SectionHeader
+          eyebrow={copy.games.eyebrow}
+          title={copy.games.title}
+          actions={
+            <button
+              type="button"
+              className="primary-button"
+              disabled={!isAdmin}
+              aria-label="Create new game"
+              onClick={() => setCreateFormOpen((current) => !current)}
+            >
+              {copy.games.newGame}
+            </button>
+          }
+        />
 
         <div className="filter-row" role="tablist" aria-label="Game type filters">
           <button
@@ -322,21 +327,21 @@ export function GamesPage() {
                 className="secondary-button"
                 onClick={() => setCreateFormOpen(false)}
               >
-                Cancel
+                {copy.common.cancel}
               </button>
             </div>
           </form>
         ) : null}
 
-        {gamesQuery.isLoading ? <p className="muted">Loading games...</p> : null}
+        {gamesQuery.isLoading ? <p className="muted">{copy.games.loading}</p> : null}
         {gamesQuery.error ? (
           <p className="form-error">{gamesQuery.error.message}</p>
         ) : null}
         {!gamesQuery.isLoading && recentGames.length === 0 ? (
           <p className="muted">
             {selectedGameType === "all"
-              ? "No games yet. Create the first one as admin."
-              : "No games of this type."}
+              ? copy.games.emptyAll
+              : copy.games.emptyFilter}
           </p>
         ) : null}
 
@@ -380,7 +385,7 @@ export function GamesPage() {
                     e.preventDefault();
                     e.stopPropagation();
                     const shouldDelete = window.confirm(
-                      `Delete ${game.displayName}? This removes its history and leaderboard impact.`,
+                      `Delete ${game.displayName}? ${copy.games.deleteConfirm}`,
                     );
 
                     if (!shouldDelete) {
@@ -396,13 +401,6 @@ export function GamesPage() {
             </li>
           ))}
         </ul>
-
-        <div className="inline-actions space-between">
-          <p className="muted">Page 1 of 1</p>
-          <button type="button" className="secondary-button" disabled>
-            Next page
-          </button>
-        </div>
       </article>
     </section>
   );

@@ -1,4 +1,5 @@
 import type { RankedMetricRow } from "../basketball/types";
+import { rankCellClass, scoreClassForSignedValue } from "../../ui/tableDisplay";
 
 export function RankedTable({
   rows,
@@ -11,28 +12,36 @@ export function RankedTable({
     return <p className="muted">Not enough qualifying rounds yet.</p>;
   }
   return (
-    <div className="table-shell">
-      <table>
+    <div className="standings-table-container">
+      <table className="standings-table">
         <thead>
           <tr>
-            <th className="th-rank">#</th>
-            <th>Player(s)</th>
-            <th>{valueHeader}</th>
-            <th>Details</th>
+            <th scope="col" className="th-rank numeric">
+              #
+            </th>
+            <th scope="col" className="th-sticky-name">
+              Player(s)
+            </th>
+            <th scope="col" className="numeric">
+              {valueHeader}
+            </th>
+            <th scope="col">Details</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row, index) => {
-            const valueClass =
-              row.value > 0 ? "score-positive" : row.value < 0 ? "score-negative" : "score-neutral";
+            const rank = index + 1;
+            const valueClass = scoreClassForSignedValue(row.value);
             return (
               <tr key={`${row.label}-${index}`}>
-                <td className="td-rank">{index + 1}</td>
-                <td>{row.label}</td>
-                <td>
+                <td className={rankCellClass(rank)}>
+                  <span className="rank-chip">{rank}</span>
+                </td>
+                <td className="td-primary td-sticky-name">{row.label}</td>
+                <td className="numeric">
                   <span className={valueClass}>{row.valueLabel}</span>
                 </td>
-                <td>{row.details}</td>
+                <td className="td-secondary">{row.details}</td>
               </tr>
             );
           })}

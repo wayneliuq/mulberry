@@ -4,6 +4,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import { gameTypeOptions } from "../features/game-types";
 import type { GameTypeId } from "../features/game-types/types";
 import { IconGlyph } from "../features/ui/IconGlyph";
+import { copy } from "../features/ui/copy";
+import { rankCellClass, scoreClassForSignedValue } from "../features/ui/tableDisplay";
+import { RoundWinRateCell } from "../features/ui/RoundWinRateCell";
+import { SectionHeader } from "../features/ui/SectionHeader";
 import { BasketballSeasonToolbar } from "../features/basketball/BasketballSeasonToolbar";
 import { useBasketballSeasons } from "../features/basketball/useBasketballSeasons";
 import { fetchLeaderboards } from "../lib/api/read";
@@ -19,7 +23,6 @@ type SortColumn =
   | "displayName"
   | "totalPoints"
   | "totalMoneyCents"
-  | "roundsWon"
   | "roundsWonPct";
 type SortDir = "asc" | "desc";
 
@@ -67,26 +70,59 @@ function SortableTh({
   sortColumn,
   sortDir,
   onSort,
+  className,
+  stickyName = false,
+  hideOnNarrow = false,
 }: {
   label: string;
   column: SortColumn;
   sortColumn: SortColumn | null;
   sortDir: SortDir;
   onSort: (col: SortColumn) => void;
+  className?: string;
+  stickyName?: boolean;
+  hideOnNarrow?: boolean;
 }) {
   const isActive = sortColumn === column;
+  const thClass = [
+    className,
+    stickyName ? "th-sticky-name" : "",
+    isActive ? "th-sort-active" : "",
+    hideOnNarrow ? "col-hide-narrow" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <th>
+    <th
+      scope="col"
+      className={thClass || undefined}
+      aria-sort={isActive ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
+    >
       <button
         type="button"
-        className="sortable-th"
+        className={isActive ? "sortable-th sortable-th-active" : "sortable-th"}
         onClick={() => onSort(column)}
-        aria-sort={isActive ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
       >
-        {label}
-        {isActive ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+        <span>{label}</span>
+        {isActive ? (
+          <IconGlyph
+            name={sortDir === "asc" ? "sort-asc" : "sort-desc"}
+            size={12}
+            className="sortable-th-icon"
+            title={sortDir === "asc" ? "Sorted ascending" : "Sorted descending"}
+          />
+        ) : null}
       </button>
     </th>
+  );
+}
+
+function RankCell({ rank }: { rank: number | undefined }) {
+  return (
+    <td className={rankCellClass(rank)}>
+      <span className="rank-chip">{rank ?? "—"}</span>
+    </td>
   );
 }
 
@@ -193,15 +229,15 @@ export function LeaderboardsPage() {
         case "totalMoneyCents":
           cmp = a.totalMoneyCents - b.totalMoneyCents;
           break;
-        case "roundsWon":
-          cmp = a.roundsWon - b.roundsWon;
-          break;
         case "roundsWonPct": {
           const totalA = a.roundsWon + a.roundsLost;
           const totalB = b.roundsWon + b.roundsLost;
           const pctA = totalA > 0 ? a.roundsWon / totalA : 0;
           const pctB = totalB > 0 ? b.roundsWon / totalB : 0;
           cmp = pctA - pctB;
+          if (cmp === 0) {
+            cmp = totalA - totalB;
+          }
           break;
         }
         default:
@@ -229,15 +265,15 @@ export function LeaderboardsPage() {
         case "totalMoneyCents":
           cmp = a.totalMoneyCents - b.totalMoneyCents;
           break;
-        case "roundsWon":
-          cmp = a.roundsWon - b.roundsWon;
-          break;
         case "roundsWonPct": {
           const totalA = a.roundsWon + a.roundsLost;
           const totalB = b.roundsWon + b.roundsLost;
           const pctA = totalA > 0 ? a.roundsWon / totalA : 0;
           const pctB = totalB > 0 ? b.roundsWon / totalB : 0;
           cmp = pctA - pctB;
+          if (cmp === 0) {
+            cmp = totalA - totalB;
+          }
           break;
         }
         default:
@@ -264,12 +300,6 @@ export function LeaderboardsPage() {
     }));
   }
 
-  function formatRndWonPct(row: PlayerLeaderboardRow | FamilyLeaderboardRow) {
-    const total = row.roundsWon + row.roundsLost;
-    if (total === 0) return "—";
-    return `${Math.round((row.roundsWon / total) * 100)}%`;
-  }
-
   return (
     <section className="stack-lg">
       {isBasketballLeaderboard ? (
@@ -282,12 +312,12 @@ export function LeaderboardsPage() {
         />
       ) : null}
       <article className="card stack-sm">
-        <div className="card-header leaderboard-card-header">
-          <div>
-            <p className="card-eyebrow">Leaderboards</p>
-          </div>
-          <div className="stack-xs leaderboard-header-controls">
-            <div className="filter-row" role="tablist" aria-label="Game filters">
+        <SectionHeader
+          eyebrow={copy.leaderboards.eyebrow}
+          title={copy.leaderboards.title}
+        />
+        <div className="stack-xs leaderboard-header-controls">
+          <div className="filter-row" role="tablist" aria-label="Game filters">
               <button
                 type="button"
                 className={
@@ -324,23 +354,28 @@ export function LeaderboardsPage() {
                   handleShowMoneyChange(event.target.checked)
                 }
               />
-              <span>Show $</span>
+              <span>{copy.leaderboards.showMoney}</span>
             </label>
           </div>
-        </div>
 
         {leaderboardsQuery.isLoading ? (
-          <p className="muted">Loading leaderboards...</p>
+          <p className="muted">{copy.leaderboards.loading}</p>
         ) : null}
         {leaderboardsQuery.error ? (
           <p className="form-error">{leaderboardsQuery.error.message}</p>
         ) : null}
 
-        <div className="table-shell">
-          <table>
+        {!leaderboardsQuery.isLoading &&
+        !leaderboardsQuery.error &&
+        playerRows.length === 0 ? (
+          <p className="muted">{copy.leaderboards.emptyPlayers}</p>
+        ) : null}
+
+        <div className="standings-table-container">
+          <table className="standings-table">
             <thead>
               <tr>
-                <th scope="col" className="th-rank">
+                <th scope="col" className="th-rank numeric">
                   #
                 </th>
                 <SortableTh
@@ -349,6 +384,7 @@ export function LeaderboardsPage() {
                   sortColumn={playerSort.column}
                   sortDir={playerSort.dir}
                   onSort={handlePlayerSort}
+                  stickyName
                 />
                 <SortableTh
                   label="Pts"
@@ -356,6 +392,7 @@ export function LeaderboardsPage() {
                   sortColumn={playerSort.column}
                   sortDir={playerSort.dir}
                   onSort={handlePlayerSort}
+                  className="numeric"
                 />
                 {showMoney ? (
                   <SortableTh
@@ -364,64 +401,64 @@ export function LeaderboardsPage() {
                     sortColumn={playerSort.column}
                     sortDir={playerSort.dir}
                     onSort={handlePlayerSort}
+                    className="numeric"
                   />
                 ) : null}
                 <SortableTh
-                  label="Rnd W-L"
-                  column="roundsWon"
-                  sortColumn={playerSort.column}
-                  sortDir={playerSort.dir}
-                  onSort={handlePlayerSort}
-                />
-                <SortableTh
-                  label="Rnd W-L (%)"
+                  label={copy.leaderboards.winRate}
                   column="roundsWonPct"
                   sortColumn={playerSort.column}
                   sortDir={playerSort.dir}
                   onSort={handlePlayerSort}
+                  className="numeric th-win-rate"
                 />
               </tr>
             </thead>
             <tbody>
-              {playerRows.map((row) => (
-                <tr key={row.playerId}>
-                  <td className="td-rank">
-                    {playerPointsRankById.get(String(row.playerId)) ?? "—"}
-                  </td>
-                  <td className="text-wrap-safe">{row.displayName}</td>
-                  <td>{formatPoints(row.totalPoints)}</td>
-                  {showMoney ? (
-                    <td>{formatMoneyCents(row.totalMoneyCents)}</td>
-                  ) : null}
-                  <td>
-                    {row.roundsWon}-{row.roundsLost}
-                  </td>
-                  <td>{formatRndWonPct(row)}</td>
-                </tr>
-              ))}
+              {playerRows.map((row) => {
+                const rank = playerPointsRankById.get(String(row.playerId));
+                return (
+                  <tr key={row.playerId}>
+                    <RankCell rank={rank} />
+                    <td className="text-wrap-safe td-primary td-sticky-name">
+                      {row.displayName}
+                    </td>
+                    <td className="numeric">
+                      <span className={scoreClassForSignedValue(row.totalPoints)}>
+                        {formatPoints(row.totalPoints)}
+                      </span>
+                    </td>
+                    {showMoney ? (
+                      <td className="numeric">
+                        {formatMoneyCents(row.totalMoneyCents)}
+                      </td>
+                    ) : null}
+                    <td className="numeric td-win-rate">
+                      <RoundWinRateCell row={row} />
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </article>
 
       <article className="card stack-sm">
-        <div className="card-header">
-          <div>
-            <p className="card-eyebrow">Families</p>
-          </div>
-          <span className="pill">{familyRows.length} families</span>
-        </div>
+        <SectionHeader
+          eyebrow={copy.leaderboards.familiesEyebrow}
+          title={copy.leaderboards.familiesEyebrow}
+          status={<span className="pill">{familyRows.length} families</span>}
+        />
 
         {familyRows.length === 0 ? (
-          <p className="muted">
-            Families appear here once at least two players share the same family.
-          </p>
+          <p className="muted">{copy.leaderboards.familiesEmpty}</p>
         ) : (
-          <div className="table-shell">
-            <table>
+          <div className="standings-table-container">
+            <table className="standings-table">
               <thead>
                 <tr>
-                  <th scope="col" className="th-rank">
+                  <th scope="col" className="th-rank numeric">
                     #
                   </th>
                   <SortableTh
@@ -430,14 +467,16 @@ export function LeaderboardsPage() {
                     sortColumn={familySort.column}
                     sortDir={familySort.dir}
                     onSort={handleFamilySort}
+                    stickyName
                   />
-                  <th>Members</th>
+                  <th scope="col">Members</th>
                   <SortableTh
                     label="Pts"
                     column="totalPoints"
                     sortColumn={familySort.column}
                     sortDir={familySort.dir}
                     onSort={handleFamilySort}
+                    className="numeric"
                   />
                   {showMoney ? (
                     <SortableTh
@@ -446,44 +485,49 @@ export function LeaderboardsPage() {
                       sortColumn={familySort.column}
                       sortDir={familySort.dir}
                       onSort={handleFamilySort}
+                      className="numeric"
                     />
                   ) : null}
                   <SortableTh
-                    label="Rnd W-L"
-                    column="roundsWon"
-                    sortColumn={familySort.column}
-                    sortDir={familySort.dir}
-                    onSort={handleFamilySort}
-                  />
-                  <SortableTh
-                    label="Rnd W-L (%)"
+                    label={copy.leaderboards.winRate}
                     column="roundsWonPct"
                     sortColumn={familySort.column}
                     sortDir={familySort.dir}
                     onSort={handleFamilySort}
+                    className="numeric th-win-rate"
                   />
                 </tr>
               </thead>
               <tbody>
-                {familyRows.map((family) => (
-                  <tr key={family.familyId}>
-                    <td className="td-rank">
-                      {familyPointsRankById.get(family.familyId) ?? "—"}
-                    </td>
-                    <td className="text-wrap-safe">{family.familyName}</td>
-                    <td className="text-wrap-safe members-cell-clamp">
-                      {family.memberNames.join(", ")}
-                    </td>
-                    <td>{formatPoints(family.totalPoints)}</td>
-                    {showMoney ? (
-                      <td>{formatMoneyCents(family.totalMoneyCents)}</td>
-                    ) : null}
-                    <td>
-                      {family.roundsWon}-{family.roundsLost}
-                    </td>
-                    <td>{formatRndWonPct(family)}</td>
-                  </tr>
-                ))}
+                {familyRows.map((family) => {
+                  const rank = familyPointsRankById.get(family.familyId);
+                  return (
+                    <tr key={family.familyId}>
+                      <RankCell rank={rank} />
+                      <td className="text-wrap-safe td-primary td-sticky-name">
+                        {family.familyName}
+                      </td>
+                      <td className="text-wrap-safe td-secondary">
+                        <span className="members-cell-clamp">
+                          {family.memberNames.join(", ")}
+                        </span>
+                      </td>
+                      <td className="numeric">
+                        <span className={scoreClassForSignedValue(family.totalPoints)}>
+                          {formatPoints(family.totalPoints)}
+                        </span>
+                      </td>
+                      {showMoney ? (
+                        <td className="numeric">
+                          {formatMoneyCents(family.totalMoneyCents)}
+                        </td>
+                      ) : null}
+                      <td className="numeric td-win-rate">
+                        <RoundWinRateCell row={family} />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

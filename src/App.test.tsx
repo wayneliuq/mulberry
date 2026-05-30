@@ -98,6 +98,7 @@ describe("app shell", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dashboards" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Admin" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Games" })).toBeInTheDocument();
   });
 
   it("keeps new game disabled in public mode", () => {
@@ -113,17 +114,17 @@ describe("app shell", () => {
     renderApp();
 
     await user.type(
-      screen.getByLabelText("Shared admin password"),
+      screen.getByLabelText("Admin password"),
       "super-secret",
     );
     await user.click(
-      screen.getByRole("button", { name: "Unlock admin actions" }),
+      screen.getByRole("button", { name: "Unlock editing" }),
     );
 
     expect(
       screen.getByRole("button", { name: "Create new game" }),
     ).toBeEnabled();
-    expect(screen.getByText("Editing enabled")).toBeInTheDocument();
+    expect(screen.getAllByText("Editing").length).toBeGreaterThanOrEqual(1);
     expect(verifyAdminPasswordMock).toHaveBeenCalledWith("super-secret");
   });
 });

@@ -32,7 +32,7 @@ describe("NbaComparisonTable", () => {
     expect(screen.queryByText(/Previously:/)).not.toBeInTheDocument();
   });
 
-  it("renders a subtle New pill and star for isNew rows", () => {
+  it("renders a New badge for isNew rows", () => {
     render(
       <NbaComparisonTable
         rows={[

@@ -7,7 +7,13 @@ export type IconGlyphName =
   | "basketball"
   | "lock"
   | "unlock"
-  | "trash";
+  | "trash"
+  | "games"
+  | "leaderboard"
+  | "dashboard"
+  | "admin"
+  | "sort-asc"
+  | "sort-desc";
 
 type IconGlyphProps = {
   name: IconGlyphName;
@@ -92,6 +98,46 @@ export function IconGlyph({
           <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
           <line x1="10" y1="11" x2="10" y2="17" />
           <line x1="14" y1="11" x2="14" y2="17" />
+        </>
+      ) : null}
+      {name === "games" ? (
+        <>
+          <rect x="4" y="6" width="16" height="12" rx="2" />
+          <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          <path d="M8 12h8" />
+        </>
+      ) : null}
+      {name === "leaderboard" ? (
+        <>
+          <path d="M8 21V10" />
+          <path d="M12 21V3" />
+          <path d="M16 21v-6" />
+        </>
+      ) : null}
+      {name === "dashboard" ? (
+        <>
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
+        </>
+      ) : null}
+      {name === "admin" ? (
+        <>
+          <circle cx="12" cy="8" r="3.5" />
+          <path d="M5 20c0-3.3 3.1-6 7-6s7 2.7 7 6" />
+        </>
+      ) : null}
+      {name === "sort-asc" ? (
+        <>
+          <path d="M8 9l4-4 4 4" />
+          <path d="M12 5v14" />
+        </>
+      ) : null}
+      {name === "sort-desc" ? (
+        <>
+          <path d="M8 15l4 4 4-4" />
+          <path d="M12 5v14" />
         </>
       ) : null}
     </svg>

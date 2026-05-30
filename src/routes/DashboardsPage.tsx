@@ -17,6 +17,8 @@ import { createLocalStorageNbaCompAdapter } from "../features/dashboards/basketb
 import { MetricCard } from "../features/dashboards/components/MetricCard";
 import { NbaComparisonTable } from "../features/dashboards/components/NbaComparisonTable";
 import { RankedTable } from "../features/dashboards/components/RankedTable";
+import { SectionHeader } from "../features/ui/SectionHeader";
+import { copy } from "../features/ui/copy";
 import { fetchBasketballDashboardData } from "../lib/api/read";
 
 function findSplitSection(
@@ -128,13 +130,15 @@ export function DashboardsPage() {
         />
         <div className="inline-actions space-between">
           <Link to="/leaderboards/basketball" className="secondary-button link-button">
-            Back to leaderboards
+            {copy.dashboards.back}
           </Link>
         </div>
         <article className="card stack-sm">
-          <p className="card-eyebrow">Dashboards</p>
-          <h2>Basketball analytics</h2>
-          <p className="muted">Loading basketball dashboards...</p>
+          <SectionHeader
+            eyebrow={copy.dashboards.eyebrow}
+            title={copy.dashboards.title}
+          />
+          <p className="muted">{copy.dashboards.loading}</p>
         </article>
       </section>
     );
@@ -151,12 +155,14 @@ export function DashboardsPage() {
         />
         <div className="inline-actions space-between">
           <Link to="/leaderboards/basketball" className="secondary-button link-button">
-            Back to leaderboards
+            {copy.dashboards.back}
           </Link>
         </div>
         <article className="card stack-sm">
-          <p className="card-eyebrow">Dashboards</p>
-          <h2>Basketball analytics</h2>
+          <SectionHeader
+            eyebrow={copy.dashboards.eyebrow}
+            title={copy.dashboards.title}
+          />
           <p className="form-error">
             {dashboardQuery.error instanceof Error
               ? dashboardQuery.error.message
@@ -183,19 +189,19 @@ export function DashboardsPage() {
 
       <div className="inline-actions space-between">
         <Link to="/leaderboards/basketball" className="secondary-button link-button">
-          Back to leaderboards
+          {copy.dashboards.back}
         </Link>
         <span className="pill">
-          {metrics.diagnostics.eligibleRounds} rounds analyzed
+          {copy.dashboards.roundsAnalyzed(metrics.diagnostics.eligibleRounds)}
         </span>
       </div>
 
       <article className="card stack-sm">
-        <p className="card-eyebrow">Dashboards</p>
-        <h2>Basketball analytics</h2>
-        <p className="muted">
-          Mobile-friendly, sample-aware stats built from round snapshots and player deltas.
-        </p>
+        <SectionHeader
+          eyebrow={copy.dashboards.eyebrow}
+          title={copy.dashboards.title}
+          subtitle={copy.dashboards.subtitle}
+        />
         <div className="dashboard-highlights">
           {highlightItems.map((item) => (
             <div key={item.label} className="dashboard-highlight-item">
@@ -208,13 +214,21 @@ export function DashboardsPage() {
       </article>
 
       <article className="card stack-sm">
-        <p className="card-eyebrow">Jump to section</p>
+        <SectionHeader eyebrow={copy.dashboards.jump} title="Sections" />
         <div className="inline-actions">
-          {sectionOrder.map((id) => (
-            <a key={id} className="filter-chip" href={`#dashboard-${id}`}>
-              {id}
-            </a>
-          ))}
+          {sectionOrder.map((id) => {
+            const label =
+              id === "nbaComp"
+                ? "Pro match"
+                : splitSectionsById.get(id)?.title ??
+                  sectionsById.get(id)?.title ??
+                  id;
+            return (
+              <a key={id} className="filter-chip" href={`#dashboard-${id}`}>
+                {label}
+              </a>
+            );
+          })}
         </div>
       </article>
 

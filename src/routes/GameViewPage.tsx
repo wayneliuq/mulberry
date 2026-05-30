@@ -40,15 +40,21 @@ import {
   parseBasketballMatchFromRoundSnapshot,
   predictBasketballMatchWinProbabilities,
 } from "../features/game-types/basketball";
+import { AddPlayersDrawer } from "../features/players/AddPlayersDrawer";
 import {
   PlayerSortButtons,
+  computeRoundCountsFromGameRounds,
+  type PlayerSortMode,
   useSortedPlayers,
 } from "../features/players/SortablePlayerList";
+import { PlayerPill } from "../features/ui/PlayerPill";
 import {
   balanceManualEntriesExcludingGhosts,
   mergeCalculatedEntriesWithGhostZeros,
 } from "../features/players/playerEligibility";
 import { IconGlyph } from "../features/ui/IconGlyph";
+import { copy } from "../features/ui/copy";
+import { SectionHeader } from "../features/ui/SectionHeader";
 import { adminWrite } from "../lib/api/admin";
 import {
   fetchBasketballRoundHistory,
@@ -163,13 +169,24 @@ export function GameViewPage() {
     [allPlayers],
   );
   const currentGamePlayerIds = new Set(game?.players.map((player) => player.playerId) ?? []);
-  const availablePlayers = allPlayers.filter(
-    (player) => !currentGamePlayerIds.has(player.id),
+  const gameRoundCountByPlayerId = useMemo(
+    () => computeRoundCountsFromGameRounds(game?.rounds ?? []),
+    [game?.rounds],
+  );
+  const availablePlayers = useMemo(
+    () =>
+      allPlayers
+        .filter((player) => !currentGamePlayerIds.has(player.id))
+        .map((player) => ({
+          ...player,
+          roundsPlayed: gameRoundCountByPlayerId.get(player.id) ?? 0,
+        })),
+    [allPlayers, currentGamePlayerIds, gameRoundCountByPlayerId],
   );
   const unlockedPlayers = game?.players.filter((player) => !player.isLocked) ?? [];
 
-  const [sortedAvailablePlayers, addPlayersSort, setAddPlayersSort] =
-    useSortedPlayers(availablePlayers);
+  const [addPlayersSort, setAddPlayersSort] =
+    useState<PlayerSortMode>("rounds-desc");
   const [sortedGamePlayers, gamePlayersSort, setGamePlayersSort] =
     useSortedPlayers(game?.players ?? [], "id");
   const [sortedUnlockedPlayers, unlockedSort, setUnlockedSort] =
@@ -1020,54 +1037,54 @@ export function GameViewPage() {
       ) : null}
       <div className="inline-actions space-between">
         <Link to="/" className="secondary-button link-button">
-          Back to games
+          {copy.gameView.back}
         </Link>
         <span className="pill">
-          {game.status === "settled" ? "Settled" : isAdmin ? "Admin mode" : "Read only"}
+          {game.status === "settled"
+            ? copy.gameView.settled
+            : isAdmin
+              ? copy.gameView.editing
+              : copy.gameView.readOnly}
         </span>
       </div>
 
       <article className="card stack-sm">
-        <div className="card-header">
-          <div>
-            <p className="card-eyebrow">Game view</p>
-            <h2>{game.displayName}</h2>
-            <p className="muted">
-              {getGameTypeOption(game.gameTypeId)?.name ?? game.gameTypeId}
-              {game.gameTypeId !== "dixit" && game.gameTypeId !== "basketball" ? (
-                <> · point basis {game.pointBasis}</>
-              ) : null}
-              {" · "}
-              {formatMoneyCents(game.moneyPerPointCents)} per point
-            </p>
-          </div>
-          <div className="inline-actions">
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={!isAdmin || game.status === "settled"}
-              onClick={() => setShowRoundForm((current) => !current)}
-            >
-              New round
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={!isAdmin || game.status === "settled"}
-              onClick={() => setShowAddPlayers((current) => !current)}
-            >
-              Add players
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={!isAdmin || game.status === "settled"}
-              onClick={() => setShowGameSettings((current) => !current)}
-            >
-              Game settings
-            </button>
-          </div>
-        </div>
+        <SectionHeader
+          title={game.displayName}
+          subtitle={`${getGameTypeOption(game.gameTypeId)?.name ?? game.gameTypeId}${
+            game.gameTypeId !== "dixit" && game.gameTypeId !== "basketball"
+              ? ` · point basis ${game.pointBasis}`
+              : ""
+          } · ${formatMoneyCents(game.moneyPerPointCents)} per point`}
+          actions={
+            <>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={!isAdmin || game.status === "settled"}
+                onClick={() => setShowRoundForm((current) => !current)}
+              >
+                {copy.gameView.newRound}
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={!isAdmin || game.status === "settled"}
+                onClick={() => setShowAddPlayers((current) => !current)}
+              >
+                {copy.gameView.addPlayers}
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={!isAdmin || game.status === "settled"}
+                onClick={() => setShowGameSettings((current) => !current)}
+              >
+                {copy.gameView.settings}
+              </button>
+            </>
+          }
+        />
 
         {showGameSettings ? (
           <form
@@ -1129,7 +1146,7 @@ export function GameViewPage() {
             ) : null}
             <div className="inline-actions">
               <button type="submit" className="primary-button">
-                Save settings
+                {copy.gameView.saveSettings}
               </button>
               <button
                 type="button"
@@ -1143,59 +1160,17 @@ export function GameViewPage() {
         ) : null}
 
         {showAddPlayers ? (
-          <div className="card-subsection stack-sm">
-            <div className="stack-sm">
-              <strong>Add existing players</strong>
-              {availablePlayers.length === 0 ? (
-                <p className="muted">All players are already in this game.</p>
-              ) : (
-                <>
-                  <PlayerSortButtons
-                    sortMode={addPlayersSort}
-                    onSortChange={setAddPlayersSort}
-                  />
-                  <div className="checkbox-list player-list-two-col">
-                    {sortedAvailablePlayers.map((player) => (
-                    <label key={player.id} className="checkbox-item">
-                      <input
-                        type="checkbox"
-                        checked={selectedPlayerIds.includes(player.id)}
-                        onChange={(event) =>
-                          setSelectedPlayerIds((current) =>
-                            event.target.checked
-                              ? [...current, player.id]
-                              : current.filter((value) => value !== player.id),
-                          )
-                        }
-                      />
-                      <span className="text-wrap-safe">{player.displayName}</span>
-                    </label>
-                  ))}
-                </div>
-                </>
-              )}
-              {addPlayersMutation.error ? (
-                <p className="form-error">{addPlayersMutation.error.message}</p>
-              ) : null}
-              <div className="inline-actions">
-                <button
-                  type="button"
-                  className="primary-button"
-                  disabled={selectedPlayerIds.length === 0}
-                  onClick={() => void addPlayersMutation.mutateAsync()}
-                >
-                  Add selected players
-                </button>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => setShowAddPlayers(false)}
-                >
-                  Done
-                </button>
-              </div>
-            </div>
-
+          <AddPlayersDrawer
+            players={availablePlayers}
+            selectedIds={selectedPlayerIds}
+            onSelectionChange={setSelectedPlayerIds}
+            sortMode={addPlayersSort}
+            onSortChange={setAddPlayersSort}
+            onAddSelected={() => void addPlayersMutation.mutateAsync()}
+            onDone={() => setShowAddPlayers(false)}
+            addError={addPlayersMutation.error?.message}
+            isAdding={addPlayersMutation.isPending}
+          >
             <form
               className="stack-sm"
               onSubmit={(event) => {
@@ -1238,7 +1213,7 @@ export function GameViewPage() {
                 Create player
               </button>
             </form>
-          </div>
+          </AddPlayersDrawer>
         ) : null}
 
         {showRoundForm ? (
@@ -1443,27 +1418,25 @@ export function GameViewPage() {
                 </div>
                 <div className="stack-sm">
                   <span>Survived (alive at end)</span>
-                  <div className="checkbox-list player-list-two-col">
+                  <div className="player-pill-grid">
                     {sortedUnlockedPlayers.map((player) => (
-                      <label key={player.playerId} className="checkbox-item">
-                        <input
-                          type="checkbox"
-                          checked={werewolfValues.survivedIds.includes(
-                            player.playerId,
-                          )}
-                          onChange={(e) =>
-                            setWerewolfValues((c) => ({
-                              ...c,
-                              survivedIds: e.target.checked
-                                ? [...c.survivedIds, player.playerId]
-                                : c.survivedIds.filter(
-                                    (id) => id !== player.playerId,
-                                  ),
-                            }))
-                          }
-                        />
-                        <span>{player.displayName}</span>
-                      </label>
+                      <PlayerPill
+                        key={player.playerId}
+                        displayName={player.displayName}
+                        selected={werewolfValues.survivedIds.includes(
+                          player.playerId,
+                        )}
+                        onToggle={() =>
+                          setWerewolfValues((c) => ({
+                            ...c,
+                            survivedIds: c.survivedIds.includes(player.playerId)
+                              ? c.survivedIds.filter(
+                                  (id) => id !== player.playerId,
+                                )
+                              : [...c.survivedIds, player.playerId],
+                          }))
+                        }
+                      />
                     ))}
                   </div>
                 </div>
@@ -2028,8 +2001,8 @@ export function GameViewPage() {
             onClick={() => {
               const message =
                 game.moneyPerPointCents === 0
-                  ? "End this game and mark as settled? (No money to exchange.)"
-                  : "End this game and calculate settlement?";
+                  ? copy.gameView.settleConfirmNoMoney
+                  : copy.gameView.settleConfirm;
               const shouldSettle = window.confirm(message);
 
               if (!shouldSettle) {
@@ -2039,37 +2012,37 @@ export function GameViewPage() {
               void calculateSettlementMutation.mutateAsync();
             }}
           >
-            Settle
+            {copy.gameView.settle}
           </button>
         </div>
       </article>
 
       {game.settlement ? (
         <article className="card stack-sm">
-          <div className="card-header">
-            <div>
-              <p className="card-eyebrow">Settlement</p>
-              <h2>{formatDateTime(game.settlement.createdAt)}</h2>
-            </div>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={!isAdmin}
-              onClick={() => {
-                const shouldUndo = window.confirm(
-                  "Undo this settlement and reopen the game?",
-                );
+          <SectionHeader
+            eyebrow={copy.gameView.settlementEyebrow}
+            title={formatDateTime(game.settlement.createdAt)}
+            actions={
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={!isAdmin}
+                onClick={() => {
+                  const shouldUndo = window.confirm(
+                    copy.gameView.settlementUndoConfirm,
+                  );
 
-                if (!shouldUndo) {
-                  return;
-                }
+                  if (!shouldUndo) {
+                    return;
+                  }
 
-                void undoSettlementMutation.mutateAsync();
-              }}
-            >
-              Undo settlement
-            </button>
-          </div>
+                  void undoSettlementMutation.mutateAsync();
+                }}
+              >
+                {copy.gameView.undoSettlement}
+              </button>
+            }
+          />
           <ul className="list-reset stack-sm">
             {game.settlement.transfers.map((transfer) => (
               <li key={transfer.id} className="list-item">
@@ -2086,16 +2059,18 @@ export function GameViewPage() {
       ) : null}
 
       <article className="card stack-sm">
-        <div className="card-header">
-          <div>
-            <p className="card-eyebrow">History</p>
-            <h2>Most recent first</h2>
-          </div>
-          <span className="pill">{game.rounds.length} rounds</span>
-        </div>
+        <SectionHeader
+          eyebrow={copy.gameView.history}
+          title={copy.gameView.historyOrder}
+          status={
+            <span className="pill">
+              {game.rounds.length} rounds
+            </span>
+          }
+        />
 
         {game.rounds.length === 0 ? (
-          <p className="muted">No rounds yet.</p>
+          <p className="muted">{copy.gameView.noRounds}</p>
         ) : (
           <ul className="list-reset stack-sm">
             {game.rounds.map((round) => (

@@ -11,6 +11,7 @@ import {
   NBA_COMPARISON_SECTION_TITLE,
 } from "../features/dashboards/basketball/constants";
 import { AdminSessionProvider } from "../features/admin/AdminSessionContext";
+import { copy } from "../features/ui/copy";
 import { DashboardsPage } from "./DashboardsPage";
 
 vi.mock("../lib/api/read", () => ({
@@ -99,8 +100,8 @@ describe("DashboardsPage", () => {
     expect(screen.getByRole("columnheader", { name: "Pro match" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Fit" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Best / Worst Combos" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Back to leaderboards" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "nbaComp" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: copy.dashboards.back })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Pro match" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Upset Machine" })).toBeInTheDocument();
     expect(screen.getByText(/New season starts on/i)).toBeInTheDocument();
   });

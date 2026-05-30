@@ -142,7 +142,7 @@ describe("LeaderboardsPage", () => {
       screen.queryByRole("columnheader", { name: "$" }),
     ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("checkbox", { name: /show \$/i }));
+    await user.click(screen.getByRole("checkbox", { name: /show money/i }));
 
     expect(
       screen.getAllByRole("columnheader", { name: "$" }).length,
@@ -155,7 +155,7 @@ describe("LeaderboardsPage", () => {
 
     await screen.findByRole("columnheader", { name: "$" });
 
-    expect(screen.getByRole("checkbox", { name: /show \$/i })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /show money/i })).toBeChecked();
   });
 
   it("writes Show $ preference to localStorage when toggled", async () => {
@@ -164,7 +164,7 @@ describe("LeaderboardsPage", () => {
 
     await screen.findByRole("columnheader", { name: "Player" });
 
-    await user.click(screen.getByRole("checkbox", { name: /show \$/i }));
+    await user.click(screen.getByRole("checkbox", { name: /show money/i }));
 
     expect(window.localStorage.getItem("mulberry.leaderboards.show-money")).toBe(
       "true",

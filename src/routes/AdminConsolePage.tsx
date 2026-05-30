@@ -10,6 +10,8 @@ import {
   useSortedPlayers,
 } from "../features/players/SortablePlayerList";
 import { IconGlyph } from "../features/ui/IconGlyph";
+import { copy } from "../features/ui/copy";
+import { SectionHeader } from "../features/ui/SectionHeader";
 import { adminWrite } from "../lib/api/admin";
 import { fetchPlayers } from "../lib/api/read";
 
@@ -163,24 +165,19 @@ export function AdminConsolePage() {
   return (
     <section className="stack-lg">
       <article className="card stack-sm">
-        <div className="card-header">
-          <div>
-            <p className="card-eyebrow">Admin console</p>
-            <h2>Maintenance tools</h2>
-          </div>
-          <span className={isAdmin ? "pill pill-success" : "pill"}>
-            {isAdmin ? "Ready for admin actions" : "Locked"}
-          </span>
-        </div>
-
-        <p className="muted">
-          Use this page for safe player renames and family membership updates.
-        </p>
+        <SectionHeader
+          eyebrow={copy.admin.eyebrow}
+          title={copy.admin.title}
+          subtitle={copy.admin.subtitle}
+          status={
+            <span className={isAdmin ? "pill pill-success" : "pill"}>
+              {isAdmin ? copy.admin.ready : copy.admin.locked}
+            </span>
+          }
+        />
 
         {!isAdmin ? (
-          <p className="muted">
-            Log in on the Games page to unlock admin maintenance actions.
-          </p>
+          <p className="muted">{copy.editMode.adminLocked}</p>
         ) : null}
         {playersQuery.isLoading ? (
           <p className="muted">Loading players...</p>
