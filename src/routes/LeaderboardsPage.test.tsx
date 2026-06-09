@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { vi } from "vitest";
-import { fetchLeaderboards } from "../lib/api/read";
+import { AdminSessionProvider } from "../features/admin/AdminSessionContext";
+import { fetchBasketballSeasons, fetchLeaderboards } from "../lib/api/read";
 import type { LeaderboardData } from "../lib/api/types";
 import { LeaderboardsPage } from "./LeaderboardsPage";
 
@@ -13,8 +14,9 @@ vi.mock("../lib/api/read", () => ({
 }));
 
 const fetchLeaderboardsMock = vi.mocked(fetchLeaderboards);
+const fetchBasketballSeasonsMock = vi.mocked(fetchBasketballSeasons);
 
-function renderLeaderboards() {
+function renderLeaderboards(initialEntry: string = "/leaderboards") {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -22,9 +24,17 @@ function renderLeaderboards() {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <LeaderboardsPage />
-      </MemoryRouter>
+      <AdminSessionProvider>
+        <MemoryRouter initialEntries={[initialEntry]}>
+          <Routes>
+            <Route path="/leaderboards" element={<LeaderboardsPage />} />
+            <Route
+              path="/leaderboards/:gameTypeId"
+              element={<LeaderboardsPage />}
+            />
+          </Routes>
+        </MemoryRouter>
+      </AdminSessionProvider>
     </QueryClientProvider>,
   );
 }
@@ -126,9 +136,16 @@ const sampleFamilies: LeaderboardData["families"] = [
 describe("LeaderboardsPage", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    fetchLeaderboardsMock.mockReset();
+    fetchBasketballSeasonsMock.mockReset();
     fetchLeaderboardsMock.mockResolvedValue({
       players: samplePlayers,
       families: sampleFamilies,
+    });
+    // Default: no seasons loaded (activeSeasonId === null → filter off).
+    fetchBasketballSeasonsMock.mockResolvedValue({
+      seasons: [],
+      activeSeasonId: 0 as unknown as number,
     });
   });
 
@@ -225,5 +242,97 @@ describe("LeaderboardsPage", () => {
     expect(rankByFamily("Family Tie A")).toBe("2");
     expect(rankByFamily("Family Tie B")).toBe("2");
     expect(rankByFamily("Family Low")).toBe("4");
+  });
+
+  it("passes applyMinRoundsFilter when viewing the active basketball season", async () => {
+    fetchBasketballSeasonsMock.mockResolvedValue({
+      seasons: [
+        {
+          id: 1,
+          seasonNumber: 1,
+          displayName: "Season 1",
+          startsAt: "2024-01-01",
+          endsAt: "2024-06-20",
+          isActive: false,
+          schemaVersion: 1,
+        },
+        {
+          id: 2,
+          seasonNumber: 2,
+          displayName: "Season 2",
+          startsAt: "2024-06-21",
+          endsAt: "2024-12-20",
+          isActive: true,
+          schemaVersion: 1,
+        },
+      ],
+      activeSeasonId: 2,
+    });
+
+    renderLeaderboards("/leaderboards/basketball");
+
+    await screen.findByRole("columnheader", { name: "Player" });
+
+    await waitFor(() => {
+      expect(fetchLeaderboardsMock).toHaveBeenCalledWith(
+        "basketball",
+        expect.objectContaining({
+          basketballSeasonId: 2,
+          applyMinRoundsFilter: true,
+        }),
+      );
+    });
+  });
+
+  it("does not pass applyMinRoundsFilter when viewing a past basketball season", async () => {
+    fetchBasketballSeasonsMock.mockResolvedValue({
+      seasons: [
+        {
+          id: 1,
+          seasonNumber: 1,
+          displayName: "Season 1",
+          startsAt: "2024-01-01",
+          endsAt: "2024-06-20",
+          isActive: false,
+          schemaVersion: 1,
+        },
+        {
+          id: 2,
+          seasonNumber: 2,
+          displayName: "Season 2",
+          startsAt: "2024-06-21",
+          endsAt: "2024-12-20",
+          isActive: true,
+          schemaVersion: 1,
+        },
+      ],
+      activeSeasonId: 2,
+    });
+
+    const user = userEvent.setup();
+    renderLeaderboards("/leaderboards/basketball");
+
+    await screen.findByRole("columnheader", { name: "Player" });
+
+    // Wait for initial active-season fetch.
+    await waitFor(() => {
+      expect(fetchLeaderboardsMock).toHaveBeenCalledWith(
+        "basketball",
+        expect.objectContaining({ applyMinRoundsFilter: true }),
+      );
+    });
+
+    // Switch to season 1 (past).
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: /season/i }),
+      "1",
+    );
+
+    await waitFor(() => {
+      const calls = fetchLeaderboardsMock.mock.calls;
+      const lastCall = calls[calls.length - 1]!;
+      const opts = lastCall[1] as { applyMinRoundsFilter?: boolean } | undefined;
+      expect(opts?.applyMinRoundsFilter).toBe(false);
+    });
   });
 });

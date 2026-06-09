@@ -84,6 +84,7 @@ Basketball stats (rounds, leaderboards, dashboards, skills, rankings) are scoped
   - Winter: **Dec 21 → Jun 20** (half-open; next season starts Jun 21)
 - Each basketball round stores `basketball_season_id` on `rounds`.
 - Player identity is global; leaderboards/dashboards only list players with activity in the selected season.
+- The basketball player leaderboard hides any player with `roundsWon + roundsLost ≤ 10` (i.e. fewer than 11 rounds) when viewing the active or any future season. Historical (closed) basketball seasons keep the unfiltered view. The threshold is the shared `LEADERBOARD_MIN_ROUNDS` constant; the filter does not apply to the family leaderboard or to other game types.
 - Season UI (selector, next-season notice, admin rollover) appears only in basketball views.
 - NBA comp anchor `localStorage` is namespaced per season (`mulberry:nba-comp:v1:season-<id>`).
 

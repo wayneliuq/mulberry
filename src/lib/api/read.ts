@@ -1,5 +1,6 @@
 import type { GameTypeId } from "../../features/game-types/types";
 import { selectAll, supabase } from "../supabase/client";
+import { applyLeaderboardMinRoundsFilter } from "./leaderboardFilter";
 import type {
   BasketballDashboardData,
   BasketballDashboardRound,
@@ -735,7 +736,7 @@ type RawMoneySettlementPlayer = {
 
 export async function fetchLeaderboards(
   gameTypeFilter: GameTypeId | "all" = "all",
-  options?: { basketballSeasonId?: number },
+  options?: { basketballSeasonId?: number; applyMinRoundsFilter?: boolean },
 ): Promise<LeaderboardData> {
   const [gamesResult, totalsResult, playersResult, familiesResult] = await Promise.all([
     selectAll<{ id: string; game_type_id: GameTypeId }>((from, to) =>
@@ -962,6 +963,10 @@ export async function fetchLeaderboards(
     })
     .sort((left, right) => right.totalPoints - left.totalPoints);
 
+  const filteredPlayerRows = options?.applyMinRoundsFilter
+    ? applyLeaderboardMinRoundsFilter(playerRows)
+    : playerRows;
+
   const families = familiesResult.data;
 
   const familyRows: FamilyLeaderboardRow[] = families
@@ -999,7 +1004,7 @@ export async function fetchLeaderboards(
 
   return {
     seasonId: options?.basketballSeasonId,
-    players: playerRows,
+    players: filteredPlayerRows,
     families: familyRows,
   };
 }
