@@ -43,7 +43,6 @@ import {
 import { AddPlayersDrawer } from "../features/players/AddPlayersDrawer";
 import {
   PlayerSortButtons,
-  computeRoundCountsFromGameRounds,
   type PlayerSortMode,
   useSortedPlayers,
 } from "../features/players/SortablePlayerList";
@@ -58,6 +57,7 @@ import { SectionHeader } from "../features/ui/SectionHeader";
 import { adminWrite } from "../lib/api/admin";
 import {
   fetchBasketballRoundHistory,
+  fetchPlayerRoundCountsByGameType,
   syncBasketballSeasonActive,
   fetchGameDetails,
   fetchPlayers,
@@ -149,6 +149,7 @@ export function GameViewPage() {
     setSelectedSeasonId,
     noticeText,
     seasonsQuery,
+    activeSeasonId,
   } = useBasketballSeasons(Boolean(isBasketballGame));
 
   const basketballHistoryQuery = useQuery({
@@ -169,9 +170,27 @@ export function GameViewPage() {
     [allPlayers],
   );
   const currentGamePlayerIds = new Set(game?.players.map((player) => player.playerId) ?? []);
+
+  // Per-game-type round counts — the same window the leaderboard uses.
+  // For basketball, scope to the active season; for other game types, all games.
+  const gameTypeRoundCountsQuery = useQuery({
+    queryKey: [
+      "player-round-counts",
+      game?.gameTypeId,
+      isBasketballGame ? activeSeasonId : null,
+    ],
+    queryFn: () =>
+      fetchPlayerRoundCountsByGameType(game!.gameTypeId, {
+        ...(isBasketballGame && activeSeasonId != null
+          ? { seasonId: activeSeasonId }
+          : {}),
+      }),
+    enabled: Boolean(game?.gameTypeId),
+  });
+
   const gameRoundCountByPlayerId = useMemo(
-    () => computeRoundCountsFromGameRounds(game?.rounds ?? []),
-    [game?.rounds],
+    () => gameTypeRoundCountsQuery.data ?? new Map<number, number>(),
+    [gameTypeRoundCountsQuery.data],
   );
   const availablePlayers = useMemo(
     () =>
@@ -280,6 +299,7 @@ export function GameViewPage() {
       queryClient.invalidateQueries({ queryKey: ["players"] }),
       queryClient.invalidateQueries({ queryKey: ["leaderboards"] }),
       queryClient.invalidateQueries({ queryKey: ["dashboards"] }),
+      queryClient.invalidateQueries({ queryKey: ["player-round-counts"] }),
       syncBasketballSeasonActive().catch(() => undefined),
     ]);
   };

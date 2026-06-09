@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   LEADERBOARD_MIN_ROUNDS,
+  aggregatePlayerRoundCounts,
   applyLeaderboardMinRoundsFilter,
 } from "./leaderboardFilter";
 
@@ -47,5 +48,46 @@ describe("applyLeaderboardMinRoundsFilter", () => {
     expect(result).toEqual([
       { id: 1, roundsWon: 6, roundsLost: 6, totalPoints: 42, displayName: "Alpha" },
     ]);
+  });
+});
+
+describe("aggregatePlayerRoundCounts", () => {
+  it("counts distinct rounds per player with non-zero deltas", () => {
+    const counts = aggregatePlayerRoundCounts([
+      { round_id: "r1", player_id: 1, point_delta: 5 },
+      { round_id: "r1", player_id: 2, point_delta: -5 },
+      { round_id: "r2", player_id: 1, point_delta: 3 },
+      { round_id: "r2", player_id: 3, point_delta: -3 },
+    ]);
+    expect(counts.get(1)).toBe(2);
+    expect(counts.get(2)).toBe(1);
+    expect(counts.get(3)).toBe(1);
+  });
+
+  it("deduplicates (round_id, player_id) when the same pair appears twice", () => {
+    const counts = aggregatePlayerRoundCounts([
+      { round_id: "r1", player_id: 1, point_delta: 5 },
+      { round_id: "r1", player_id: 1, point_delta: -5 }, // same player+round, counts once
+    ]);
+    expect(counts.get(1)).toBe(1);
+  });
+
+  it("skips entries with point_delta === 0", () => {
+    const counts = aggregatePlayerRoundCounts([
+      { round_id: "r1", player_id: 1, point_delta: 0 },
+      { round_id: "r2", player_id: 1, point_delta: 7 },
+    ]);
+    expect(counts.get(1)).toBe(1);
+  });
+
+  it("returns an empty map for empty input", () => {
+    expect(aggregatePlayerRoundCounts([])).toEqual(new Map());
+  });
+
+  it("does not include players with no non-zero entries", () => {
+    const counts = aggregatePlayerRoundCounts([
+      { round_id: "r1", player_id: 1, point_delta: 4 },
+    ]);
+    expect(counts.has(2)).toBe(false);
   });
 });

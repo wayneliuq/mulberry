@@ -1,6 +1,9 @@
 import type { GameTypeId } from "../../features/game-types/types";
 import { selectAll, supabase } from "../supabase/client";
-import { applyLeaderboardMinRoundsFilter } from "./leaderboardFilter";
+import {
+  aggregatePlayerRoundCounts,
+  applyLeaderboardMinRoundsFilter,
+} from "./leaderboardFilter";
 import type {
   BasketballDashboardData,
   BasketballDashboardRound,
@@ -733,6 +736,64 @@ type RawMoneySettlementPlayer = {
   amount_cents: number;
   money_settlements: { game_id: string } | { game_id: string }[] | null;
 };
+
+export async function fetchPlayerRoundCountsByGameType(
+  gameTypeId: GameTypeId,
+  options?: { seasonId?: number },
+): Promise<Map<number, number>> {
+  let gameIds: string[];
+
+  if (options?.seasonId != null) {
+    // Basketball: filter rounds to those in the season, then derive game ids.
+    const { data: roundRows, error } = await selectAll<{ game_id: string }>(
+      (from, to) =>
+        supabase
+          .from("rounds")
+          .select("game_id")
+          .eq("game_type_id", gameTypeId)
+          .eq("basketball_season_id", options.seasonId!)
+          .range(from, to),
+    );
+    if (error) {
+      throw new Error(error.message);
+    }
+    gameIds = Array.from(new Set(roundRows.map((row) => row.game_id)));
+  } else {
+    const { data: games, error } = await selectAll<{ id: string }>(
+      (from, to) =>
+        supabase
+          .from("games")
+          .select("id")
+          .eq("game_type_id", gameTypeId)
+          .range(from, to),
+    );
+    if (error) {
+      throw new Error(error.message);
+    }
+    gameIds = games.map((game) => game.id);
+  }
+
+  if (gameIds.length === 0) {
+    return new Map();
+  }
+
+  const { data: entries, error: entriesError } = await selectAll<{
+    round_id: string;
+    player_id: number;
+    point_delta: number;
+  }>((from, to) =>
+    supabase
+      .from("round_entries")
+      .select("round_id, player_id, point_delta")
+      .in("game_id", gameIds)
+      .range(from, to),
+  );
+  if (entriesError) {
+    throw new Error(entriesError.message);
+  }
+
+  return aggregatePlayerRoundCounts(entries);
+}
 
 export async function fetchLeaderboards(
   gameTypeFilter: GameTypeId | "all" = "all",
