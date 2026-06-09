@@ -1,0 +1,3 @@
+specialists_recommended:
+  - frontend-engineer
+notes: Both deliverables are small, contained, UI-driven (one filter, one sort-input swap). Frontend-engineer flagged because the Add-players sort input is consumed by every game-type's game view and the per-game-type round count is a new query shared across views.

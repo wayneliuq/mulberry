@@ -178,15 +178,30 @@ export function LeaderboardsPage() {
     setSelectedSeasonId,
     noticeText,
     seasonsQuery,
+    activeSeasonId,
   } = useBasketballSeasons(isBasketballLeaderboard);
 
+  const applyMinRoundsFilter =
+    isBasketballLeaderboard &&
+    selectedSeasonId != null &&
+    activeSeasonId != null &&
+    selectedSeasonId >= activeSeasonId;
+
   const leaderboardsQuery = useQuery({
-    queryKey: ["leaderboards", selectedGameType, selectedSeasonId],
+    queryKey: [
+      "leaderboards",
+      selectedGameType,
+      selectedSeasonId,
+      applyMinRoundsFilter,
+    ],
     queryFn: () =>
       fetchLeaderboards(
         selectedGameType,
         isBasketballLeaderboard && selectedSeasonId != null
-          ? { basketballSeasonId: selectedSeasonId }
+          ? {
+              basketballSeasonId: selectedSeasonId,
+              applyMinRoundsFilter,
+            }
           : undefined,
       ),
     enabled: !isBasketballLeaderboard || selectedSeasonId !== null,
