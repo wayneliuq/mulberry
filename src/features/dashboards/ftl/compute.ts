@@ -183,23 +183,40 @@ export function buildFtlDashboardMetrics(
 
   // ── Section 3: Alliance Win Rate (2-player combos) ────────────────
 
-  // Step 1: Rank combos by landlord-side co-occurrence win rate (for selection)
-  const comboStats = new Map<string, { wins: number; total: number }>();
+  // Step 1: Find combos with enough same-team rounds (landlord OR villager side)
+  // Same team = both in landlordSideSelections OR both NOT in landlordSideSelections
+  const comboSameTeamStats = new Map<string, { wins: number; total: number }>();
   for (const round of rounds) {
-    const selSet = round.landlordSideSelections;
-    const eligibleInRound = selSet.filter((pid) => eligiblePlayerIds.has(pid));
-    const roundPairs = pairs([...new Set(eligibleInRound)]);
+    const selSet = roundLandlordSet.get(round.roundId)!;
+    const participants = new Set(
+      roundEntries
+        .filter((e) => e.roundId === round.roundId)
+        .map((e) => e.playerId),
+    );
+    const eligibleParticipants = [...participants].filter((pid) =>
+      eligiblePlayerIds.has(pid),
+    );
+    const roundPairs = pairs(eligibleParticipants);
     const won = round.outcome === "won";
+
     for (const [a, b] of roundPairs) {
+      const aOnLandlord = selSet.has(a);
+      const bOnLandlord = selSet.has(b);
+      // Same team: both landlord or both villager
+      if (aOnLandlord !== bOnLandlord) continue;
+
       const key = [a, b].sort().join("-");
-      const stat = comboStats.get(key) ?? { wins: 0, total: 0 };
+      const stat = comboSameTeamStats.get(key) ?? { wins: 0, total: 0 };
       stat.total++;
-      if (won) stat.wins++;
-      comboStats.set(key, stat);
+      // Win from their perspective: landlord side won AND they're on landlord,
+      // OR landlord side lost AND they're on villager side
+      const teamWon = aOnLandlord ? won : !won;
+      if (teamWon) stat.wins++;
+      comboSameTeamStats.set(key, stat);
     }
   }
 
-  const eligibleCombos = [...comboStats.entries()]
+  const eligibleCombos = [...comboSameTeamStats.entries()]
     .filter(([, s]) => s.total >= FTL_MIN_COMBO_ROUNDS)
     .sort(([, a], [, b]) => pct(b.wins, b.total) - pct(a.wins, a.total));
 
@@ -208,8 +225,8 @@ export function buildFtlDashboardMetrics(
   const selectedComboKeys = new Set([...topComboKeys, ...bottomComboKeys]);
 
   // Step 2: For each selected combo, compute lift = together - apart
-  // together = both on landlord side (from comboStats)
-  // apart = each player's landlord-side win rate in rounds where the OTHER is NOT on landlord side
+  // together = same-team win rate (from comboSameTeamStats)
+  // apart = each player's win rate when on DIFFERENT teams from the other
   function signedPct(v: number): string {
     const rounded = Math.round(v * 10) / 10;
     return `${rounded > 0 ? "+" : ""}${rounded}%`;
@@ -219,15 +236,14 @@ export function buildFtlDashboardMetrics(
     const rows: FtlStatRow[] = [];
     for (const key of keys) {
       const [a, b] = key.split("-").map(Number);
-      const comboStat = comboStats.get(key);
+      const comboStat = comboSameTeamStats.get(key);
       if (!comboStat || comboStat.total === 0) continue;
 
       const togetherRate = comboStat.wins / comboStat.total;
 
-      // Player A's landlord-side win rate in rounds where B is NOT on landlord side
+      // Apart: player A's win rate when on OPPOSITE team from B
       let apartAWins = 0;
       let apartATotal = 0;
-      // Player B's landlord-side win rate in rounds where A is NOT on landlord side
       let apartBWins = 0;
       let apartBTotal = 0;
 
@@ -235,20 +251,24 @@ export function buildFtlDashboardMetrics(
         const selSet = roundLandlordSet.get(round.roundId)!;
         const won = round.outcome === "won";
 
-        if (selSet.has(a) && !selSet.has(b)) {
+        const aOnLandlord = selSet.has(a);
+        const bOnLandlord = selSet.has(b);
+
+        // A is on opposite team from B
+        if (aOnLandlord !== bOnLandlord) {
+          const aTeamWon = aOnLandlord ? won : !won;
           apartATotal++;
-          if (won) apartAWins++;
-        }
-        if (selSet.has(b) && !selSet.has(a)) {
+          if (aTeamWon) apartAWins++;
+
+          const bTeamWon = bOnLandlord ? won : !won;
           apartBTotal++;
-          if (won) apartBWins++;
+          if (bTeamWon) apartBWins++;
         }
       }
 
       const apartARate = apartATotal > 0 ? apartAWins / apartATotal : null;
       const apartBRate = apartBTotal > 0 ? apartBWins / apartBTotal : null;
 
-      // Apart = average of individual rates (same as basketball pattern)
       const apartRate =
         apartARate !== null && apartBRate !== null
           ? (apartARate + apartBRate) / 2
@@ -277,7 +297,7 @@ export function buildFtlDashboardMetrics(
     id: "allianceWinRate",
     title: "Alliance Win Rate",
     explanation:
-      "Win-rate lift when both players are on the landlord side together vs when they play apart. Positive = synergy.",
+      "Win-rate lift when both players are on the same team (landlord or villager) vs when they're on opposite teams. Positive = synergy.",
     positiveTitle: "Best Duos (positive lift)",
     negativeTitle: "Worst Duos (negative lift)",
     positiveRows: buildComboRows(topComboKeys),
