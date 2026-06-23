@@ -207,35 +207,9 @@ export function buildFtlDashboardMetrics(
   const bottomComboKeys = eligibleCombos.slice(-FTL_TOP_COMBOS_COUNT).map(([k]) => k);
   const selectedComboKeys = new Set([...topComboKeys, ...bottomComboKeys]);
 
-  // Step 2: Compute individual player win rates across ALL FTL rounds
-  // "Win" = positive point_delta
-  const playerIndividualWins = new Map<number, { wins: number; total: number }>();
-  for (const round of rounds) {
-    const entries = roundEntries.filter((e) => e.roundId === round.roundId);
-    for (const entry of entries) {
-      if (!eligiblePlayerIds.has(entry.playerId)) continue;
-      const stat = playerIndividualWins.get(entry.playerId) ?? {
-        wins: 0,
-        total: 0,
-      };
-      stat.total++;
-      if (entry.pointDelta > 0) stat.wins++;
-      playerIndividualWins.set(entry.playerId, stat);
-    }
-  }
-
-  // Step 3: For selected combos, compute combo win rate + delta vs individual
-  // Build per-round participant set
-  const roundParticipantSet = new Map<string, Set<number>>();
-  for (const entry of roundEntries) {
-    let set = roundParticipantSet.get(entry.roundId);
-    if (!set) {
-      set = new Set();
-      roundParticipantSet.set(entry.roundId, set);
-    }
-    set.add(entry.playerId);
-  }
-
+  // Step 2: For each selected combo, compute lift = together - apart
+  // together = both on landlord side (from comboStats)
+  // apart = each player's landlord-side win rate in rounds where the OTHER is NOT on landlord side
   function signedPct(v: number): string {
     const rounded = Math.round(v * 10) / 10;
     return `${rounded > 0 ? "+" : ""}${rounded}%`;
@@ -245,46 +219,55 @@ export function buildFtlDashboardMetrics(
     const rows: FtlStatRow[] = [];
     for (const key of keys) {
       const [a, b] = key.split("-").map(Number);
+      const comboStat = comboStats.get(key);
+      if (!comboStat || comboStat.total === 0) continue;
 
-      // Combo win rate (both positive) across all rounds together
-      let comboWins = 0;
-      let comboTotal = 0;
+      const togetherRate = comboStat.wins / comboStat.total;
+
+      // Player A's landlord-side win rate in rounds where B is NOT on landlord side
+      let apartAWins = 0;
+      let apartATotal = 0;
+      // Player B's landlord-side win rate in rounds where A is NOT on landlord side
+      let apartBWins = 0;
+      let apartBTotal = 0;
+
       for (const round of rounds) {
-        const participants = roundParticipantSet.get(round.roundId);
-        if (!participants?.has(a) || !participants?.has(b)) continue;
-        const entries = roundEntries.filter((e) => e.roundId === round.roundId);
-        const deltaA = entries.find((e) => e.playerId === a)?.pointDelta ?? 0;
-        const deltaB = entries.find((e) => e.playerId === b)?.pointDelta ?? 0;
-        comboTotal++;
-        if (deltaA > 0 && deltaB > 0) comboWins++;
+        const selSet = roundLandlordSet.get(round.roundId)!;
+        const won = round.outcome === "won";
+
+        if (selSet.has(a) && !selSet.has(b)) {
+          apartATotal++;
+          if (won) apartAWins++;
+        }
+        if (selSet.has(b) && !selSet.has(a)) {
+          apartBTotal++;
+          if (won) apartBWins++;
+        }
       }
-      if (comboTotal === 0) continue;
 
-      const comboRate = comboWins / comboTotal;
+      const apartARate = apartATotal > 0 ? apartAWins / apartATotal : null;
+      const apartBRate = apartBTotal > 0 ? apartBWins / apartBTotal : null;
 
-      // Individual win rates
-      const statA = playerIndividualWins.get(a);
-      const statB = playerIndividualWins.get(b);
-      const rateA = statA && statA.total > 0 ? statA.wins / statA.total : null;
-      const rateB = statB && statB.total > 0 ? statB.wins / statB.total : null;
+      // Apart = average of individual rates (same as basketball pattern)
+      const apartRate =
+        apartARate !== null && apartBRate !== null
+          ? (apartARate + apartBRate) / 2
+          : apartARate ?? apartBRate;
 
-      // Expected = average of individual rates
-      const expected =
-        rateA !== null && rateB !== null ? (rateA + rateB) / 2 : null;
+      const lift = apartRate !== null ? togetherRate - apartRate : null;
+      const liftLabel = lift !== null ? signedPct(lift * 100) : "n/a";
 
-      // Delta = combo rate - expected
-      const delta = expected !== null ? comboRate - expected : null;
-      const deltaLabel = delta !== null ? signedPct(delta * 100) : "n/a";
-      const individualLabel =
-        rateA !== null && rateB !== null
-          ? `avg ${pct(rateA * 100, 100)}/${pct(rateB * 100, 100)} individually`
-          : "";
+      const togetherLabel = `${pct(comboStat.wins, comboStat.total)}% (${comboStat.total})`;
+      const apartLabel =
+        apartARate !== null && apartBRate !== null
+          ? `apart ${pct(apartARate * 100, 100)}/${pct(apartBRate * 100, 100)}%`
+          : "apart n/a";
 
       rows.push({
         label: comboLabel(players, [a, b]),
-        value: delta !== null ? Math.round(delta * 1000) / 10 : 0,
-        valueLabel: deltaLabel,
-        details: `Together ${pct(comboWins, comboTotal)}% (${comboTotal} rounds) · ${individualLabel}`,
+        value: lift !== null ? Math.round(lift * 1000) / 10 : 0,
+        valueLabel: liftLabel,
+        details: `Together ${togetherLabel} · ${apartLabel}`,
       });
     }
     return rows.sort((a, b) => b.value - a.value);
@@ -294,7 +277,7 @@ export function buildFtlDashboardMetrics(
     id: "allianceWinRate",
     title: "Alliance Win Rate",
     explanation:
-      "How much better (or worse) a duo performs together vs their individual win rates. Positive = synergy, negative = anti-synergy.",
+      "Win-rate lift when both players are on the landlord side together vs when they play apart. Positive = synergy.",
     positiveTitle: "Best Duos (positive lift)",
     negativeTitle: "Worst Duos (negative lift)",
     positiveRows: buildComboRows(topComboKeys),
