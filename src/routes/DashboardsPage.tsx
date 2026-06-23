@@ -151,12 +151,12 @@ function FtlDashboardView() {
               <p className="muted">{splitSection.explanation}</p>
               <details className="dashboard-details" open>
                 <summary>{splitSection.positiveTitle}</summary>
-                <RankedTable rows={splitSection.positiveRows} valueHeader="Win %" />
+                <RankedTable rows={splitSection.positiveRows} valueHeader={id === "allianceWinRate" ? "Lift" : "Win %"} />
               </details>
               {splitSection.negativeRows.length > 0 ? (
                 <details className="dashboard-details" open>
                   <summary>{splitSection.negativeTitle}</summary>
-                  <RankedTable rows={splitSection.negativeRows} valueHeader="Win %" />
+                  <RankedTable rows={splitSection.negativeRows} valueHeader={id === "allianceWinRate" ? "Lift" : "Win %"} />
                 </details>
               ) : null}
             </MetricCard>
