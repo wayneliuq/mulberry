@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { BasketballSeasonToolbar } from "../features/basketball/BasketballSeasonToolbar";
 import { useBasketballSeasons } from "../features/basketball/useBasketballSeasons";
 import { nbaCompStorageKeyForSeason } from "../features/basketball/seasons";
@@ -449,7 +449,13 @@ function BasketballDashboardView() {
 }
 
 export function DashboardsPage() {
-  const [activeGameType, setActiveGameType] = useState<DashboardGameType>("basketball");
+  const { dashboardType } = useParams<{ dashboardType?: string }>();
+  const navigate = useNavigate();
+
+  const activeGameType: DashboardGameType =
+    dashboardType === "ftl" || dashboardType === "fight-the-landlord"
+      ? "fight-the-landlord"
+      : "basketball";
 
   return (
     <section className="stack-lg">
@@ -463,7 +469,13 @@ export function DashboardsPage() {
                 ? "filter-toggle filter-toggle-active"
                 : "filter-toggle"
             }
-            onClick={() => setActiveGameType(option.id)}
+            onClick={() =>
+              navigate(
+                option.id === "basketball"
+                  ? "/dashboards/basketball"
+                  : "/dashboards/ftl",
+              )
+            }
           >
             <span className="filter-toggle-label">{option.name}</span>
           </button>

@@ -217,15 +217,107 @@ export function buildFtlDashboardMetrics(
     .slice(-FTL_TOP_COMBOS_COUNT)
     .reverse();
 
+  // Expand selected combos to ALL rounds where both players participated
+  // Build per-round participant set
+  const roundParticipantSet = new Map<string, Set<number>>();
+  for (const entry of roundEntries) {
+    let set = roundParticipantSet.get(entry.roundId);
+    if (!set) {
+      set = new Set();
+      roundParticipantSet.set(entry.roundId, set);
+    }
+    set.add(entry.playerId);
+  }
+
+  // For each selected combo key, find ALL rounds where both participated
+  const selectedComboKeys = new Set([
+    ...topCombos.map((c) => {
+      const ids = c.label.split(" + ").map((n) => {
+        const p = players.find((p) => p.displayName === n);
+        return p?.id ?? 0;
+      });
+      return ids.sort().join("-");
+    }),
+    ...bottomCombos.map((c) => {
+      const ids = c.label.split(" + ").map((n) => {
+        const p = players.find((p) => p.displayName === n);
+        return p?.id ?? 0;
+      });
+      return ids.sort().join("-");
+    }),
+  ]);
+
+  // Recompute stats for selected combos using ALL rounds
+  // "Win" = both players have positive point_delta in the round
+  const comboAllRounds = new Map<
+    string,
+    { wins: number; total: number; label: string }
+  >();
+
+  for (const comboKey of selectedComboKeys) {
+    const [a, b] = comboKey.split("-").map(Number);
+    let wins = 0;
+    let total = 0;
+    for (const round of rounds) {
+      const participants = roundParticipantSet.get(round.roundId);
+      if (!participants?.has(a) || !participants?.has(b)) continue;
+      const entries = roundEntries.filter((e) => e.roundId === round.roundId);
+      const deltaA = entries.find((e) => e.playerId === a)?.pointDelta ?? 0;
+      const deltaB = entries.find((e) => e.playerId === b)?.pointDelta ?? 0;
+      total++;
+      if (deltaA > 0 && deltaB > 0) wins++;
+    }
+    if (total > 0) {
+      comboAllRounds.set(comboKey, {
+        wins,
+        total,
+        label: comboLabel(players, [a, b]),
+      });
+    }
+  }
+
+  // Rebuild rows with ALL-round stats
+  function buildComboRows(keys: string[]): FtlStatRow[] {
+    return keys
+      .map((key) => {
+        const allStats = comboAllRounds.get(key);
+        if (!allStats || allStats.total === 0) return null;
+        const wr = pct(allStats.wins, allStats.total);
+        return {
+          label: allStats.label,
+          value: wr,
+          valueLabel: formatPct(wr),
+          details: `${allStats.wins}W / ${allStats.total - allStats.wins}L in ${allStats.total} rounds together`,
+        };
+      })
+      .filter((r): r is FtlStatRow => r !== null)
+      .sort((a, b) => b.value - a.value);
+  }
+
+  const topComboKeys = topCombos.map((c) => {
+    const ids = c.label.split(" + ").map((n) => {
+      const p = players.find((p) => p.displayName === n);
+      return p?.id ?? 0;
+    });
+    return ids.sort().join("-");
+  });
+  const bottomComboKeys = bottomCombos.map((c) => {
+    const ids = c.label.split(" + ").map((n) => {
+      const p = players.find((p) => p.displayName === n);
+      return p?.id ?? 0;
+    });
+    return ids.sort().join("-");
+  });
+
   const allianceSection: FtlDashboardSplitSection = {
     id: "allianceWinRate",
     title: "Alliance Win Rate",
     explanation:
-      "2-player combos on the landlord side. Top and bottom duos by win rate (min 3 rounds together).",
+      "Top and bottom 2-player duos ranked by landlord-side win rate (min 3 rounds together). Stats show ALL rounds where both players participated.",
     positiveTitle: "Best Duos",
     negativeTitle: "Worst Duos",
-    positiveRows: topCombos,
-    negativeRows: bottomCombos,
+    positiveRows: buildComboRows(topComboKeys),
+    negativeRows: buildComboRows(bottomComboKeys),
   };
 
   // ── Section 4: Biggest Pots ────────────────────────────────────────

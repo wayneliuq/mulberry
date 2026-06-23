@@ -31,6 +31,10 @@ export const appRoutes: RouteObject[] = [
         element: <DashboardsPage />,
       },
       {
+        path: "dashboards/:dashboardType",
+        element: <DashboardsPage />,
+      },
+      {
         path: "admin",
         element: <AdminConsolePage />,
       },
