@@ -51,6 +51,7 @@ export type FtlDashboardSplitSection = {
 };
 
 export type FtlDashboardModel = {
+  overallWinRate: { rate: number; wins: number; losses: number; total: number };
   sections: FtlDashboardSection[];
   splitSections: FtlDashboardSplitSection[];
   diagnostics: { totalRounds: number; eligiblePlayers: number };

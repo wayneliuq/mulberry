@@ -23,7 +23,7 @@ function formatPct(v: number): string {
   return `${v}%`;
 }
 
-/** Generate all 2-element subsets of an array (order-independent). */
+/** Generate all 2-element subsets of an array (order-independent, deduped). */
 function pairs(arr: number[]): [number, number][] {
   const result: [number, number][] = [];
   for (let i = 0; i < arr.length; i++) {
@@ -60,7 +60,6 @@ export function buildFtlDashboardMetrics(
 
   // Build per-round lookup: roundId → Set<playerId> of landlord-side players
   const roundLandlordSet = new Map<string, Set<number>>();
-  const roundOutcomeMap = new Map<string, "won" | "lost">();
   const roundMetaMap = new Map<
     string,
     { numBombs: number; gameMultiplier: number; selections: number[] }
@@ -69,7 +68,6 @@ export function buildFtlDashboardMetrics(
   for (const round of rounds) {
     const selSet = new Set(round.landlordSideSelections);
     roundLandlordSet.set(round.roundId, selSet);
-    roundOutcomeMap.set(round.roundId, round.outcome);
     roundMetaMap.set(round.roundId, {
       numBombs: round.numBombs,
       gameMultiplier: round.gameMultiplier,
@@ -86,7 +84,7 @@ export function buildFtlDashboardMetrics(
     );
   }
 
-  // Eligible players: 10+ total rounds
+  // Eligible players: 10+ FTL rounds
   const eligiblePlayerIds = new Set<number>();
   for (const [pid, count] of playerRoundCounts) {
     if (count >= FTL_MIN_ROUNDS) {
@@ -105,7 +103,7 @@ export function buildFtlDashboardMetrics(
   }
   const overallWinRate = pct(totalWins, totalRounds);
 
-  // Per-player landlord-side stats
+  // Per-player landlord-side stats (no "Overall" row — that's a chip now)
   const playerLandlordStats = new Map<
     number,
     { landlordRounds: number; wins: number }
@@ -126,12 +124,6 @@ export function buildFtlDashboardMetrics(
   }
 
   const landlordRows: FtlStatRow[] = [
-    {
-      label: "Overall",
-      value: overallWinRate,
-      valueLabel: formatPct(overallWinRate),
-      details: `${totalWins}W / ${totalRounds - totalWins}L in ${totalRounds} rounds`,
-    },
     ...[...playerLandlordStats.entries()]
       .filter(([, s]) => s.landlordRounds >= FTL_MIN_ROUNDS)
       .map(([pid, s]) => {
@@ -150,7 +142,7 @@ export function buildFtlDashboardMetrics(
     id: "landlordWinRate",
     title: "Landlord Side Win Rate",
     explanation:
-      "How often the landlord side wins. Overall rate plus per-player rate when on the landlord side.",
+      "Per-player win rate when on the landlord side (10+ FTL rounds).",
     rows: landlordRows,
   };
 
@@ -171,12 +163,12 @@ export function buildFtlDashboardMetrics(
     .filter(([pid]) => eligiblePlayerIds.has(pid))
     .map(([pid, selections]) => {
       const totalPlayed = playerRoundCounts.get(pid) ?? 1;
-      const perRound = Math.round((selections / totalPlayed) * 100) / 100;
+      const frequencyPct = pct(selections, totalPlayed);
       return {
         label: playerDisplayName(players, pid),
-        value: selections,
-        valueLabel: `${selections}`,
-        details: `${perRound}x per round · ${totalPlayed} rounds played`,
+        value: frequencyPct,
+        valueLabel: formatPct(frequencyPct),
+        details: `${selections} selections in ${totalPlayed} rounds`,
       };
     })
     .sort((a, b) => b.value - a.value);
@@ -185,7 +177,7 @@ export function buildFtlDashboardMetrics(
     id: "landlordFrequency",
     title: "Landlord Frequency",
     explanation:
-      "How often each player is selected for the landlord side. Higher = more time as 地主 or ally.",
+      "How often each player is selected for the landlord side, as % of rounds played.",
     rows: frequencyRows,
   };
 
@@ -242,7 +234,6 @@ export function buildFtlDashboardMetrics(
     const meta = roundMetaMap.get(round.roundId)!;
     const potSize =
       1 * meta.gameMultiplier * (meta.numBombs + 1) * meta.selections.length;
-    // Find max absolute point delta for this round
     const entries = roundEntries.filter((e) => e.roundId === round.roundId);
     const maxDelta = Math.max(...entries.map((e) => Math.abs(e.pointDelta)));
     return { round, potSize, maxDelta, meta, entries };
@@ -264,7 +255,7 @@ export function buildFtlDashboardMetrics(
     return {
       label: date,
       value: pot.maxDelta,
-      valueLabel: `${pot.maxDelta} pts`,
+      valueLabel: `${pot.maxDelta}pts`,
       details: `${pot.meta.numBombs} bombs · ${pot.meta.gameMultiplier}x · Won: ${winners} · Lost: ${losers}`,
     };
   });
@@ -279,10 +270,31 @@ export function buildFtlDashboardMetrics(
 
   // ── Section 5: Win Streaks ─────────────────────────────────────────
 
-  // For each eligible player, find longest consecutive landlord-side win streak
+  // Track each player's last FTL round (any role, not just landlord-side)
+  const playerLastFtlRoundIdx = new Map<number, number>();
+  for (let i = 0; i < rounds.length; i++) {
+    const round = rounds[i];
+    const entriesForRound = roundEntries.filter(
+      (e) => e.roundId === round.roundId,
+    );
+    for (const entry of entriesForRound) {
+      if (eligiblePlayerIds.has(entry.playerId)) {
+        playerLastFtlRoundIdx.set(entry.playerId, i);
+      }
+    }
+  }
+
+  // Track longest AND current streak per player
   const playerStreaks = new Map<
     number,
-    { longest: number; startIdx: number; endIdx: number }
+    {
+      longest: number;
+      bestStartIdx: number;
+      bestEndIdx: number;
+      current: number;
+      currentStartIdx: number;
+      lastLandlordIdx: number;
+    }
   >();
 
   for (const pid of eligiblePlayerIds) {
@@ -291,14 +303,21 @@ export function buildFtlDashboardMetrics(
     let streakStart = 0;
     let bestStart = 0;
     let bestEnd = 0;
+    let currentStart = 0;
+    let lastLandlordIdx = -1;
 
     for (let i = 0; i < rounds.length; i++) {
       const round = rounds[i];
       const selSet = roundLandlordSet.get(round.roundId);
       if (!selSet?.has(pid)) continue;
 
+      lastLandlordIdx = i;
+
       if (round.outcome === "won") {
-        if (current === 0) streakStart = i;
+        if (current === 0) {
+          streakStart = i;
+          currentStart = i;
+        }
         current++;
         if (current > longest) {
           longest = current;
@@ -313,37 +332,61 @@ export function buildFtlDashboardMetrics(
     if (longest > 0) {
       playerStreaks.set(pid, {
         longest,
-        startIdx: bestStart,
-        endIdx: bestEnd,
+        bestStartIdx: bestStart,
+        bestEndIdx: bestEnd,
+        current,
+        currentStartIdx: currentStart,
+        lastLandlordIdx,
       });
     }
   }
 
+  const lastRoundIdx = rounds.length - 1;
+
   const streakRows: FtlStatRow[] = [...playerStreaks.entries()]
-    .sort(([, a], [, b]) => b.longest - a.longest)
-    .slice(0, FTL_TOP_STREAKS_COUNT)
     .map(([pid, streak]) => {
-      const startDate = rounds[streak.startIdx].createdAt.slice(0, 10);
-      const endDate = rounds[streak.endIdx].createdAt.slice(0, 10);
+      const startIdx = streak.bestStartIdx;
+      const endIdx = streak.bestEndIdx;
+      const startDate = rounds[startIdx].createdAt.slice(0, 10);
+      const endDate = rounds[endIdx].createdAt.slice(0, 10);
+      // Ongoing: best streak ends at player's last landlord-side round
+      // AND that last landlord round is the player's last FTL round
+      // AND it was a win (current > 0 and bestEnd == lastLandlordIdx)
+      const lastFtlIdx = playerLastFtlRoundIdx.get(pid) ?? -1;
+      const bestStreakIsCurrent =
+        streak.bestEndIdx === streak.lastLandlordIdx &&
+        streak.lastLandlordIdx === lastFtlIdx &&
+        streak.current > 0;
+
       return {
         label: playerDisplayName(players, pid),
         value: streak.longest,
         valueLabel: `${streak.longest} wins`,
-        details: `${startDate} → ${endDate}`,
+        details: bestStreakIsCurrent
+          ? `${startDate} – present`
+          : `${startDate} → ${endDate}`,
       };
-    });
+    })
+    .sort((a, b) => b.value - a.value)
+    .slice(0, FTL_TOP_STREAKS_COUNT);
 
   const streaksSection: FtlDashboardSection = {
     id: "winStreaks",
     title: "Win Streaks",
     explanation:
-      "Longest consecutive wins on the landlord side. Consistency at being 地主.",
+      "Longest consecutive wins on the landlord side. Ongoing streaks shown with 'present'.",
     rows: streakRows,
   };
 
   // ── Assemble ──────────────────────────────────────────────────────
 
   return {
+    overallWinRate: {
+      rate: overallWinRate,
+      wins: totalWins,
+      losses: totalRounds - totalWins,
+      total: totalRounds,
+    },
     sections: [landlordSection, frequencySection, potsSection, streaksSection],
     splitSections: [allianceSection],
     diagnostics: {

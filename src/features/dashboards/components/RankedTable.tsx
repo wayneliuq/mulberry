@@ -4,9 +4,11 @@ import { rankCellClass, scoreClassForSignedValue } from "../../ui/tableDisplay";
 export function RankedTable({
   rows,
   valueHeader = "Value",
+  valueMinWidth,
 }: {
   rows: RankedMetricRow[];
   valueHeader?: string;
+  valueMinWidth?: string;
 }) {
   if (rows.length === 0) {
     return <p className="muted">Not enough qualifying rounds yet.</p>;
@@ -22,7 +24,7 @@ export function RankedTable({
             <th scope="col" className="th-sticky-name">
               Player(s)
             </th>
-            <th scope="col" className="numeric">
+            <th scope="col" className="numeric" style={valueMinWidth ? { minWidth: valueMinWidth } : undefined}>
               {valueHeader}
             </th>
             <th scope="col">Details</th>
@@ -38,7 +40,7 @@ export function RankedTable({
                   <span className="rank-chip">{rank}</span>
                 </td>
                 <td className="td-primary td-sticky-name">{row.label}</td>
-                <td className="numeric">
+                <td className="numeric" style={valueMinWidth ? { minWidth: valueMinWidth } : undefined}>
                   <span className={valueClass}>{row.valueLabel}</span>
                 </td>
                 <td className="td-secondary">{row.details}</td>

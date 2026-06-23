@@ -165,12 +165,30 @@ function FtlDashboardView() {
 
         const section = ftlSectionsById.get(id);
         if (!section) return null;
+
+        // Overall win rate chip for landlord win rate section
+        const overallChip =
+          id === "landlordWinRate" ? (
+            <div className="dashboard-highlight-item" style={{ marginBottom: "1rem" }}>
+              <p className="dashboard-highlight-label">Overall Landlord Win Rate</p>
+              <p className="dashboard-highlight-value">{ftlMetrics!.overallWinRate.rate}%</p>
+              <p className="dashboard-highlight-detail">
+                {ftlMetrics!.overallWinRate.wins}W / {ftlMetrics!.overallWinRate.losses}L in {ftlMetrics!.overallWinRate.total} rounds
+              </p>
+            </div>
+          ) : null;
+
+        // Wider value column for biggest pots
+        const valueHeader = id === "biggestPots" ? "Points" : undefined;
+        const valueMinWidth = id === "biggestPots" ? "5rem" : undefined;
+
         return (
           <MetricCard key={id} id={`dashboard-${id}`} title={section.title}>
+            {overallChip}
             <p className="muted">{section.explanation}</p>
             <details className="dashboard-details" open>
               <summary>Ranked results</summary>
-              <RankedTable rows={section.rows} />
+              <RankedTable rows={section.rows} valueHeader={valueHeader} valueMinWidth={valueMinWidth} />
             </details>
           </MetricCard>
         );
