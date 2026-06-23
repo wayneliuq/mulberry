@@ -11,6 +11,7 @@ import type {
   BasketballSeasonSummary,
   BasketballSeasonsPayload,
   FamilyLeaderboardRow,
+  FtlDashboardData,
   GameDetails,
   GameSummary,
   LeaderboardData,
@@ -1068,4 +1069,94 @@ export async function fetchLeaderboards(
     players: filteredPlayerRows,
     families: familyRows,
   };
+}
+
+export async function fetchFtlDashboardData(): Promise<FtlDashboardData> {
+  const [roundsResult, entriesResult, playersResult] = await Promise.all([
+    selectAll<{
+      id: string;
+      game_id: string;
+      created_at: string;
+      settings_snapshot: Record<string, unknown>;
+    }>((from, to) =>
+      supabase
+        .from("rounds")
+        .select("id, game_id, created_at, settings_snapshot")
+        .eq("game_type_id", "fight-the-landlord")
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to),
+    ),
+    selectAll<{ round_id: string; player_id: number; point_delta: number }>(
+      (from, to) =>
+        supabase
+          .from("round_entries")
+          .select("round_id, player_id, point_delta")
+          .range(from, to),
+    ),
+    selectAll<{
+      id: number;
+      display_name: string;
+      family_id: string | null;
+    }>((from, to) =>
+      supabase
+        .from("players")
+        .select("id, display_name, family_id")
+        .eq("is_active", true)
+        .range(from, to),
+    ),
+  ]);
+
+  if (roundsResult.error) throw new Error(roundsResult.error.message);
+  if (entriesResult.error) throw new Error(entriesResult.error.message);
+  if (playersResult.error) throw new Error(playersResult.error.message);
+
+  // Filter to rounds with landlordSideSelections in metadata
+  const ftlRounds = roundsResult.data
+    .filter((round) => {
+      const meta = round.settings_snapshot?.metadata as
+        | Record<string, unknown>
+        | undefined;
+      if (!meta || meta.mode !== "fight-the-landlord") return false;
+      const selections = meta.landlordSideSelections;
+      return (
+        Array.isArray(selections) &&
+        selections.length > 0 &&
+        typeof meta.outcome === "string" &&
+        (meta.outcome === "won" || meta.outcome === "lost")
+      );
+    })
+    .map((round) => {
+      const meta = round.settings_snapshot.metadata as Record<
+        string,
+        unknown
+      >;
+      return {
+        roundId: round.id,
+        gameId: round.game_id,
+        createdAt: round.created_at,
+        landlordSideSelections: meta.landlordSideSelections as number[],
+        numBombs: (meta.numBombs as number) ?? 0,
+        gameMultiplier: (meta.gameMultiplier as number) ?? 1,
+        outcome: meta.outcome as "won" | "lost",
+      };
+    });
+
+  const ftlRoundIds = new Set(ftlRounds.map((r) => r.roundId));
+
+  const ftlEntries = entriesResult.data
+    .filter((entry) => ftlRoundIds.has(entry.round_id))
+    .map((entry) => ({
+      roundId: entry.round_id,
+      playerId: entry.player_id,
+      pointDelta: entry.point_delta,
+    }));
+
+  const activePlayerIds = new Set(ftlEntries.map((e) => e.playerId));
+  const players = playersResult.data
+    .filter((p) => activePlayerIds.has(p.id))
+    .map((p) => ({ id: p.id, displayName: p.display_name, familyId: p.family_id }))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }));
+
+  return { players, rounds: ftlRounds, roundEntries: ftlEntries };
 }
