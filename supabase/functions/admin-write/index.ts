@@ -130,6 +130,14 @@ const actionSchema = z.discriminatedUnion("action", [
     playerId: z.number().int().positive(),
     isScoreNeutralHidden: z.boolean(),
   }),
+  z.object({
+    action: z.literal("save_basketball_team_preset"),
+    password: z.string(),
+    gameId: uuidSchema,
+    teamAPlayerIds: z.array(z.number().int().positive()).min(1),
+    teamBPlayerIds: z.array(z.number().int().positive()).min(1),
+    teamAWinProb: z.number().min(0).max(1).optional(),
+  }),
 ]);
 
 type AdminAction = z.infer<typeof actionSchema>;
@@ -142,6 +150,7 @@ type PlayerRow = {
 };
 
 const SCORE_NEUTRAL_EPSILON = 0.01;
+const MAX_BASKETBALL_TEAM_PRESETS = 10;
 
 function isNearZeroPointDelta(value: number): boolean {
   return Math.abs(value) <= SCORE_NEUTRAL_EPSILON;
@@ -215,6 +224,53 @@ function assertScoreNeutralRoundEntries(
       throw new Error(
         "Ghost players must receive exactly zero points in every round.",
       );
+    }
+  }
+}
+
+function validateBasketballTeamRoster(
+  teamAPlayerIds: number[],
+  teamBPlayerIds: number[],
+  unlockedPlayerIds: Set<number>,
+) {
+  if (teamAPlayerIds.length < 1 || teamBPlayerIds.length < 1) {
+    throw new Error("Basketball teams require at least one player on each side.");
+  }
+
+  const teamASet = new Set<number>();
+  const teamBSet = new Set<number>();
+
+  for (const id of teamAPlayerIds) {
+    if (!Number.isInteger(id)) {
+      throw new Error("Basketball team metadata must use integer player ids.");
+    }
+    if (!unlockedPlayerIds.has(id)) {
+      throw new Error("Basketball team metadata references a locked or missing player.");
+    }
+    teamASet.add(id);
+  }
+
+  for (const id of teamBPlayerIds) {
+    if (!Number.isInteger(id)) {
+      throw new Error("Basketball team metadata must use integer player ids.");
+    }
+    if (!unlockedPlayerIds.has(id)) {
+      throw new Error("Basketball team metadata references a locked or missing player.");
+    }
+    teamBSet.add(id);
+  }
+
+  if (teamASet.size !== teamAPlayerIds.length) {
+    throw new Error("Team A cannot list the same player twice.");
+  }
+
+  if (teamBSet.size !== teamBPlayerIds.length) {
+    throw new Error("Team B cannot list the same player twice.");
+  }
+
+  for (const id of teamASet) {
+    if (teamBSet.has(id)) {
+      throw new Error("Basketball team metadata cannot place one player on both teams.");
     }
   }
 }
@@ -813,6 +869,142 @@ async function handleDeleteGame(
   }
 
   return jsonResponse({ deletedGameId: action.gameId });
+}
+
+type BasketballTeamPresetRow = {
+  id: string;
+  game_id: string;
+  label_number: number;
+  team_a_player_ids: number[];
+  team_b_player_ids: number[];
+  team_a_win_prob: number | null;
+  created_at: string;
+};
+
+async function handleSaveBasketballTeamPreset(
+  supabase: Awaited<ReturnType<typeof createVerifiedAdminClient>>["supabase"],
+  action: Extract<AdminAction, { action: "save_basketball_team_preset" }>,
+) {
+  const game = await requireGame(supabase, action.gameId);
+
+  if (game.game_type_id !== "basketball") {
+    throw new Error("Team presets are only supported for basketball games.");
+  }
+
+  if (game.status !== "open") {
+    throw new Error("Cannot save team presets on a settled game.");
+  }
+
+  const { data: gamePlayers, error: gamePlayersError } = await supabase
+    .from("game_players")
+    .select("id, game_id, player_id, join_order, is_locked")
+    .eq("game_id", action.gameId)
+    .order("join_order", { ascending: true });
+
+  if (gamePlayersError) {
+    throw new Error(gamePlayersError.message);
+  }
+
+  const unlockedPlayerIds = new Set(
+    ((gamePlayers ?? []) as GamePlayerRow[])
+      .filter((row) => !row.is_locked)
+      .map((row) => row.player_id),
+  );
+
+  validateBasketballTeamRoster(
+    action.teamAPlayerIds,
+    action.teamBPlayerIds,
+    unlockedPlayerIds,
+  );
+
+  const { data: maxLabelRow, error: maxLabelError } = await supabase
+    .from("basketball_team_presets")
+    .select("label_number")
+    .eq("game_id", action.gameId)
+    .order("label_number", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ label_number: number }>();
+
+  if (maxLabelError) {
+    throw new Error(maxLabelError.message);
+  }
+
+  const labelNumber = (maxLabelRow?.label_number ?? 0) + 1;
+
+  const { data: inserted, error: insertError } = await supabase
+    .from("basketball_team_presets")
+    .insert({
+      game_id: action.gameId,
+      label_number: labelNumber,
+      team_a_player_ids: action.teamAPlayerIds,
+      team_b_player_ids: action.teamBPlayerIds,
+      team_a_win_prob: action.teamAWinProb ?? null,
+    })
+    .select(
+      "id, game_id, label_number, team_a_player_ids, team_b_player_ids, team_a_win_prob, created_at",
+    )
+    .single<BasketballTeamPresetRow>();
+
+  if (insertError) {
+    throw new Error(insertError.message);
+  }
+
+  const { data: presetRows, error: listError } = await supabase
+    .from("basketball_team_presets")
+    .select("id")
+    .eq("game_id", action.gameId)
+    .order("created_at", { ascending: false });
+
+  if (listError) {
+    throw new Error(listError.message);
+  }
+
+  const deletedPresetIds: string[] = [];
+  const rows = presetRows ?? [];
+  if (rows.length > MAX_BASKETBALL_TEAM_PRESETS) {
+    const staleIds = rows
+      .slice(MAX_BASKETBALL_TEAM_PRESETS)
+      .map((row) => row.id as string);
+    if (staleIds.length > 0) {
+      const { error: deleteError } = await supabase
+        .from("basketball_team_presets")
+        .delete()
+        .in("id", staleIds);
+      if (deleteError) {
+        throw new Error(deleteError.message);
+      }
+      deletedPresetIds.push(...staleIds);
+    }
+  }
+
+  await touchGame(supabase, action.gameId);
+
+  await insertAuditLog(
+    supabase,
+    "save_basketball_team_preset",
+    "game",
+    action.gameId,
+    {
+      preset_id: inserted.id,
+      label_number: inserted.label_number,
+      deleted_preset_ids: deletedPresetIds,
+      team_a_player_ids: inserted.team_a_player_ids,
+      team_b_player_ids: inserted.team_b_player_ids,
+      team_a_win_prob: inserted.team_a_win_prob,
+    },
+  );
+
+  return jsonResponse({
+    preset: {
+      id: inserted.id,
+      labelNumber: inserted.label_number,
+      teamAPlayerIds: inserted.team_a_player_ids,
+      teamBPlayerIds: inserted.team_b_player_ids,
+      teamAWinProb: inserted.team_a_win_prob,
+      createdAt: inserted.created_at,
+    },
+    deletedPresetIds,
+  });
 }
 
 async function handleCreateRound(
@@ -1461,6 +1653,8 @@ Deno.serve(async (request) => {
         return await handleRemoveGamePlayer(supabase, action);
       case "delete_game":
         return await handleDeleteGame(supabase, action);
+      case "save_basketball_team_preset":
+        return await handleSaveBasketballTeamPreset(supabase, action);
       case "create_round":
         return await handleCreateRound(supabase, action);
       case "delete_round":

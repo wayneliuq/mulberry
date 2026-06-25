@@ -1,8 +1,10 @@
 import {
   type Dispatch,
   type SetStateAction,
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -13,6 +15,8 @@ import {
 import { Link, useParams } from "react-router-dom";
 import { useAdminSession } from "../features/admin/AdminSessionContext";
 import { BasketballSeasonToolbar } from "../features/basketball/BasketballSeasonToolbar";
+import { BasketballPickedTeamsPanel } from "../features/basketball/BasketballPickedTeamsPanel";
+import { BasketballPresetRow } from "../features/basketball/BasketballPresetRow";
 import { BasketballTeamPickerSection } from "../features/basketball/BasketballTeamPickerSection";
 import { useBasketballSeasons } from "../features/basketball/useBasketballSeasons";
 import { calculateDixitRound } from "../features/game-types/dixit";
@@ -38,8 +42,11 @@ import {
 } from "../features/game-types/werewolves";
 import {
   DEFAULT_BASKETBALL_LEDGER_SCALE,
+  balanceBasketballTeams,
+  BASKETBALL_TEAM_BALANCE_MAX_PLAYERS,
   parseBasketballMatchFromRoundSnapshot,
   predictBasketballMatchWinProbabilities,
+  priorBasketballMatchesFromSeasonHistory,
 } from "../features/game-types/basketball";
 import { AddPlayersDrawer } from "../features/players/AddPlayersDrawer";
 import {
@@ -56,6 +63,7 @@ import { IconGlyph } from "../features/ui/IconGlyph";
 import { copy } from "../features/ui/copy";
 import { SectionHeader } from "../features/ui/SectionHeader";
 import { adminWrite } from "../lib/api/admin";
+import type { BasketballTeamPreset } from "../lib/api/types";
 import {
   fetchBasketballRoundHistory,
   fetchPlayerRoundCountsByGameType,
@@ -74,6 +82,13 @@ export function GameViewPage() {
   const queryClient = useQueryClient();
   const { isAdmin, password } = useAdminSession();
   const [showAddPlayers, setShowAddPlayers] = useState(false);
+  const [showPickTeams, setShowPickTeams] = useState(false);
+  const [pickTeamsPending, setPickTeamsPending] = useState(false);
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const [latestPickedPreset, setLatestPickedPreset] =
+    useState<BasketballTeamPreset | null>(null);
+  const applyingPresetRef = useRef(false);
+  const [presetClearedNotice, setPresetClearedNotice] = useState(false);
   const [showGameSettings, setShowGameSettings] = useState(false);
   const [showRoundForm, setShowRoundForm] = useState(false);
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<number[]>([]);
@@ -204,6 +219,21 @@ export function GameViewPage() {
     [allPlayers, currentGamePlayerIds, gameRoundCountByPlayerId],
   );
   const unlockedPlayers = game?.players.filter((player) => !player.isLocked) ?? [];
+  const unlockedPlayerIdSet = useMemo(
+    () => new Set(unlockedPlayers.map((player) => player.playerId)),
+    [unlockedPlayers],
+  );
+  const basketballTeamPresets = game?.basketballTeamPresets ?? [];
+  const playerDisplayNameById = useMemo(
+    () =>
+      new Map(
+        (game?.players ?? []).map((player) => [
+          player.playerId,
+          player.displayName,
+        ]),
+      ),
+    [game?.players],
+  );
 
   const [addPlayersSort, setAddPlayersSort] =
     useState<PlayerSortMode>("rounds-desc");
@@ -221,7 +251,7 @@ export function GameViewPage() {
   );
 
   useEffect(() => {
-    if (!game || game.gameTypeId !== "basketball" || !showRoundForm) {
+    if (!game || game.gameTypeId !== "basketball") {
       return;
     }
 
@@ -229,16 +259,19 @@ export function GameViewPage() {
       ? basketballRosterKey.split(",").map((id) => Number(id))
       : [];
 
-    if (ids.length < 2) {
-      return;
-    }
-
     const next: Record<number, "none" | "A" | "B"> = {};
     ids.forEach((id) => {
       next[id] = "none";
     });
     setBasketballTeamByPlayerId(next);
-  }, [game?.gameTypeId, showRoundForm, basketballRosterKey]);
+    setSelectedPresetId(null);
+  }, [game?.gameTypeId, basketballRosterKey]);
+
+  useEffect(() => {
+    if (!showRoundForm) {
+      setSelectedPresetId(null);
+    }
+  }, [showRoundForm]);
 
   useEffect(() => {
     setBasketballBalancedEntries(null);
@@ -436,9 +469,71 @@ export function GameViewPage() {
       setDixitManualInputs({});
       setBasketballManualMode(false);
       setBasketballManualInputs({});
+      setSelectedPresetId(null);
       await invalidateGameData();
     },
   });
+
+  const saveBasketballTeamPresetMutation = useMutation({
+    mutationFn: async (payload: {
+      teamAPlayerIds: number[];
+      teamBPlayerIds: number[];
+      teamAWinProb: number;
+    }) =>
+      adminWrite<
+        "save_basketball_team_preset",
+        { preset: BasketballTeamPreset; deletedPresetIds?: string[] }
+      >({
+        action: "save_basketball_team_preset",
+        password: requireAdminPassword(),
+        gameId,
+        teamAPlayerIds: payload.teamAPlayerIds,
+        teamBPlayerIds: payload.teamBPlayerIds,
+        teamAWinProb: payload.teamAWinProb,
+      }),
+    onSuccess: async (data) => {
+      if (data?.preset) {
+        setLatestPickedPreset(data.preset);
+      }
+      await invalidateGameData();
+    },
+  });
+
+  const runPickTeamsSave = useCallback(async () => {
+    const playerIds = sortedUnlockedPlayers.map((player) => player.playerId);
+    const priors = priorBasketballMatchesFromSeasonHistory(
+      basketballHistoryQuery.data ?? [],
+    );
+    const balanced = balanceBasketballTeams(playerIds, priors);
+    if (!balanced) {
+      window.alert(copy.gameView.pickTeamsFailed);
+      return;
+    }
+
+    await saveBasketballTeamPresetMutation.mutateAsync({
+      teamAPlayerIds: balanced.teamAPlayerIds,
+      teamBPlayerIds: balanced.teamBPlayerIds,
+      teamAWinProb: balanced.teamAWinProb,
+    });
+  }, [
+    basketballHistoryQuery.data,
+    saveBasketballTeamPresetMutation,
+    sortedUnlockedPlayers,
+  ]);
+
+  useEffect(() => {
+    if (!pickTeamsPending || basketballHistoryQuery.isLoading) {
+      return;
+    }
+
+    void runPickTeamsSave().finally(() => {
+      setPickTeamsPending(false);
+    });
+  }, [
+    basketballHistoryQuery.isLoading,
+    pickTeamsPending,
+    runPickTeamsSave,
+  ]);
 
   const deleteRoundMutation = useMutation({
     mutationFn: async (roundId: string) =>
@@ -1045,6 +1140,105 @@ export function GameViewPage() {
     });
   }
 
+  function applyBasketballPreset(preset: BasketballTeamPreset) {
+    applyingPresetRef.current = true;
+    const next: Record<number, "none" | "A" | "B"> = {};
+    for (const player of sortedUnlockedPlayers) {
+      next[player.playerId] = "none";
+    }
+    for (const id of preset.teamAPlayerIds) {
+      if (unlockedPlayerIdSet.has(id)) {
+        next[id] = "A";
+      }
+    }
+    for (const id of preset.teamBPlayerIds) {
+      if (unlockedPlayerIdSet.has(id)) {
+        next[id] = "B";
+      }
+    }
+    setBasketballTeamByPlayerId(next);
+    applyingPresetRef.current = false;
+    setPresetClearedNotice(false);
+  }
+
+  function clearBasketballTeamAssignments() {
+    const next: Record<number, "none" | "A" | "B"> = {};
+    for (const player of sortedUnlockedPlayers) {
+      next[player.playerId] = "none";
+    }
+    setBasketballTeamByPlayerId(next);
+  }
+
+  function handleBasketballTeamChange(
+    playerId: number,
+    team: "none" | "A" | "B",
+  ) {
+    if (!applyingPresetRef.current && selectedPresetId !== null) {
+      setSelectedPresetId(null);
+      setPresetClearedNotice(true);
+    }
+    setBasketballTeamByPlayerId((current) => ({
+      ...current,
+      [playerId]: team,
+    }));
+  }
+
+  function handleBasketballPresetSelect(preset: BasketballTeamPreset | null) {
+    if (preset === null) {
+      setSelectedPresetId(null);
+      clearBasketballTeamAssignments();
+      return;
+    }
+
+    setSelectedPresetId(preset.id);
+    applyBasketballPreset(preset);
+  }
+
+  function handlePickTeamsClick() {
+    const nextOpen = !showPickTeams;
+    setShowPickTeams(nextOpen);
+    if (!nextOpen) {
+      return;
+    }
+
+    if (sortedUnlockedPlayers.length < 2) {
+      window.alert(copy.gameView.pickTeamsNeedPlayers);
+      return;
+    }
+
+    if (sortedUnlockedPlayers.length > BASKETBALL_TEAM_BALANCE_MAX_PLAYERS) {
+      window.alert(copy.gameView.pickTeamsTooManyPlayers);
+      return;
+    }
+
+    if (basketballHistoryQuery.isLoading) {
+      setPickTeamsPending(true);
+      return;
+    }
+
+    void runPickTeamsSave();
+  }
+
+  const pickPanelPreset =
+    latestPickedPreset ?? basketballTeamPresets[0] ?? null;
+  const pickTeamsDisabled =
+    !isAdmin ||
+    game.status === "settled" ||
+    sortedUnlockedPlayers.length < 2 ||
+    sortedUnlockedPlayers.length > BASKETBALL_TEAM_BALANCE_MAX_PLAYERS;
+
+  const basketballPresetRow = (
+    <BasketballPresetRow
+      presets={basketballTeamPresets}
+      selectedPresetId={selectedPresetId}
+      onSelectPreset={handleBasketballPresetSelect}
+      disabled={!isAdmin || game.status === "settled"}
+      isLoading={basketballHistoryQuery.isLoading}
+      loadingMessage={copy.gameView.presetLineupsLoading}
+      emptyMessage={copy.gameView.presetLineupsEmpty}
+    />
+  );
+
   return (
     <section className="stack-lg">
       {game.gameTypeId === "basketball" ? (
@@ -1095,6 +1289,18 @@ export function GameViewPage() {
               >
                 {copy.gameView.addPlayers}
               </button>
+              {game.gameTypeId === "basketball" ? (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={pickTeamsDisabled}
+                  aria-expanded={showPickTeams}
+                  aria-controls="basketball-pick-teams-panel"
+                  onClick={handlePickTeamsClick}
+                >
+                  {copy.gameView.pickTeams}
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="secondary-button"
@@ -1106,6 +1312,19 @@ export function GameViewPage() {
             </>
           }
         />
+
+        {game.gameTypeId === "basketball" && showPickTeams ? (
+          <BasketballPickedTeamsPanel
+            preset={pickPanelPreset}
+            playersById={playerDisplayNameById}
+            isLoading={
+              pickTeamsPending ||
+              saveBasketballTeamPresetMutation.isPending ||
+              (basketballHistoryQuery.isLoading && !pickPanelPreset)
+            }
+            loadingMessage={copy.gameView.pickTeamsHistoryLoading}
+          />
+        ) : null}
 
         {showGameSettings ? (
           <form
@@ -1528,15 +1747,16 @@ export function GameViewPage() {
                   <BasketballTeamPickerSection
                     players={sortedUnlockedPlayers}
                     teamByPlayerId={basketballTeamByPlayerId}
-                    onTeamChange={(playerId, team) =>
-                      setBasketballTeamByPlayerId((current) => ({
-                        ...current,
-                        [playerId]: team,
-                      }))
-                    }
+                    onTeamChange={handleBasketballTeamChange}
                     sortMode={unlockedSort}
                     onSortChange={setUnlockedSort}
                   />
+                  {presetClearedNotice ? (
+                    <p className="muted" role="status" aria-live="polite">
+                      {copy.gameView.presetClearedLive}
+                    </p>
+                  ) : null}
+                  {basketballPresetRow}
                   <ManualRoundForm
                     players={basketballManualPlayers}
                     inputs={basketballManualInputs}
@@ -1613,12 +1833,7 @@ export function GameViewPage() {
                 <BasketballTeamPickerSection
                   players={sortedUnlockedPlayers}
                   teamByPlayerId={basketballTeamByPlayerId}
-                  onTeamChange={(playerId, team) =>
-                    setBasketballTeamByPlayerId((current) => ({
-                      ...current,
-                      [playerId]: team,
-                    }))
-                  }
+                  onTeamChange={handleBasketballTeamChange}
                   sortMode={unlockedSort}
                   onSortChange={setUnlockedSort}
                 />
@@ -1643,6 +1858,12 @@ export function GameViewPage() {
                     </ul>
                   </div>
                 ) : null}
+                {presetClearedNotice ? (
+                  <p className="muted" role="status" aria-live="polite">
+                    {copy.gameView.presetClearedLive}
+                  </p>
+                ) : null}
+                {basketballPresetRow}
                 <RoundFormFooter
                   imbalanceTotal={basketballDisplayTotal}
                   onBalanceToZero={handleBasketballBalanceToZero}

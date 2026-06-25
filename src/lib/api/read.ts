@@ -10,6 +10,7 @@ import type {
   BasketballDashboardRoundEntry,
   BasketballSeasonSummary,
   BasketballSeasonsPayload,
+  BasketballTeamPreset,
   FamilyLeaderboardRow,
   FtlDashboardData,
   GameDetails,
@@ -365,6 +366,7 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
     roundsResult,
     roundEntriesResult,
     settlement,
+    teamPresetsResult,
   ] = await Promise.all([
     supabase
       .from("games")
@@ -402,6 +404,14 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
         .range(from, to),
     ),
     fetchSettlement(gameId),
+    supabase
+      .from("basketball_team_presets")
+      .select(
+        "id, label_number, team_a_player_ids, team_b_player_ids, team_a_win_prob, created_at",
+      )
+      .eq("game_id", gameId)
+      .order("created_at", { ascending: false })
+      .limit(10),
   ]);
 
   const game = assertData(gameResult.data as RawGame | null, gameResult.error);
@@ -431,6 +441,34 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
   if (roundEntriesResult.error) {
     throw new Error(roundEntriesResult.error.message);
   }
+
+  if (teamPresetsResult.error) {
+    throw new Error(teamPresetsResult.error.message);
+  }
+
+  type RawBasketballTeamPreset = {
+    id: string;
+    label_number: number;
+    team_a_player_ids: number[];
+    team_b_player_ids: number[];
+    team_a_win_prob: number | null;
+    created_at: string;
+  };
+
+  const basketballTeamPresets: BasketballTeamPreset[] | undefined =
+    game.game_type_id === "basketball"
+      ? ((teamPresetsResult.data ?? []) as RawBasketballTeamPreset[]).map(
+          (row) => ({
+            id: row.id,
+            labelNumber: row.label_number,
+            teamAPlayerIds: row.team_a_player_ids.map(Number),
+            teamBPlayerIds: row.team_b_player_ids.map(Number),
+            teamAWinProb:
+              row.team_a_win_prob === null ? null : Number(row.team_a_win_prob),
+            createdAt: row.created_at,
+          }),
+        )
+      : undefined;
 
   const totalByGamePlayerId = new Map(
     ((totalsResult.data ?? []) as RawGamePointTotal[]).map((row) => [
@@ -492,6 +530,9 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
           ?.sort((left, right) => right.pointDelta - left.pointDelta) ?? [],
     })),
     settlement,
+    ...(basketballTeamPresets !== undefined
+      ? { basketballTeamPresets }
+      : {}),
   };
 }
 

@@ -16,7 +16,17 @@ export type AdminWriteAction =
   | "calculate_settlement"
   | "undo_settlement"
   | "rollover_basketball_season"
-  | "toggle_player_score_neutral_hidden";
+  | "toggle_player_score_neutral_hidden"
+  | "save_basketball_team_preset";
+
+export type BasketballTeamPreset = {
+  id: string;
+  labelNumber: number;
+  teamAPlayerIds: number[];
+  teamBPlayerIds: number[];
+  teamAWinProb: number | null;
+  createdAt: string;
+};
 
 export type PlayerSummary = {
   id: number;
@@ -95,6 +105,7 @@ export type GameDetails = {
   players: GamePlayerSummary[];
   rounds: RoundSummary[];
   settlement: SettlementSummary | null;
+  basketballTeamPresets?: BasketballTeamPreset[];
 };
 
 export type PlayerLeaderboardRow = {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  balanceBasketballTeams,
   calculateBasketballRound,
   parseBasketballMatchFromRoundSnapshot,
   predictBasketballMatchWinProbabilities,
@@ -7,6 +8,48 @@ import {
   priorBasketballMatchesFromSeasonHistory,
   priorBasketballMatchesStrictlyBeforeRound,
 } from "./basketball";
+
+describe("balanceBasketballTeams", () => {
+  it("returns null when fewer than two players", () => {
+    expect(balanceBasketballTeams([], [])).toBeNull();
+    expect(balanceBasketballTeams([1], [])).toBeNull();
+  });
+
+  it("splits four fresh players into 2v2 near 50/50", () => {
+    const result = balanceBasketballTeams([1, 2, 3, 4], []);
+    expect(result).not.toBeNull();
+    expect(result!.teamAPlayerIds).toHaveLength(2);
+    expect(result!.teamBPlayerIds).toHaveLength(2);
+    expect(result!.teamAWinProb).toBeGreaterThanOrEqual(0.45);
+    expect(result!.teamAWinProb).toBeLessThanOrEqual(0.55);
+  });
+
+  it("separates stronger players across teams after a decisive prior", () => {
+    const priors = [
+      {
+        teamAPlayerIds: [1, 2],
+        teamBPlayerIds: [3, 4],
+        scoreTeamA: 21,
+        scoreTeamB: 0,
+      },
+    ];
+    const result = balanceBasketballTeams([1, 2, 3, 4], priors);
+    expect(result).not.toBeNull();
+    const teamA = new Set(result!.teamAPlayerIds);
+    const teamB = new Set(result!.teamBPlayerIds);
+    const winnersTogether =
+      (teamA.has(1) && teamA.has(2)) || (teamB.has(1) && teamB.has(2));
+    expect(winnersTogether).toBe(false);
+  });
+
+  it("handles three players with uneven teams", () => {
+    const result = balanceBasketballTeams([1, 2, 3], []);
+    expect(result).not.toBeNull();
+    expect(result!.teamAPlayerIds.length + result!.teamBPlayerIds.length).toBe(3);
+    expect(result!.teamAPlayerIds.length).toBeGreaterThanOrEqual(1);
+    expect(result!.teamBPlayerIds.length).toBeGreaterThanOrEqual(1);
+  });
+});
 
 describe("calculateBasketballRound", () => {
   it("produces zero-sum entries for a first-round 2v2", () => {

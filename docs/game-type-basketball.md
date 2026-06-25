@@ -39,6 +39,28 @@ Validation rules:
 
 ---
 
+## Team presets (pick teams)
+
+Admins can auto-balance **unlocked** players into Team A and Team B from the game view **Pick teams** control. The client:
+
+1. Replays OpenSkill for the **selected basketball season** (same history source as new-round scoring).
+2. Partitions unlocked players into two teams with win probability closest to 50/50.
+3. Saves the result via `save_basketball_team_preset` (admin-write).
+
+Presets are stored in **`basketball_team_presets`** per game:
+
+| Column | Meaning |
+|--------|---------|
+| `label_number` | Monotonic per game (`1`, `2`, `3`, …); gaps remain after FIFO eviction |
+| `team_a_player_ids`, `team_b_player_ids` | Roster at save time (unlocked players only) |
+| `team_a_win_prob` | OpenSkill `predictWin` for Team A before the hypothetical match |
+
+**Retention:** at most **10** presets per game. An 11th insert deletes the **oldest** row by `created_at`. Writes require an open basketball game and pass the same roster validation as basketball round metadata (disjoint teams, no duplicates, unlocked roster only). Reads are public; writes go through admin-write only.
+
+In the **round form**, numbered pills (one per saved preset) quick-fill Team A/B assignments. Deselecting a pill resets unlocked players to **none**. Manual team edits clear the active preset selection.
+
+---
+
 ## OpenSkill replay
 
 Skill is tracked with **openskill.js** (default prior: `mu = 25`, `sigma ≈ 8.33` per player).

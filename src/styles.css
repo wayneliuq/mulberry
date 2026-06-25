@@ -1545,6 +1545,25 @@ tbody tr:last-child td {
   gap: 0.35rem;
 }
 
+.basketball-picked-teams-heading {
+  color: var(--text-strong);
+  font-size: var(--font-size-h3);
+}
+
+.basketball-picked-teams-empty {
+  font-size: var(--font-size-small);
+}
+
+.basketball-picked-teams-player {
+  padding: var(--space-xs) var(--space-sm);
+}
+
+@media (max-width: 480px) {
+  .basketball-picked-teams-grid.player-list-two-col {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tab-link,
   .primary-button,

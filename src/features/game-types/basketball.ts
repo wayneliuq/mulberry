@@ -13,6 +13,15 @@ import type {
  */
 export const DEFAULT_BASKETBALL_LEDGER_SCALE = 7;
 
+/** Max unlocked players considered for auto team balance (combinatorial cap). */
+export const BASKETBALL_TEAM_BALANCE_MAX_PLAYERS = 12;
+
+export type BalancedBasketballTeams = {
+  teamAPlayerIds: number[];
+  teamBPlayerIds: number[];
+  teamAWinProb: number;
+};
+
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
@@ -191,6 +200,136 @@ export function predictBasketballMatchWinProbabilities(
     return null;
   }
   return { teamAWinProb, teamBWinProb };
+}
+
+function winProbForTeams(
+  ratings: Map<number, OpenSkillRating>,
+  teamAPlayerIds: number[],
+  teamBPlayerIds: number[],
+): number | null {
+  const teamA = teamAPlayerIds.map((id) => ratings.get(id) ?? rating());
+  const teamB = teamBPlayerIds.map((id) => ratings.get(id) ?? rating());
+  const probs = predictWin([teamA, teamB]);
+  const teamAWinProb = probs[0];
+  if (typeof teamAWinProb !== "number" || !Number.isFinite(teamAWinProb)) {
+    return null;
+  }
+  return teamAWinProb;
+}
+
+function partitionScore(
+  teamAPlayerIds: number[],
+  teamBPlayerIds: number[],
+  ratings: Map<number, OpenSkillRating>,
+): { distanceFromHalf: number; teamAWinProb: number } | null {
+  const teamAWinProb = winProbForTeams(ratings, teamAPlayerIds, teamBPlayerIds);
+  if (teamAWinProb === null) {
+    return null;
+  }
+  return {
+    distanceFromHalf: Math.abs(teamAWinProb - 0.5),
+    teamAWinProb,
+  };
+}
+
+function comparePartitions(
+  left: {
+    teamAPlayerIds: number[];
+    teamBPlayerIds: number[];
+    distanceFromHalf: number;
+    teamAWinProb: number;
+  },
+  right: {
+    teamAPlayerIds: number[];
+    teamBPlayerIds: number[];
+    distanceFromHalf: number;
+    teamAWinProb: number;
+  },
+): number {
+  if (left.distanceFromHalf !== right.distanceFromHalf) {
+    return left.distanceFromHalf - right.distanceFromHalf;
+  }
+
+  const leftBalanced =
+    Math.abs(left.teamAPlayerIds.length - left.teamBPlayerIds.length);
+  const rightBalanced =
+    Math.abs(right.teamAPlayerIds.length - right.teamBPlayerIds.length);
+  if (leftBalanced !== rightBalanced) {
+    return leftBalanced - rightBalanced;
+  }
+
+  const leftKey = [...left.teamAPlayerIds].sort((a, b) => a - b).join(",");
+  const rightKey = [...right.teamAPlayerIds].sort((a, b) => a - b).join(",");
+  return leftKey.localeCompare(rightKey);
+}
+
+/**
+ * Partition unlocked players into two teams with win probability closest to 50/50
+ * after replaying season prior matches once.
+ */
+export function balanceBasketballTeams(
+  playerIds: number[],
+  priorRoundsChronological: BasketballMatchInput[],
+): BalancedBasketballTeams | null {
+  const sortedIds = [...new Set(playerIds)].sort((a, b) => a - b);
+  if (sortedIds.length < 2) {
+    return null;
+  }
+  if (sortedIds.length > BASKETBALL_TEAM_BALANCE_MAX_PLAYERS) {
+    return null;
+  }
+
+  const ratings = replayPriorsIntoRatings(priorRoundsChronological);
+  const n = sortedIds.length;
+  const maxMask = (1 << n) - 1;
+  let best: {
+    teamAPlayerIds: number[];
+    teamBPlayerIds: number[];
+    distanceFromHalf: number;
+    teamAWinProb: number;
+  } | null = null;
+
+  for (let mask = 1; mask < maxMask; mask += 1) {
+    const teamAPlayerIds: number[] = [];
+    const teamBPlayerIds: number[] = [];
+    for (let i = 0; i < n; i += 1) {
+      if (mask & (1 << i)) {
+        teamAPlayerIds.push(sortedIds[i]!);
+      } else {
+        teamBPlayerIds.push(sortedIds[i]!);
+      }
+    }
+
+    if (teamAPlayerIds.length < 1 || teamBPlayerIds.length < 1) {
+      continue;
+    }
+
+    const scored = partitionScore(teamAPlayerIds, teamBPlayerIds, ratings);
+    if (!scored) {
+      continue;
+    }
+
+    const candidate = {
+      teamAPlayerIds,
+      teamBPlayerIds,
+      distanceFromHalf: scored.distanceFromHalf,
+      teamAWinProb: scored.teamAWinProb,
+    };
+
+    if (!best || comparePartitions(candidate, best) < 0) {
+      best = candidate;
+    }
+  }
+
+  if (!best) {
+    return null;
+  }
+
+  return {
+    teamAPlayerIds: best.teamAPlayerIds,
+    teamBPlayerIds: best.teamBPlayerIds,
+    teamAWinProb: best.teamAWinProb,
+  };
 }
 
 export function calculateBasketballRound(
