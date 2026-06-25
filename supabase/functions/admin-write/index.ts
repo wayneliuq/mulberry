@@ -857,16 +857,23 @@ async function handleDeleteGame(
   supabase: Awaited<ReturnType<typeof createVerifiedAdminClient>>["supabase"],
   action: Extract<AdminAction, { action: "delete_game" }>,
 ) {
-  await insertAuditLog(supabase, "delete_game", "game", action.gameId, {});
+  await requireGame(supabase, action.gameId);
 
-  const { error } = await supabase
+  const { data: deletedRows, error } = await supabase
     .from("games")
     .delete()
-    .eq("id", action.gameId);
+    .eq("id", action.gameId)
+    .select("id");
 
   if (error) {
     throw new Error(error.message);
   }
+
+  if (!deletedRows || deletedRows.length === 0) {
+    throw new Error("Game not found or could not be deleted.");
+  }
+
+  await insertAuditLog(supabase, "delete_game", "game", action.gameId, {});
 
   return jsonResponse({ deletedGameId: action.gameId });
 }

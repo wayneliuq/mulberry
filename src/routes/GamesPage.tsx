@@ -133,9 +133,13 @@ export function GamesPage() {
         gameId,
       });
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["games"] });
-      await queryClient.invalidateQueries({ queryKey: ["leaderboards"] });
+    onSuccess: async (_data, gameId) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["games"] }),
+        queryClient.invalidateQueries({ queryKey: ["leaderboards"] }),
+        queryClient.invalidateQueries({ queryKey: ["game", gameId] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboards"] }),
+      ]);
     },
   });
 
@@ -360,6 +364,11 @@ export function GamesPage() {
         {gamesQuery.error ? (
           <p className="form-error">{gamesQuery.error.message}</p>
         ) : null}
+        {deleteGameMutation.error ? (
+          <p className="form-error" role="alert">
+            {deleteGameMutation.error.message}
+          </p>
+        ) : null}
         {!gamesQuery.isLoading && filteredGames.length === 0 ? (
           <p className="muted">
             {selectedGameType === "all"
@@ -404,7 +413,7 @@ export function GamesPage() {
                   className="icon-button"
                   disabled={!isAdmin}
                   aria-label={`Delete ${game.displayName}`}
-                  onClick={(e) => {
+                  onClick={async (e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     const shouldDelete = window.confirm(
@@ -415,7 +424,15 @@ export function GamesPage() {
                       return;
                     }
 
-                    void deleteGameMutation.mutateAsync(game.id);
+                    try {
+                      await deleteGameMutation.mutateAsync(game.id);
+                    } catch (deleteError) {
+                      const message =
+                        deleteError instanceof Error
+                          ? deleteError.message
+                          : "Could not delete this game.";
+                      window.alert(message);
+                    }
                   }}
                 >
                   <IconGlyph name="trash" />

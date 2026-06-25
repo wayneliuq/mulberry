@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
 import { AdminSessionProvider } from "../features/admin/AdminSessionContext";
+import { adminWrite, verifyAdminPassword } from "../lib/api/admin";
 import { fetchGames } from "../lib/api/read";
 import type { GameSummary } from "../lib/api/types";
 import { GamesPage } from "./GamesPage";
@@ -12,7 +13,14 @@ vi.mock("../lib/api/read", () => ({
   fetchGames: vi.fn(),
 }));
 
+vi.mock("../lib/api/admin", () => ({
+  verifyAdminPassword: vi.fn(),
+  adminWrite: vi.fn(),
+}));
+
 const fetchGamesMock = vi.mocked(fetchGames);
+const verifyAdminPasswordMock = vi.mocked(verifyAdminPassword);
+const adminWriteMock = vi.mocked(adminWrite);
 
 function makeGames(count: number, gameTypeId: GameSummary["gameTypeId"] = "texas-holdem"): GameSummary[] {
   return Array.from({ length: count }, (_, index) => ({
@@ -52,6 +60,14 @@ function gameLinks(namePattern: RegExp = /^Open Game /) {
 describe("GamesPage", () => {
   beforeEach(() => {
     fetchGamesMock.mockResolvedValue([]);
+    verifyAdminPasswordMock.mockResolvedValue(undefined);
+    adminWriteMock.mockReset();
+    window.localStorage.setItem("mulberry.admin-password", "test-password");
+  });
+
+  afterEach(() => {
+    window.localStorage.clear();
+    vi.restoreAllMocks();
   });
 
   it("shows the Games section title", async () => {
@@ -132,5 +148,59 @@ describe("GamesPage", () => {
       expect(gameLinks()).toHaveLength(10);
     });
     expect(screen.queryByRole("navigation", { name: "Games pagination" })).not.toBeInTheDocument();
+  });
+
+  it("deletes a game when admin confirms", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    adminWriteMock.mockResolvedValue({ deletedGameId: "game-1" });
+    fetchGamesMock.mockResolvedValue(makeGames(1, "basketball"));
+
+    renderGamesPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Delete Game 1" })).toBeEnabled();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Delete Game 1" }));
+
+    await waitFor(() => {
+      expect(adminWriteMock).toHaveBeenCalledWith({
+        action: "delete_game",
+        password: "test-password",
+        gameId: "game-1",
+      });
+    });
+
+    expect(alertSpy).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+    alertSpy.mockRestore();
+  });
+
+  it("surfaces delete failures to the user", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    adminWriteMock.mockRejectedValue(new Error("Game not found or could not be deleted."));
+    fetchGamesMock.mockResolvedValue(makeGames(1, "texas-holdem"));
+
+    renderGamesPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Delete Game 1" })).toBeEnabled();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Delete Game 1" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Game not found or could not be deleted."),
+      ).toBeInTheDocument();
+    });
+    expect(alertSpy).toHaveBeenCalledWith(
+      "Game not found or could not be deleted.",
+    );
+    alertSpy.mockRestore();
   });
 });

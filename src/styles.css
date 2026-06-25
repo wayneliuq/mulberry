@@ -780,6 +780,8 @@ select:focus {
 
 .game-row-actions {
   flex-shrink: 0;
+  position: relative;
+  z-index: 1;
   padding: 0.85rem 0.9rem 0.85rem 0;
 }
 
