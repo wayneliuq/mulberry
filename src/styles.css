@@ -1535,6 +1535,16 @@ tbody tr:last-child td {
   padding: 2px;
 }
 
+.option-pill-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.basketball-team-picker-row {
+  gap: 0.35rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tab-link,
   .primary-button,

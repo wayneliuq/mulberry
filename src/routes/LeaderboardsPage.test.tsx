@@ -284,7 +284,7 @@ describe("LeaderboardsPage", () => {
     });
   });
 
-  it("does not pass applyMinRoundsFilter when viewing a past basketball season", async () => {
+  it("passes applyMinRoundsFilter when viewing a past basketball season", async () => {
     fetchBasketballSeasonsMock.mockResolvedValue({
       seasons: [
         {
@@ -332,7 +332,7 @@ describe("LeaderboardsPage", () => {
       const calls = fetchLeaderboardsMock.mock.calls;
       const lastCall = calls[calls.length - 1]!;
       const opts = lastCall[1] as { applyMinRoundsFilter?: boolean } | undefined;
-      expect(opts?.applyMinRoundsFilter).toBe(false);
+      expect(opts?.applyMinRoundsFilter).toBe(true);
     });
   });
 });

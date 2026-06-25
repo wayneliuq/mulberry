@@ -22,7 +22,10 @@ export const copy = {
   },
   games: {
     eyebrow: "Games",
-    title: "Recent games",
+    title: "Games",
+    previousPage: "Previous",
+    nextPage: "Next",
+    pageStatus: (page: number, total: number) => `Page ${page} of ${total}`,
     newGame: "New game",
     createGame: "Create game",
     cancel: "Cancel",

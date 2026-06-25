@@ -98,7 +98,7 @@ describe("app shell", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dashboards" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Admin" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Games" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Games", level: 1 })).toBeInTheDocument();
   });
 
   it("keeps new game disabled in public mode", () => {

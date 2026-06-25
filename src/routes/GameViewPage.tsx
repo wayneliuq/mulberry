@@ -13,6 +13,7 @@ import {
 import { Link, useParams } from "react-router-dom";
 import { useAdminSession } from "../features/admin/AdminSessionContext";
 import { BasketballSeasonToolbar } from "../features/basketball/BasketballSeasonToolbar";
+import { BasketballTeamPickerSection } from "../features/basketball/BasketballTeamPickerSection";
 import { useBasketballSeasons } from "../features/basketball/useBasketballSeasons";
 import { calculateDixitRound } from "../features/game-types/dixit";
 import { calculateFightTheLandlordRound } from "../features/game-types/fightTheLandlord";
@@ -1524,37 +1525,18 @@ export function GameViewPage() {
                     Manual points for team A/B players only. These rounds do not
                     affect basketball rating predictions.
                   </p>
-                  <div className="stack-sm">
-                    <PlayerSortButtons
-                      sortMode={unlockedSort}
-                      onSortChange={setUnlockedSort}
-                    />
-                    <div className="player-list-two-col">
-                      {sortedUnlockedPlayers.map((player) => (
-                        <label key={player.playerId} className="stack-xs">
-                          <span>{player.displayName}</span>
-                          <select
-                            value={
-                              basketballTeamByPlayerId[player.playerId] ?? "none"
-                            }
-                            onChange={(event) =>
-                              setBasketballTeamByPlayerId((current) => ({
-                                ...current,
-                                [player.playerId]: event.target.value as
-                                  | "none"
-                                  | "A"
-                                  | "B",
-                              }))
-                            }
-                          >
-                            <option value="none">None</option>
-                            <option value="A">Team A</option>
-                            <option value="B">Team B</option>
-                          </select>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
+                  <BasketballTeamPickerSection
+                    players={sortedUnlockedPlayers}
+                    teamByPlayerId={basketballTeamByPlayerId}
+                    onTeamChange={(playerId, team) =>
+                      setBasketballTeamByPlayerId((current) => ({
+                        ...current,
+                        [playerId]: team,
+                      }))
+                    }
+                    sortMode={unlockedSort}
+                    onSortChange={setUnlockedSort}
+                  />
                   <ManualRoundForm
                     players={basketballManualPlayers}
                     inputs={basketballManualInputs}
@@ -1628,32 +1610,18 @@ export function GameViewPage() {
                     />
                   </label>
                 </div>
-                <div className="stack-sm">
-                  <PlayerSortButtons
-                    sortMode={unlockedSort}
-                    onSortChange={setUnlockedSort}
-                  />
-                  <div className="player-list-two-col">
-                    {sortedUnlockedPlayers.map((player) => (
-                      <label key={player.playerId} className="stack-xs">
-                        <span>{player.displayName}</span>
-                        <select
-                          value={basketballTeamByPlayerId[player.playerId] ?? "none"}
-                          onChange={(event) =>
-                            setBasketballTeamByPlayerId((current) => ({
-                              ...current,
-                              [player.playerId]: event.target.value as "none" | "A" | "B",
-                            }))
-                          }
-                        >
-                          <option value="none">None</option>
-                          <option value="A">Team A</option>
-                          <option value="B">Team B</option>
-                        </select>
-                      </label>
-                    ))}
-                  </div>
-                </div>
+                <BasketballTeamPickerSection
+                  players={sortedUnlockedPlayers}
+                  teamByPlayerId={basketballTeamByPlayerId}
+                  onTeamChange={(playerId, team) =>
+                    setBasketballTeamByPlayerId((current) => ({
+                      ...current,
+                      [playerId]: team,
+                    }))
+                  }
+                  sortMode={unlockedSort}
+                  onSortChange={setUnlockedSort}
+                />
                 {basketballDisplayEntries && basketballDisplayEntries.length > 0 ? (
                   <div className="stack-xs">
                     <span className="muted">Point preview</span>

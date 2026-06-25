@@ -1,7 +1,6 @@
 /**
  * Minimum rounds (won + lost) for a player to appear in the basketball
- * player leaderboard when viewing the active or any future season.
- * Historical (closed) seasons are unaffected by this filter.
+ * player leaderboard for any season.
  *
  * Distinct from `PLAYER_MIN_ROUNDS` in `features/dashboards/basketball/constants.ts`,
  * which is a statistical-significance gate for the basketball dashboard metrics.

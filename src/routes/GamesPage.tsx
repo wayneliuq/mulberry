@@ -1,5 +1,6 @@
 import {
   type FormEvent,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -22,6 +23,8 @@ import { adminWrite } from "../lib/api/admin";
 import { fetchGames } from "../lib/api/read";
 import { formatRelativeDate } from "../lib/format";
 
+const GAMES_PAGE_SIZE = 10;
+
 export function GamesPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -39,6 +42,7 @@ export function GamesPage() {
   const [selectedGameType, setSelectedGameType] = useState<GameTypeId | "all">(
     "all",
   );
+  const [page, setPage] = useState(0);
   const [createFormOpen, setCreateFormOpen] = useState(false);
   const [createGameValues, setCreateGameValues] = useState({
     gameTypeId: "texas-holdem",
@@ -52,11 +56,31 @@ export function GamesPage() {
     queryFn: fetchGames,
   });
 
-  const recentGames = useMemo(() => {
+  const filteredGames = useMemo(() => {
     const games = gamesQuery.data ?? [];
     if (selectedGameType === "all") return games;
     return games.filter((g) => g.gameTypeId === selectedGameType);
   }, [gamesQuery.data, selectedGameType]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredGames.length / GAMES_PAGE_SIZE),
+  );
+  const safePage = Math.min(page, totalPages - 1);
+  const pagedGames = filteredGames.slice(
+    safePage * GAMES_PAGE_SIZE,
+    (safePage + 1) * GAMES_PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    setPage(0);
+  }, [selectedGameType]);
+
+  useEffect(() => {
+    if (safePage !== page) {
+      setPage(safePage);
+    }
+  }, [page, safePage]);
 
   const createGameMutation = useMutation({
     mutationFn: async () => {
@@ -181,7 +205,6 @@ export function GamesPage() {
 
       <article className="card stack-sm">
         <SectionHeader
-          eyebrow={copy.games.eyebrow}
           title={copy.games.title}
           actions={
             <button
@@ -337,7 +360,7 @@ export function GamesPage() {
         {gamesQuery.error ? (
           <p className="form-error">{gamesQuery.error.message}</p>
         ) : null}
-        {!gamesQuery.isLoading && recentGames.length === 0 ? (
+        {!gamesQuery.isLoading && filteredGames.length === 0 ? (
           <p className="muted">
             {selectedGameType === "all"
               ? copy.games.emptyAll
@@ -346,7 +369,7 @@ export function GamesPage() {
         ) : null}
 
         <ul className="list-reset stack-sm">
-          {recentGames.map((game) => (
+          {pagedGames.map((game) => (
             <li key={game.id} className="list-item game-row-tappable">
               <Link
                 to={`/games/${game.id}`}
@@ -401,6 +424,33 @@ export function GamesPage() {
             </li>
           ))}
         </ul>
+
+        {filteredGames.length > GAMES_PAGE_SIZE ? (
+          <nav
+            className="inline-actions space-between"
+            aria-label="Games pagination"
+          >
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={safePage === 0}
+              onClick={() => setPage((current) => current - 1)}
+            >
+              {copy.games.previousPage}
+            </button>
+            <span className="muted">
+              {copy.games.pageStatus(safePage + 1, totalPages)}
+            </span>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={safePage >= totalPages - 1}
+              onClick={() => setPage((current) => current + 1)}
+            >
+              {copy.games.nextPage}
+            </button>
+          </nav>
+        ) : null}
       </article>
     </section>
   );

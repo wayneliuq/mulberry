@@ -178,14 +178,10 @@ export function LeaderboardsPage() {
     setSelectedSeasonId,
     noticeText,
     seasonsQuery,
-    activeSeasonId,
   } = useBasketballSeasons(isBasketballLeaderboard);
 
   const applyMinRoundsFilter =
-    isBasketballLeaderboard &&
-    selectedSeasonId != null &&
-    activeSeasonId != null &&
-    selectedSeasonId >= activeSeasonId;
+    isBasketballLeaderboard && selectedSeasonId != null;
 
   const leaderboardsQuery = useQuery({
     queryKey: [
