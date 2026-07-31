@@ -24,6 +24,7 @@ export type BasketballTeamPreset = {
   labelNumber: number;
   teamAPlayerIds: number[];
   teamBPlayerIds: number[];
+  teams?: number[][];
   teamAWinProb: number | null;
   createdAt: string;
 };

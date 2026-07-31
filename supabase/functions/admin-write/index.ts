@@ -136,6 +136,7 @@ const actionSchema = z.discriminatedUnion("action", [
     gameId: uuidSchema,
     teamAPlayerIds: z.array(z.number().int().positive()).min(1),
     teamBPlayerIds: z.array(z.number().int().positive()).min(1),
+    teams: z.array(z.array(z.number().int().positive())).optional(),
     teamAWinProb: z.number().min(0).max(1).optional(),
   }),
 ]);
@@ -884,6 +885,7 @@ type BasketballTeamPresetRow = {
   label_number: number;
   team_a_player_ids: number[];
   team_b_player_ids: number[];
+  teams: number[][] | null;
   team_a_win_prob: number | null;
   created_at: string;
 };
@@ -945,10 +947,11 @@ async function handleSaveBasketballTeamPreset(
       label_number: labelNumber,
       team_a_player_ids: action.teamAPlayerIds,
       team_b_player_ids: action.teamBPlayerIds,
+      teams: action.teams ?? [action.teamAPlayerIds, action.teamBPlayerIds],
       team_a_win_prob: action.teamAWinProb ?? null,
     })
     .select(
-      "id, game_id, label_number, team_a_player_ids, team_b_player_ids, team_a_win_prob, created_at",
+      "id, game_id, label_number, team_a_player_ids, team_b_player_ids, teams, team_a_win_prob, created_at",
     )
     .single<BasketballTeamPresetRow>();
 
@@ -1007,6 +1010,9 @@ async function handleSaveBasketballTeamPreset(
       labelNumber: inserted.label_number,
       teamAPlayerIds: inserted.team_a_player_ids,
       teamBPlayerIds: inserted.team_b_player_ids,
+      teams: Array.isArray(inserted.teams)
+        ? inserted.teams
+        : [inserted.team_a_player_ids, inserted.team_b_player_ids],
       teamAWinProb: inserted.team_a_win_prob,
       createdAt: inserted.created_at,
     },

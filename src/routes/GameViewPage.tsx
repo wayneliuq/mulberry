@@ -17,7 +17,10 @@ import { useAdminSession } from "../features/admin/AdminSessionContext";
 import { BasketballSeasonToolbar } from "../features/basketball/BasketballSeasonToolbar";
 import { BasketballPickedTeamsPanel } from "../features/basketball/BasketballPickedTeamsPanel";
 import { BasketballPresetRow } from "../features/basketball/BasketballPresetRow";
-import { BasketballTeamPickerSection } from "../features/basketball/BasketballTeamPickerSection";
+import {
+  BasketballTeamPickerSection,
+  type BasketballTeamChoice,
+} from "../features/basketball/BasketballTeamPickerSection";
 import { useBasketballSeasons } from "../features/basketball/useBasketballSeasons";
 import { calculateDixitRound } from "../features/game-types/dixit";
 import { calculateFightTheLandlordRound } from "../features/game-types/fightTheLandlord";
@@ -139,8 +142,12 @@ export function GameViewPage() {
     winningTeamIds: [],
   });
   const [basketballTeamByPlayerId, setBasketballTeamByPlayerId] = useState<
-    Record<number, "none" | "A" | "B">
+    Record<number, BasketballTeamChoice>
   >({});
+  const [basketballScoringSystem, setBasketballScoringSystem] = useState<
+    "1/2" | "2/3"
+  >("1/2");
+  const [basketballPickNumTeams, setBasketballPickNumTeams] = useState<number>(2);
   const [basketballScores, setBasketballScores] = useState({
     teamA: "",
     teamB: "",
@@ -281,6 +288,7 @@ export function GameViewPage() {
     basketballTeamByPlayerId,
     basketballRosterKey,
     basketballHistoryQuery.dataUpdatedAt,
+    basketballScoringSystem,
   ]);
 
   const basketballDraft = useMemo(() => {
@@ -306,6 +314,7 @@ export function GameViewPage() {
       scoreTeamA: Number(basketballScores.teamA),
       scoreTeamB: Number(basketballScores.teamB),
       ghostPlayerIds,
+      scoringSystem: basketballScoringSystem,
     });
   }, [
     game,
@@ -316,6 +325,7 @@ export function GameViewPage() {
     basketballScores.teamB,
     sortedUnlockedPlayers,
     ghostPlayerIds,
+    basketballScoringSystem,
   ]);
 
   const basketballDisplayEntries =
@@ -478,6 +488,7 @@ export function GameViewPage() {
     mutationFn: async (payload: {
       teamAPlayerIds: number[];
       teamBPlayerIds: number[];
+      teams?: number[][];
       teamAWinProb: number;
     }) =>
       adminWrite<
@@ -489,6 +500,7 @@ export function GameViewPage() {
         gameId,
         teamAPlayerIds: payload.teamAPlayerIds,
         teamBPlayerIds: payload.teamBPlayerIds,
+        teams: payload.teams,
         teamAWinProb: payload.teamAWinProb,
       }),
     onSuccess: async (data) => {
@@ -504,7 +516,11 @@ export function GameViewPage() {
     const priors = priorBasketballMatchesFromSeasonHistory(
       basketballHistoryQuery.data ?? [],
     );
-    const balanced = balanceBasketballTeams(playerIds, priors);
+    const balanced = balanceBasketballTeams(
+      playerIds,
+      priors,
+      basketballPickNumTeams,
+    );
     if (!balanced) {
       window.alert(copy.gameView.pickTeamsFailed);
       return;
@@ -513,10 +529,12 @@ export function GameViewPage() {
     await saveBasketballTeamPresetMutation.mutateAsync({
       teamAPlayerIds: balanced.teamAPlayerIds,
       teamBPlayerIds: balanced.teamBPlayerIds,
+      teams: balanced.teams,
       teamAWinProb: balanced.teamAWinProb,
     });
   }, [
     basketballHistoryQuery.data,
+    basketballPickNumTeams,
     saveBasketballTeamPresetMutation,
     sortedUnlockedPlayers,
   ]);
@@ -1017,6 +1035,17 @@ export function GameViewPage() {
       return;
     }
 
+    const sidelined = sortedUnlockedPlayers.filter((player) => {
+      const team = basketballTeamByPlayerId[player.playerId];
+      return team === "C" || team === "D" || team === "E" || team === "F";
+    });
+    if (sidelined.length > 0) {
+      window.alert(
+        "Scoring is Team A vs Team B only. Move players off Team C–F (or leave them as none) before saving.",
+      );
+      return;
+    }
+
     const scoreTeamA = Number(basketballScores.teamA);
     const scoreTeamB = Number(basketballScores.teamB);
 
@@ -1051,6 +1080,7 @@ export function GameViewPage() {
         scoreTeamA,
         scoreTeamB,
         ghostPlayerIds,
+        scoringSystem: basketballScoringSystem,
       });
       if (!draft) {
         window.alert("Could not calculate points for this matchup.");
@@ -1099,6 +1129,7 @@ export function GameViewPage() {
         scoreTeamA,
         scoreTeamB,
         basketballLedgerScale: DEFAULT_BASKETBALL_LEDGER_SCALE,
+        scoringSystem: basketballScoringSystem,
       },
     });
     setBasketballScores({ teamA: "", teamB: "" });
@@ -1142,10 +1173,12 @@ export function GameViewPage() {
 
   function applyBasketballPreset(preset: BasketballTeamPreset) {
     applyingPresetRef.current = true;
-    const next: Record<number, "none" | "A" | "B"> = {};
+    const next: Record<number, BasketballTeamChoice> = {};
     for (const player of sortedUnlockedPlayers) {
       next[player.playerId] = "none";
     }
+    // Round scoring is always A vs B; multi-team presets still expose A/B via
+    // teamAPlayerIds / teamBPlayerIds (first two partitions).
     for (const id of preset.teamAPlayerIds) {
       if (unlockedPlayerIdSet.has(id)) {
         next[id] = "A";
@@ -1162,7 +1195,7 @@ export function GameViewPage() {
   }
 
   function clearBasketballTeamAssignments() {
-    const next: Record<number, "none" | "A" | "B"> = {};
+    const next: Record<number, BasketballTeamChoice> = {};
     for (const player of sortedUnlockedPlayers) {
       next[player.playerId] = "none";
     }
@@ -1171,7 +1204,7 @@ export function GameViewPage() {
 
   function handleBasketballTeamChange(
     playerId: number,
-    team: "none" | "A" | "B",
+    team: BasketballTeamChoice,
   ) {
     if (!applyingPresetRef.current && selectedPresetId !== null) {
       setSelectedPresetId(null);
@@ -1192,6 +1225,35 @@ export function GameViewPage() {
 
     setSelectedPresetId(preset.id);
     applyBasketballPreset(preset);
+  }
+
+  function handleSelectLastRound() {
+    const history = basketballHistoryQuery.data ?? [];
+    if (history.length === 0) return;
+    const lastRound = history[history.length - 1];
+    if (!lastRound) return;
+    const match = parseBasketballMatchFromRoundSnapshot(lastRound.settingsSnapshot);
+    if (!match) return;
+
+    applyingPresetRef.current = true;
+    setSelectedPresetId("last");
+    const next: Record<number, BasketballTeamChoice> = {};
+    for (const player of sortedUnlockedPlayers) {
+      next[player.playerId] = "none";
+    }
+    for (const id of match.teamAPlayerIds) {
+      if (unlockedPlayerIdSet.has(id)) {
+        next[id] = "A";
+      }
+    }
+    for (const id of match.teamBPlayerIds) {
+      if (unlockedPlayerIdSet.has(id)) {
+        next[id] = "B";
+      }
+    }
+    setBasketballTeamByPlayerId(next);
+    applyingPresetRef.current = false;
+    setPresetClearedNotice(false);
   }
 
   function handlePickTeamsClick() {
@@ -1232,6 +1294,8 @@ export function GameViewPage() {
       presets={basketballTeamPresets}
       selectedPresetId={selectedPresetId}
       onSelectPreset={handleBasketballPresetSelect}
+      hasLastRound={(basketballHistoryQuery.data ?? []).length > 0}
+      onSelectLastRound={handleSelectLastRound}
       disabled={!isAdmin || game.status === "settled"}
       isLoading={basketballHistoryQuery.isLoading}
       loadingMessage={copy.gameView.presetLineupsLoading}
@@ -1290,16 +1354,31 @@ export function GameViewPage() {
                 {copy.gameView.addPlayers}
               </button>
               {game.gameTypeId === "basketball" ? (
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={pickTeamsDisabled}
-                  aria-expanded={showPickTeams}
-                  aria-controls="basketball-pick-teams-panel"
-                  onClick={handlePickTeamsClick}
-                >
-                  {copy.gameView.pickTeams}
-                </button>
+                <>
+                  <div className="inline-actions" aria-label="Number of teams for Pick Teams">
+                    {[2, 3, 4, 5, 6].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        className={`pill-button${basketballPickNumTeams === n ? " pill-button--active" : ""}`}
+                        disabled={pickTeamsDisabled}
+                        onClick={() => setBasketballPickNumTeams(n)}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={pickTeamsDisabled}
+                    aria-expanded={showPickTeams}
+                    aria-controls="basketball-pick-teams-panel"
+                    onClick={handlePickTeamsClick}
+                  >
+                    {copy.gameView.pickTeams}
+                  </button>
+                </>
               ) : null}
               <button
                 type="button"
@@ -1791,13 +1870,27 @@ export function GameViewPage() {
                 }}
               >
                 <p className="muted">
-                  Assign only participating players to team A or B (leave others as
-                  none), then enter the final score for this game. Point basis stays 1;
-                  OpenSkill ordinal changes
-                  are scaled by a fixed ledger factor (currently {DEFAULT_BASKETBALL_LEDGER_SCALE})
-                  so a typical 11‑point game moves each player on the order of ~10–20
-                  points, then mean‑centered so the round sums to exactly zero.
+                  Assign players to Team A or B, enter scores, then submit.
+                  Point deltas scale by game length and margin (capped at 2×).
+                  Use Teams 2–6 above Pick Teams when balancing multi-team lineups.
                 </p>
+                <div className="form-grid">
+                  <label className="stack-xs">
+                    <span>Scoring</span>
+                    <div className="inline-actions">
+                      {(["1/2", "2/3"] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          className={`pill-button${basketballScoringSystem === mode ? " pill-button--active" : ""}`}
+                          onClick={() => setBasketballScoringSystem(mode)}
+                        >
+                          {mode === "1/2" ? "1s & 2s" : "2s & 3s"}
+                        </button>
+                      ))}
+                    </div>
+                  </label>
+                </div>
                 <div className="form-grid">
                   <label className="stack-xs">
                     <span>Team A score</span>
@@ -1836,6 +1929,7 @@ export function GameViewPage() {
                   onTeamChange={handleBasketballTeamChange}
                   sortMode={unlockedSort}
                   onSortChange={setUnlockedSort}
+                  numTeams={2}
                 />
                 {basketballDisplayEntries && basketballDisplayEntries.length > 0 ? (
                   <div className="stack-xs">

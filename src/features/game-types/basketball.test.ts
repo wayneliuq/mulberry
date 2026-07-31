@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   balanceBasketballTeams,
+  basketballEffectiveLedgerScale,
   calculateBasketballRound,
   parseBasketballMatchFromRoundSnapshot,
+  parseBasketballScoringSystemFromRoundSnapshot,
   predictBasketballMatchWinProbabilities,
   priorBasketballMatchesFromRoundSnapshots,
   priorBasketballMatchesFromSeasonHistory,
@@ -48,6 +50,24 @@ describe("balanceBasketballTeams", () => {
     expect(result!.teamAPlayerIds.length + result!.teamBPlayerIds.length).toBe(3);
     expect(result!.teamAPlayerIds.length).toBeGreaterThanOrEqual(1);
     expect(result!.teamBPlayerIds.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("splits six players into 3 balanced teams of 2 players each", () => {
+    const result = balanceBasketballTeams([1, 2, 3, 4, 5, 6], [], 3);
+    expect(result).not.toBeNull();
+    expect(result!.teams).toHaveLength(3);
+    for (const team of result!.teams!) {
+      expect(team).toHaveLength(2);
+    }
+  });
+
+  it("splits eight players into 4 balanced teams of 2 players each", () => {
+    const result = balanceBasketballTeams([1, 2, 3, 4, 5, 6, 7, 8], [], 4);
+    expect(result).not.toBeNull();
+    expect(result!.teams).toHaveLength(4);
+    for (const team of result!.teams!) {
+      expect(team).toHaveLength(2);
+    }
   });
 });
 
@@ -105,6 +125,169 @@ describe("calculateBasketballRound", () => {
     const second1 = second.entries.find((e) => e.playerId === 1)!.pointDelta;
     expect(second1).not.toBe(first1);
     expect(second.isZeroSum).toBe(true);
+  });
+
+  it("scales 11–0 shutout win at exactly 2.0x fold change compared to 11–9 close win", () => {
+    const closeWin = calculateBasketballRound({
+      priorRounds: [],
+      match: {
+        teamAPlayerIds: [1, 2],
+        teamBPlayerIds: [3, 4],
+        scoreTeamA: 11,
+        scoreTeamB: 9,
+      },
+    });
+    const shutoutWin = calculateBasketballRound({
+      priorRounds: [],
+      match: {
+        teamAPlayerIds: [1, 2],
+        teamBPlayerIds: [3, 4],
+        scoreTeamA: 11,
+        scoreTeamB: 0,
+      },
+    });
+
+    const closeDelta = closeWin.entries.find((e) => e.playerId === 1)!.pointDelta;
+    const shutoutDelta = shutoutWin.entries.find((e) => e.playerId === 1)!.pointDelta;
+    expect(shutoutDelta / closeDelta).toBeCloseTo(2.0, 1);
+  });
+
+  it("scales 7 vs 11 vs 15 point games proportionally", () => {
+    const game7 = calculateBasketballRound({
+      priorRounds: [],
+      match: {
+        teamAPlayerIds: [1, 2],
+        teamBPlayerIds: [3, 4],
+        scoreTeamA: 7,
+        scoreTeamB: 5,
+      },
+    });
+    const game11 = calculateBasketballRound({
+      priorRounds: [],
+      match: {
+        teamAPlayerIds: [1, 2],
+        teamBPlayerIds: [3, 4],
+        scoreTeamA: 11,
+        scoreTeamB: 9,
+      },
+    });
+    const game15 = calculateBasketballRound({
+      priorRounds: [],
+      match: {
+        teamAPlayerIds: [1, 2],
+        teamBPlayerIds: [3, 4],
+        scoreTeamA: 15,
+        scoreTeamB: 13,
+      },
+    });
+
+    const delta7 = game7.entries.find((e) => e.playerId === 1)!.pointDelta;
+    const delta11 = game11.entries.find((e) => e.playerId === 1)!.pointDelta;
+    const delta15 = game15.entries.find((e) => e.playerId === 1)!.pointDelta;
+
+    expect(delta7 / delta11).toBeCloseTo(7 / 11, 1);
+    expect(delta15 / delta11).toBeCloseTo(15 / 11, 1);
+  });
+
+  it("halves effective point scale when 2s & 3s mode is selected", () => {
+    const game11_1s2s = calculateBasketballRound({
+      priorRounds: [],
+      match: {
+        teamAPlayerIds: [1, 2],
+        teamBPlayerIds: [3, 4],
+        scoreTeamA: 11,
+        scoreTeamB: 9,
+      },
+      scoringSystem: "1/2",
+    });
+    const game21_2s3s = calculateBasketballRound({
+      priorRounds: [],
+      match: {
+        teamAPlayerIds: [1, 2],
+        teamBPlayerIds: [3, 4],
+        scoreTeamA: 21,
+        scoreTeamB: 19,
+      },
+      scoringSystem: "2/3",
+    });
+
+    const delta11 = game11_1s2s.entries.find((e) => e.playerId === 1)!.pointDelta;
+    const delta21 = game21_2s3s.entries.find((e) => e.playerId === 1)!.pointDelta;
+    // 21 in 2s/3s mode is 10.5 effective pts vs 11 in 1s/2s mode -> nearly identical (~0.955 ratio)
+    expect(delta21 / delta11).toBeCloseTo(10.5 / 11, 1);
+  });
+
+  it("computes exact effective ledger scale for length and capped margin", () => {
+    expect(
+      basketballEffectiveLedgerScale({
+        scoreTeamA: 11,
+        scoreTeamB: 9,
+      }),
+    ).toBeCloseTo(7 * (11 / 11) * 1.0, 10);
+
+    expect(
+      basketballEffectiveLedgerScale({
+        scoreTeamA: 7,
+        scoreTeamB: 5,
+      }),
+    ).toBeCloseTo(7 * (7 / 11) * 1.0, 10);
+
+    expect(
+      basketballEffectiveLedgerScale({
+        scoreTeamA: 15,
+        scoreTeamB: 13,
+      }),
+    ).toBeCloseTo(7 * (15 / 11) * 1.0, 10);
+
+    expect(
+      basketballEffectiveLedgerScale({
+        scoreTeamA: 11,
+        scoreTeamB: 0,
+      }),
+    ).toBeCloseTo(7 * 1.0 * 2.0, 10);
+
+    expect(
+      basketballEffectiveLedgerScale({
+        scoreTeamA: 21,
+        scoreTeamB: 19,
+        scoringSystem: "2/3",
+      }),
+    ).toBeCloseTo(7 * (10.5 / 11) * 1.0, 10);
+
+    // Cap stays at 2.0x even for absurd margins after 2/3 halving.
+    expect(
+      basketballEffectiveLedgerScale({
+        scoreTeamA: 40,
+        scoreTeamB: 0,
+        scoringSystem: "2/3",
+      }),
+    ).toBeCloseTo(7 * (20 / 11) * 2.0, 10);
+  });
+
+  it("defaults historical snapshots without scoringSystem to 1/2", () => {
+    expect(
+      parseBasketballScoringSystemFromRoundSnapshot({
+        metadata: {
+          mode: "basketball",
+          teamAPlayerIds: [1],
+          teamBPlayerIds: [2],
+          scoreTeamA: 11,
+          scoreTeamB: 9,
+        },
+      }),
+    ).toBe("1/2");
+    expect(
+      parseBasketballScoringSystemFromRoundSnapshot({
+        metadata: {
+          mode: "basketball",
+          scoringSystem: "2/3",
+          teamAPlayerIds: [1],
+          teamBPlayerIds: [2],
+          scoreTeamA: 21,
+          scoreTeamB: 19,
+        },
+      }),
+    ).toBe("2/3");
   });
 
   it("respects an explicit ledgerScale for reproducibility", () => {

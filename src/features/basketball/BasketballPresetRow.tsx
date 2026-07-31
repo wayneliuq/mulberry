@@ -8,6 +8,8 @@ type BasketballPresetRowProps = {
   presets: BasketballTeamPreset[];
   selectedPresetId: string | null;
   onSelectPreset: (preset: BasketballTeamPreset | null) => void;
+  hasLastRound?: boolean;
+  onSelectLastRound?: () => void;
   disabled?: boolean;
   isLoading?: boolean;
   loadingMessage?: string;
@@ -19,6 +21,8 @@ export function BasketballPresetRow({
   presets,
   selectedPresetId,
   onSelectPreset,
+  hasLastRound = false,
+  onSelectLastRound,
   disabled = false,
   isLoading = false,
   loadingMessage = "Loading saved lineups…",
@@ -29,16 +33,23 @@ export function BasketballPresetRow({
     return <p className="muted">{loadingMessage}</p>;
   }
 
-  if (presets.length === 0) {
+  if (presets.length === 0 && !hasLastRound) {
     return <p className="muted">{emptyMessage}</p>;
   }
 
-  const options = presets.map(
+  const options: OptionPillGroupOption<string>[] = presets.map(
     (preset): OptionPillGroupOption<string> => ({
       value: preset.id,
       label: String(preset.labelNumber),
     }),
   );
+
+  if (hasLastRound) {
+    options.unshift({
+      value: "last",
+      label: "Last",
+    });
+  }
 
   const presetById = new Map(presets.map((preset) => [preset.id, preset]));
 
@@ -51,6 +62,10 @@ export function BasketballPresetRow({
         onChange={(presetId) => {
           if (presetId === null) {
             onSelectPreset(null);
+            return;
+          }
+          if (presetId === "last") {
+            onSelectLastRound?.();
             return;
           }
           const preset = presetById.get(presetId);

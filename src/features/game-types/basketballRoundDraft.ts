@@ -16,12 +16,13 @@ export type BasketballRoundDraftInput = {
   scoreTeamA: number;
   scoreTeamB: number;
   ghostPlayerIds: Set<number>;
+  scoringSystem?: "1/2" | "2/3";
 };
 
 export function buildBasketballScoredRoundEntries(
   input: BasketballRoundDraftInput,
 ): { entries: ManualPointEntry[]; total: number } | null {
-  const { teamAPlayerIds, teamBPlayerIds, scoreTeamA, scoreTeamB } = input;
+  const { teamAPlayerIds, teamBPlayerIds, scoreTeamA, scoreTeamB, scoringSystem } = input;
 
   if (teamAPlayerIds.length < 1 || teamBPlayerIds.length < 1) {
     return null;
@@ -49,6 +50,7 @@ export function buildBasketballScoredRoundEntries(
       scoreTeamA,
       scoreTeamB,
     },
+    scoringSystem,
   });
 
   const teamByPlayerId = new Map<number, "A" | "B">();

@@ -20,6 +20,7 @@ export type BalancedBasketballTeams = {
   teamAPlayerIds: number[];
   teamBPlayerIds: number[];
   teamAWinProb: number;
+  teams?: number[][];
 };
 
 function round2(value: number): number {
@@ -65,6 +66,12 @@ export const basketballRoundSchema = z.object({
    * New rounds should omit this so the current `DEFAULT_BASKETBALL_LEDGER_SCALE` applies.
    */
   ledgerScale: z.number().finite().positive().optional(),
+  /**
+   * Scoring system used for the game:
+   * - "1/2": 1s and 2s scoring (default; games to 7, 11, 15)
+   * - "2/3": 2s and 3s scoring (games to 21; pure point scale halved)
+   */
+  scoringSystem: z.enum(["1/2", "2/3"]).optional(),
 });
 
 export type BasketballMatchInput = z.infer<typeof matchSchema>;
@@ -117,6 +124,23 @@ export function parseBasketballMatchFromRoundSnapshot(
     scoreTeamB: meta.scoreTeamB,
   });
   return parsed.success ? parsed.data : null;
+}
+
+export function parseBasketballScoringSystemFromRoundSnapshot(
+  settingsSnapshot: Record<string, unknown> | undefined,
+): "1/2" | "2/3" {
+  const meta = settingsSnapshot?.metadata as Record<string, unknown> | undefined;
+  return meta?.scoringSystem === "2/3" ? "2/3" : "1/2";
+}
+
+export function parseBasketballLedgerScaleFromRoundSnapshot(
+  settingsSnapshot: Record<string, unknown> | undefined,
+): number | undefined {
+  const meta = settingsSnapshot?.metadata as Record<string, unknown> | undefined;
+  const scale = meta?.basketballLedgerScale;
+  return typeof scale === "number" && Number.isFinite(scale) && scale > 0
+    ? scale
+    : undefined;
 }
 
 export function priorBasketballMatchesFromRoundSnapshots(
@@ -264,15 +288,15 @@ function comparePartitions(
 }
 
 /**
- * Partition unlocked players into two teams with win probability closest to 50/50
- * after replaying season prior matches once.
+ * Partition unlocked players into numTeams (2 to 6) balanced teams.
  */
 export function balanceBasketballTeams(
   playerIds: number[],
   priorRoundsChronological: BasketballMatchInput[],
+  numTeams: number = 2,
 ): BalancedBasketballTeams | null {
   const sortedIds = [...new Set(playerIds)].sort((a, b) => a - b);
-  if (sortedIds.length < 2) {
+  if (sortedIds.length < numTeams || numTeams < 2 || numTeams > 6) {
     return null;
   }
   if (sortedIds.length > BASKETBALL_TEAM_BALANCE_MAX_PLAYERS) {
@@ -280,63 +304,162 @@ export function balanceBasketballTeams(
   }
 
   const ratings = replayPriorsIntoRatings(priorRoundsChronological);
-  const n = sortedIds.length;
-  const maxMask = (1 << n) - 1;
-  let best: {
-    teamAPlayerIds: number[];
-    teamBPlayerIds: number[];
-    distanceFromHalf: number;
-    teamAWinProb: number;
-  } | null = null;
 
-  for (let mask = 1; mask < maxMask; mask += 1) {
-    const teamAPlayerIds: number[] = [];
-    const teamBPlayerIds: number[] = [];
-    for (let i = 0; i < n; i += 1) {
-      if (mask & (1 << i)) {
-        teamAPlayerIds.push(sortedIds[i]!);
-      } else {
-        teamBPlayerIds.push(sortedIds[i]!);
+  if (numTeams === 2) {
+    const n = sortedIds.length;
+    const maxMask = (1 << n) - 1;
+    let best: {
+      teamAPlayerIds: number[];
+      teamBPlayerIds: number[];
+      distanceFromHalf: number;
+      teamAWinProb: number;
+    } | null = null;
+
+    for (let mask = 1; mask < maxMask; mask += 1) {
+      const teamAPlayerIds: number[] = [];
+      const teamBPlayerIds: number[] = [];
+      for (let i = 0; i < n; i += 1) {
+        if (mask & (1 << i)) {
+          teamAPlayerIds.push(sortedIds[i]!);
+        } else {
+          teamBPlayerIds.push(sortedIds[i]!);
+        }
+      }
+
+      if (teamAPlayerIds.length < 1 || teamBPlayerIds.length < 1) {
+        continue;
+      }
+
+      const scored = partitionScore(teamAPlayerIds, teamBPlayerIds, ratings);
+      if (!scored) {
+        continue;
+      }
+
+      const candidate = {
+        teamAPlayerIds,
+        teamBPlayerIds,
+        distanceFromHalf: scored.distanceFromHalf,
+        teamAWinProb: scored.teamAWinProb,
+      };
+
+      if (!best || comparePartitions(candidate, best) < 0) {
+        best = candidate;
       }
     }
 
-    if (teamAPlayerIds.length < 1 || teamBPlayerIds.length < 1) {
-      continue;
+    if (!best) {
+      return null;
     }
 
-    const scored = partitionScore(teamAPlayerIds, teamBPlayerIds, ratings);
-    if (!scored) {
-      continue;
-    }
-
-    const candidate = {
-      teamAPlayerIds,
-      teamBPlayerIds,
-      distanceFromHalf: scored.distanceFromHalf,
-      teamAWinProb: scored.teamAWinProb,
+    return {
+      teamAPlayerIds: best.teamAPlayerIds,
+      teamBPlayerIds: best.teamBPlayerIds,
+      teamAWinProb: best.teamAWinProb,
+      teams: [best.teamAPlayerIds, best.teamBPlayerIds],
     };
+  }
 
-    if (!best || comparePartitions(candidate, best) < 0) {
-      best = candidate;
+  // Multi-team balancing (K = 3..6): partition N players into K non-empty teams
+  const K = numTeams;
+  const N = sortedIds.length;
+  const minTeamSize = Math.floor(N / K);
+  const maxTeamSize = Math.ceil(N / K);
+
+  const playerOrdinals = sortedIds.map((id) => ordinalFor(ratings, id));
+
+  let bestTeams: number[][] | null = null;
+  let bestVariance = Infinity;
+
+  const currentAssignment: number[] = new Array(N).fill(-1);
+
+  function search(playerIdx: number, teamsUsedCount: number) {
+    if (playerIdx === N) {
+      if (teamsUsedCount < K) return;
+      const teamLists: number[][] = Array.from({ length: K }, () => []);
+      const teamMeans: number[] = new Array(K).fill(0);
+
+      for (let i = 0; i < N; i += 1) {
+        const t = currentAssignment[i]!;
+        teamLists[t]!.push(sortedIds[i]!);
+        teamMeans[t]! += playerOrdinals[i]!;
+      }
+
+      for (let t = 0; t < K; t += 1) {
+        const len = teamLists[t]!.length;
+        if (len < minTeamSize || len > maxTeamSize) return;
+        teamMeans[t] /= len;
+      }
+
+      const meanOfMeans = teamMeans.reduce((a, b) => a + b, 0) / K;
+      const variance =
+        teamMeans.reduce((sum, m) => sum + (m - meanOfMeans) ** 2, 0) / K;
+
+      if (variance < bestVariance) {
+        bestVariance = variance;
+        bestTeams = teamLists;
+      }
+      return;
+    }
+
+    const maxTeamToTry = Math.min(teamsUsedCount, K - 1);
+    for (let t = 0; t <= maxTeamToTry; t += 1) {
+      currentAssignment[playerIdx] = t;
+      search(
+        playerIdx + 1,
+        t === teamsUsedCount ? teamsUsedCount + 1 : teamsUsedCount,
+      );
     }
   }
 
-  if (!best) {
+  search(0, 0);
+
+  if (!bestTeams) {
     return null;
   }
 
+  const teamA = bestTeams[0] ?? [];
+  const teamB = bestTeams[1] ?? [];
+  const teamAWinProb = winProbForTeams(ratings, teamA, teamB) ?? 0.5;
+
   return {
-    teamAPlayerIds: best.teamAPlayerIds,
-    teamBPlayerIds: best.teamBPlayerIds,
-    teamAWinProb: best.teamAWinProb,
+    teamAPlayerIds: teamA,
+    teamBPlayerIds: teamB,
+    teamAWinProb,
+    teams: bestTeams,
   };
+}
+
+export function basketballEffectiveLedgerScale(input: {
+  scoreTeamA: number;
+  scoreTeamB: number;
+  scoringSystem?: "1/2" | "2/3";
+  ledgerScale?: number;
+}): number {
+  const baseLedgerScale = input.ledgerScale ?? DEFAULT_BASKETBALL_LEDGER_SCALE;
+  const scoringSystem = input.scoringSystem ?? "1/2";
+  const pointDivisor = scoringSystem === "2/3" ? 2 : 1;
+
+  const scoreAEff = input.scoreTeamA / pointDivisor;
+  const scoreBEff = input.scoreTeamB / pointDivisor;
+  const maxScoreEff = Math.max(scoreAEff, scoreBEff);
+  const marginEff = Math.abs(scoreAEff - scoreBEff);
+
+  const mPoints = maxScoreEff / 11;
+  const mMargin = Math.min(2.0, 1.0 + Math.max(0, marginEff - 2) / 9);
+  return baseLedgerScale * mPoints * mMargin;
 }
 
 export function calculateBasketballRound(
   input: BasketballRoundInput,
 ): RoundCalculationResult {
   const parsed = basketballRoundSchema.parse(input);
-  const ledgerScale = parsed.ledgerScale ?? DEFAULT_BASKETBALL_LEDGER_SCALE;
+  const effectiveLedgerScale = basketballEffectiveLedgerScale({
+    scoreTeamA: parsed.match.scoreTeamA,
+    scoreTeamB: parsed.match.scoreTeamB,
+    scoringSystem: parsed.scoringSystem,
+    ledgerScale: parsed.ledgerScale,
+  });
+
   const ratings = replayPriorsIntoRatings(parsed.priorRounds);
 
   const participantIds = [
@@ -353,7 +476,7 @@ export function calculateBasketballRound(
   const rawDeltas = participantIds.map((id) => {
     const after = ordinalFor(ratings, id);
     const before = beforeOrd.get(id) ?? 0;
-    return round2((after - before) * ledgerScale);
+    return round2((after - before) * effectiveLedgerScale);
   });
 
   const n = rawDeltas.length;

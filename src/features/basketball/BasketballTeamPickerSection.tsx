@@ -8,7 +8,16 @@ import {
   type PlayerSortMode,
 } from "../players/SortablePlayerList";
 
-export type BasketballTeamChoice = "none" | "A" | "B";
+export type BasketballTeamChoice = "none" | "A" | "B" | "C" | "D" | "E" | "F";
+
+const ALL_TEAM_LETTERS: ("A" | "B" | "C" | "D" | "E" | "F")[] = [
+  "A",
+  "B",
+  "C",
+  "D",
+  "E",
+  "F",
+];
 
 export const BASKETBALL_TEAM_PILL_OPTIONS = [
   { value: "A", label: "Team A" },
@@ -21,12 +30,14 @@ type BasketballTeamPickerSectionProps<T extends PlayerLike> = {
   onTeamChange: (playerId: number, team: BasketballTeamChoice) => void;
   sortMode: PlayerSortMode;
   onSortChange: (mode: PlayerSortMode) => void;
+  numTeams?: number;
 };
 
 function pillValueForTeam(
   team: BasketballTeamChoice | undefined,
-): "A" | "B" | null {
-  return team === "A" || team === "B" ? team : null;
+  activeLetters: Set<BasketballTeamChoice>,
+): BasketballTeamChoice | null {
+  return team && activeLetters.has(team) ? team : null;
 }
 
 export function BasketballTeamPickerSection<T extends PlayerLike>({
@@ -35,7 +46,18 @@ export function BasketballTeamPickerSection<T extends PlayerLike>({
   onTeamChange,
   sortMode,
   onSortChange,
+  numTeams = 2,
 }: BasketballTeamPickerSectionProps<T>) {
+  const activeCount = Math.max(2, Math.min(6, numTeams));
+  const activeLetters = ALL_TEAM_LETTERS.slice(0, activeCount);
+  const activeLetterSet = new Set<BasketballTeamChoice>(activeLetters);
+
+  const pillOptions: OptionPillGroupOption<BasketballTeamChoice>[] =
+    activeLetters.map((letter) => ({
+      value: letter,
+      label: `Team ${letter}`,
+    }));
+
   return (
     <div className="stack-sm">
       <PlayerSortButtons sortMode={sortMode} onSortChange={onSortChange} />
@@ -50,8 +72,11 @@ export function BasketballTeamPickerSection<T extends PlayerLike>({
             <div key={playerId} className="stack-xs basketball-team-picker-row">
               <span>{player.displayName}</span>
               <OptionPillGroup
-                options={BASKETBALL_TEAM_PILL_OPTIONS}
-                value={pillValueForTeam(teamByPlayerId[playerId])}
+                options={pillOptions}
+                value={pillValueForTeam(
+                  teamByPlayerId[playerId],
+                  activeLetterSet,
+                )}
                 onChange={(team) =>
                   onTeamChange(playerId, team ?? "none")
                 }

@@ -407,7 +407,7 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
     supabase
       .from("basketball_team_presets")
       .select(
-        "id, label_number, team_a_player_ids, team_b_player_ids, team_a_win_prob, created_at",
+        "id, label_number, team_a_player_ids, team_b_player_ids, teams, team_a_win_prob, created_at",
       )
       .eq("game_id", gameId)
       .order("created_at", { ascending: false })
@@ -451,6 +451,7 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
     label_number: number;
     team_a_player_ids: number[];
     team_b_player_ids: number[];
+    teams?: number[][];
     team_a_win_prob: number | null;
     created_at: string;
   };
@@ -463,6 +464,9 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
             labelNumber: row.label_number,
             teamAPlayerIds: row.team_a_player_ids.map(Number),
             teamBPlayerIds: row.team_b_player_ids.map(Number),
+            teams: Array.isArray(row.teams)
+              ? row.teams.map((team) => team.map(Number))
+              : undefined,
             teamAWinProb:
               row.team_a_win_prob === null ? null : Number(row.team_a_win_prob),
             createdAt: row.created_at,

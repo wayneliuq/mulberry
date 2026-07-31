@@ -1,39 +1,11 @@
 import type { BasketballTeamPreset } from "../../lib/api/types";
 
-type PlayerName = {
-  playerId: number;
-  displayName: string;
-};
-
 type BasketballPickedTeamsPanelProps = {
   preset: BasketballTeamPreset | null;
   playersById: Map<number, string>;
   isLoading?: boolean;
   loadingMessage?: string;
 };
-
-function teamColumn(
-  label: string,
-  playerIds: number[],
-  playersById: Map<number, string>,
-) {
-  return (
-    <div className="stack-sm basketball-picked-teams-column">
-      <strong className="basketball-picked-teams-heading">{label}</strong>
-      {playerIds.length === 0 ? (
-        <p className="muted basketball-picked-teams-empty">No players</p>
-      ) : (
-        <ul className="list-reset stack-xs">
-          {playerIds.map((playerId) => (
-            <li key={playerId} className="list-item basketball-picked-teams-player">
-              <span>{playersById.get(playerId) ?? playerId}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
 
 export function BasketballPickedTeamsPanel({
   preset,
@@ -57,6 +29,17 @@ export function BasketballPickedTeamsPanel({
     return null;
   }
 
+  const teamsList: { label: string; playerIds: number[] }[] =
+    preset.teams && preset.teams.length > 2
+      ? preset.teams.map((playerIds, idx) => ({
+          label: `Team ${String.fromCharCode(65 + idx)}`,
+          playerIds,
+        }))
+      : [
+          { label: "Team A", playerIds: preset.teamAPlayerIds },
+          { label: "Team B", playerIds: preset.teamBPlayerIds },
+        ];
+
   const winPct =
     preset.teamAWinProb === null
       ? null
@@ -66,13 +49,30 @@ export function BasketballPickedTeamsPanel({
     <div id="basketball-pick-teams-panel" className="card-subsection stack-sm">
       <div className="stack-xs">
         <strong>Preset {preset.labelNumber}</strong>
-        {winPct !== null ? (
+        {winPct !== null && teamsList.length === 2 ? (
           <p className="muted">Team A {winPct}% predicted win</p>
         ) : null}
       </div>
       <div className="player-list-two-col basketball-picked-teams-grid">
-        {teamColumn("Team A", preset.teamAPlayerIds, playersById)}
-        {teamColumn("Team B", preset.teamBPlayerIds, playersById)}
+        {teamsList.map((t) => (
+          <div key={t.label} className="stack-sm basketball-picked-teams-column">
+            <strong className="basketball-picked-teams-heading">{t.label}</strong>
+            {t.playerIds.length === 0 ? (
+              <p className="muted basketball-picked-teams-empty">No players</p>
+            ) : (
+              <ul className="list-reset stack-xs">
+                {t.playerIds.map((playerId) => (
+                  <li
+                    key={playerId}
+                    className="list-item basketball-picked-teams-player"
+                  >
+                    <span>{playersById.get(playerId) ?? playerId}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

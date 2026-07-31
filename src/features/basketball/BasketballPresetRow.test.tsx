@@ -72,4 +72,24 @@ describe("BasketballPresetRow", () => {
     );
     expect(screen.getByText("No saved lineups yet")).toBeInTheDocument();
   });
+
+  it("offers a Last pill that autofills from the previous round handler", async () => {
+    const user = userEvent.setup();
+    const onSelectLastRound = vi.fn();
+    const onSelectPreset = vi.fn();
+
+    render(
+      <BasketballPresetRow
+        presets={PRESETS}
+        selectedPresetId={null}
+        onSelectPreset={onSelectPreset}
+        hasLastRound
+        onSelectLastRound={onSelectLastRound}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Last" }));
+    expect(onSelectLastRound).toHaveBeenCalledTimes(1);
+    expect(onSelectPreset).not.toHaveBeenCalled();
+  });
 });
