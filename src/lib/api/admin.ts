@@ -75,7 +75,7 @@ export async function verifyAdminPassword(password: string) {
 export async function adminWrite<
   TAction extends AdminWriteAction,
   TResponse = unknown,
->(payload: AdminWritePayload<TAction>) {
+>(payload: AdminWritePayload<TAction>): Promise<TResponse> {
   const { data, error } = await supabase.functions.invoke<
     TResponse & { error?: string }
   >("admin-write", {
@@ -87,5 +87,5 @@ export async function adminWrite<
     throw new Error(formatFunctionsInvokeError(error, data));
   }
 
-  return data;
+  return data as TResponse;
 }
