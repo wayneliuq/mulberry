@@ -16,6 +16,7 @@ import { Link, useParams } from "react-router-dom";
 import { useAdminSession } from "../features/admin/AdminSessionContext";
 import { BasketballSeasonToolbar } from "../features/basketball/BasketballSeasonToolbar";
 import { BasketballPickedTeamsPanel } from "../features/basketball/BasketballPickedTeamsPanel";
+import { BasketballPickTeamsDialog } from "../features/basketball/BasketballPickTeamsDialog";
 import { BasketballLineupRow } from "../features/basketball/BasketballLineupRow";
 import { BasketballTeamPickerSection } from "../features/basketball/BasketballTeamPickerSection";
 import { basketballLineupApplication } from "../features/basketball/basketballLineups";
@@ -24,7 +25,6 @@ import {
   basketballMatchupRosters,
   basketballMatchupWithSide,
   basketballTeamLetters,
-  BASKETBALL_TEAM_COUNT_OPTIONS,
   clampBasketballTeamCount,
   DEFAULT_BASKETBALL_MATCHUP,
   MIN_BASKETBALL_TEAM_COUNT,
@@ -96,8 +96,19 @@ export function GameViewPage() {
   const queryClient = useQueryClient();
   const { isAdmin, password } = useAdminSession();
   const [showAddPlayers, setShowAddPlayers] = useState(false);
+  /** The "Pick teams" dialog, where the team count is chosen. */
+  const [showPickTeamsDialog, setShowPickTeamsDialog] = useState(false);
+  /** The result panel showing the lineup the last pick produced. */
   const [showPickTeams, setShowPickTeams] = useState(false);
-  const [pickTeamsPending, setPickTeamsPending] = useState(false);
+  /**
+   * Team count the user confirmed while season ratings were still loading; the
+   * pick runs as soon as the history query settles. Null when nothing is
+   * waiting. Carried as a number rather than a flag so the pick uses the count
+   * that was confirmed, not whatever state has drifted to since.
+   */
+  const [pickTeamsPendingCount, setPickTeamsPendingCount] = useState<
+    number | null
+  >(null);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [latestPickedPreset, setLatestPickedPreset] =
     useState<BasketballTeamPreset | null>(null);
@@ -511,45 +522,43 @@ export function GameViewPage() {
     },
   });
 
-  const runPickTeamsSave = useCallback(async () => {
-    const playerIds = sortedUnlockedPlayers.map((player) => player.playerId);
-    const priors = priorBasketballMatchesFromSeasonHistory(
-      basketballHistoryQuery.data ?? [],
-    );
-    const balanced = balanceBasketballTeams(
-      playerIds,
-      priors,
-      basketballTeamCount,
-    );
-    if (!balanced) {
-      window.alert(copy.gameView.pickTeamsFailed);
-      return;
-    }
+  const runPickTeamsSave = useCallback(
+    async (teamCount: number) => {
+      const playerIds = sortedUnlockedPlayers.map((player) => player.playerId);
+      const priors = priorBasketballMatchesFromSeasonHistory(
+        basketballHistoryQuery.data ?? [],
+      );
+      const balanced = balanceBasketballTeams(playerIds, priors, teamCount);
+      if (!balanced) {
+        window.alert(copy.gameView.pickTeamsFailed);
+        return;
+      }
 
-    await saveBasketballTeamPresetMutation.mutateAsync({
-      teamAPlayerIds: balanced.teamAPlayerIds,
-      teamBPlayerIds: balanced.teamBPlayerIds,
-      teams: balanced.teams,
-      teamAWinProb: balanced.teamAWinProb,
-    });
-  }, [
-    basketballHistoryQuery.data,
-    basketballTeamCount,
-    saveBasketballTeamPresetMutation,
-    sortedUnlockedPlayers,
-  ]);
+      await saveBasketballTeamPresetMutation.mutateAsync({
+        teamAPlayerIds: balanced.teamAPlayerIds,
+        teamBPlayerIds: balanced.teamBPlayerIds,
+        teams: balanced.teams,
+        teamAWinProb: balanced.teamAWinProb,
+      });
+    },
+    [
+      basketballHistoryQuery.data,
+      saveBasketballTeamPresetMutation,
+      sortedUnlockedPlayers,
+    ],
+  );
 
   useEffect(() => {
-    if (!pickTeamsPending || basketballHistoryQuery.isLoading) {
+    if (pickTeamsPendingCount === null || basketballHistoryQuery.isLoading) {
       return;
     }
 
-    void runPickTeamsSave().finally(() => {
-      setPickTeamsPending(false);
+    void runPickTeamsSave(pickTeamsPendingCount).finally(() => {
+      setPickTeamsPendingCount(null);
     });
   }, [
     basketballHistoryQuery.isLoading,
-    pickTeamsPending,
+    pickTeamsPendingCount,
     runPickTeamsSave,
   ]);
 
@@ -1199,37 +1208,32 @@ export function GameViewPage() {
     );
   }
 
-  function handlePickTeamsClick() {
-    const nextOpen = !showPickTeams;
-    setShowPickTeams(nextOpen);
-    if (!nextOpen) {
-      return;
-    }
-
-    if (sortedUnlockedPlayers.length < basketballTeamCount) {
-      window.alert(copy.gameView.pickTeamsNeedPlayers(basketballTeamCount));
-      return;
-    }
-
-    if (sortedUnlockedPlayers.length > BASKETBALL_TEAM_BALANCE_MAX_PLAYERS) {
-      window.alert(copy.gameView.pickTeamsTooManyPlayers);
-      return;
-    }
+  /**
+   * "Pick teams" only opens the dialog now — the team count, and the roster
+   * checks that depend on it, live inside. The dialog closes on confirm and the
+   * picked lineup appears in the result panel below the header.
+   */
+  function handlePickTeamsConfirm(teamCount: number) {
+    handleBasketballTeamCountChange(teamCount);
+    setShowPickTeamsDialog(false);
+    setShowPickTeams(true);
 
     if (basketballHistoryQuery.isLoading) {
-      setPickTeamsPending(true);
+      setPickTeamsPendingCount(teamCount);
       return;
     }
 
-    void runPickTeamsSave();
+    void runPickTeamsSave(teamCount);
   }
 
   const pickPanelPreset =
     latestPickedPreset ?? basketballTeamPresets[0] ?? null;
   const basketballEditingDisabled = !isAdmin || game.status === "settled";
+  // The count-specific "unlock at least N players" check moved into the dialog,
+  // so the button only guards what no team count can fix.
   const pickTeamsDisabled =
     basketballEditingDisabled ||
-    sortedUnlockedPlayers.length < basketballTeamCount ||
+    sortedUnlockedPlayers.length < MIN_BASKETBALL_TEAM_COUNT ||
     sortedUnlockedPlayers.length > BASKETBALL_TEAM_BALANCE_MAX_PLAYERS;
 
   const basketballTeamLetterOptions = basketballTeamLetters(
@@ -1299,36 +1303,16 @@ export function GameViewPage() {
                 {copy.gameView.addPlayers}
               </button>
               {game.gameTypeId === "basketball" ? (
-                <>
-                  <div
-                    className="inline-actions"
-                    role="group"
-                    aria-label={copy.gameView.basketballTeamCountLabel}
-                  >
-                    {BASKETBALL_TEAM_COUNT_OPTIONS.map((n) => (
-                      <button
-                        key={n}
-                        type="button"
-                        className={`pill-button${basketballTeamCount === n ? " pill-button--active" : ""}`}
-                        aria-pressed={basketballTeamCount === n}
-                        disabled={basketballEditingDisabled}
-                        onClick={() => handleBasketballTeamCountChange(n)}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    disabled={pickTeamsDisabled}
-                    aria-expanded={showPickTeams}
-                    aria-controls="basketball-pick-teams-panel"
-                    onClick={handlePickTeamsClick}
-                  >
-                    {copy.gameView.pickTeams}
-                  </button>
-                </>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={pickTeamsDisabled}
+                  aria-haspopup="dialog"
+                  aria-expanded={showPickTeamsDialog}
+                  onClick={() => setShowPickTeamsDialog(true)}
+                >
+                  {copy.gameView.pickTeams}
+                </button>
               ) : null}
               <button
                 type="button"
@@ -1342,12 +1326,21 @@ export function GameViewPage() {
           }
         />
 
+        {game.gameTypeId === "basketball" && showPickTeamsDialog ? (
+          <BasketballPickTeamsDialog
+            playerCount={sortedUnlockedPlayers.length}
+            maxPlayers={BASKETBALL_TEAM_BALANCE_MAX_PLAYERS}
+            onConfirm={handlePickTeamsConfirm}
+            onCancel={() => setShowPickTeamsDialog(false)}
+          />
+        ) : null}
+
         {game.gameTypeId === "basketball" && showPickTeams ? (
           <BasketballPickedTeamsPanel
             preset={pickPanelPreset}
             playersById={playerDisplayNameById}
             isLoading={
-              pickTeamsPending ||
+              pickTeamsPendingCount !== null ||
               saveBasketballTeamPresetMutation.isPending ||
               (basketballHistoryQuery.isLoading && !pickPanelPreset)
             }

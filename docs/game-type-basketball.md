@@ -42,13 +42,15 @@ Validation rules:
 
 ## Team presets (pick teams)
 
-Admins can auto-balance **unlocked** players into Team A and Team B from the game view **Pick teams** control. The client:
+Admins auto-balance **unlocked** players from the game view **Pick teams** control, which opens a dialog. The dialog is the only place the team count is chosen: options **2–6**, defaulting to **2** every time it opens. Confirming runs the pick. The client:
 
 1. Replays OpenSkill for the **selected basketball season** (same history source as new-round scoring).
 2. Partitions unlocked players into the chosen number of teams, under two objectives in strict priority order:
    - **Even player counts — hard constraint.** Team sizes differ by at most one (`floor(N/K)` or `ceil(N/K)`). 8 players over 2 teams is 4v4, never 3v5; 8 over 3 teams is 3/3/2. Uneven splits are never considered, however much better their skill balance would be.
    - **Skill balance — best effort.** Among the evenly sized candidates, pick the closest match: win probability nearest 50/50 for two teams, minimum variance of team mean ordinals for three or more. A lopsided roster can still leave one side favoured; that is accepted.
 3. Saves the result via `save_basketball_team_preset` (admin-write).
+
+Rosters larger than 12 unlocked players are refused (the search is exhaustive); the dialog blocks confirm and says so.
 
 Presets are stored in **`basketball_team_presets`** per game:
 

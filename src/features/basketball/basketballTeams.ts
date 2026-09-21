@@ -58,6 +58,31 @@ export function basketballTeamLetters(count: number): BasketballTeamLetter[] {
   return ALL_BASKETBALL_TEAM_LETTERS.slice(0, clampBasketballTeamCount(count));
 }
 
+/**
+ * The team sizes "Pick teams" will produce, largest first.
+ *
+ * Even counts are a hard rule in `balanceBasketballTeams`, not a preference:
+ * every team gets `floor(N / K)` players and the first `N % K` teams get one
+ * extra, so sizes never differ by more than one. 8 players over 2 teams is
+ * `[4, 4]`; 8 over 3 is `[3, 3, 2]`. Fewer players than teams yields an empty
+ * list — that roster cannot be split at all.
+ */
+export function basketballTeamSizes(
+  playerCount: number,
+  teamCount: number,
+): number[] {
+  const teams = clampBasketballTeamCount(teamCount);
+  if (!Number.isFinite(playerCount) || playerCount < teams) {
+    return [];
+  }
+  const players = Math.trunc(playerCount);
+  const base = Math.floor(players / teams);
+  const remainder = players % teams;
+  return Array.from({ length: teams }, (_, index) =>
+    index < remainder ? base + 1 : base,
+  );
+}
+
 type PresetLike = {
   teamAPlayerIds: number[];
   teamBPlayerIds: number[];

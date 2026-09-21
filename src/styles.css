@@ -1502,6 +1502,33 @@ tbody tr:last-child td {
   flex-shrink: 0;
 }
 
+/* Modal dialog (Pick teams) */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg);
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.modal-card {
+  width: min(100%, 24rem);
+  max-height: calc(100vh - 2 * var(--space-lg));
+  overflow-y: auto;
+  padding: var(--space-lg);
+  background: var(--md-sys-color-surface);
+  border: var(--border-width) solid var(--md-sys-color-outline-variant);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-elevation-2);
+}
+
+.modal-card:focus {
+  outline: none;
+}
+
 /* Add players drawer */
 .add-players-drawer {
   background: var(--md-sys-color-surface);

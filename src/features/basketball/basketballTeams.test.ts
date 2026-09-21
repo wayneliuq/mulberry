@@ -6,6 +6,7 @@ import {
   basketballMatchupWithSide,
   basketballPresetPartitions,
   basketballTeamLetters,
+  basketballTeamSizes,
   clampBasketballTeamCount,
   DEFAULT_BASKETBALL_MATCHUP,
   normalizeBasketballMatchup,
@@ -242,5 +243,43 @@ describe("basketballMatchupRosters", () => {
     expect(
       rosterForTeamLetter([4, 3, 2, 1], assignments, "A"),
     ).toEqual([2, 1]);
+  });
+});
+
+describe("basketballTeamSizes", () => {
+  it.each([
+    { playerCount: 8, teamCount: 2, sizes: [4, 4] },
+    { playerCount: 7, teamCount: 2, sizes: [4, 3] },
+    { playerCount: 8, teamCount: 3, sizes: [3, 3, 2] },
+    { playerCount: 12, teamCount: 6, sizes: [2, 2, 2, 2, 2, 2] },
+    { playerCount: 8, teamCount: 6, sizes: [2, 2, 1, 1, 1, 1] },
+    { playerCount: 11, teamCount: 5, sizes: [3, 2, 2, 2, 2] },
+  ])(
+    "splits $playerCount players across $teamCount teams as $sizes",
+    ({ playerCount, teamCount, sizes }) => {
+      expect(basketballTeamSizes(playerCount, teamCount)).toEqual(sizes);
+    },
+  );
+
+  it("never lets two teams differ by more than one player", () => {
+    for (let teamCount = 2; teamCount <= 6; teamCount += 1) {
+      for (let playerCount = teamCount; playerCount <= 12; playerCount += 1) {
+        const sizes = basketballTeamSizes(playerCount, teamCount);
+        expect(sizes).toHaveLength(teamCount);
+        expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThanOrEqual(1);
+        expect(sizes.reduce((sum, size) => sum + size, 0)).toBe(playerCount);
+      }
+    }
+  });
+
+  it("returns nothing when there are fewer players than teams", () => {
+    expect(basketballTeamSizes(3, 4)).toEqual([]);
+    expect(basketballTeamSizes(0, 2)).toEqual([]);
+    expect(basketballTeamSizes(Number.NaN, 2)).toEqual([]);
+  });
+
+  it("clamps the team count the same way the picker does", () => {
+    expect(basketballTeamSizes(8, 1)).toEqual(basketballTeamSizes(8, 2));
+    expect(basketballTeamSizes(12, 9)).toEqual(basketballTeamSizes(12, 6));
   });
 });

@@ -55,13 +55,19 @@ export const copy = {
     settleConfirmNoMoney: "End this game and mark as settled? (No money to exchange.)",
     settleConfirm: "End this game and calculate settlement?",
     pickTeams: "Pick teams",
+    pickTeamsConfirm: "Pick teams",
     basketballTeamCountLabel: "Number of teams",
+    pickTeamsDialogHelp: (playerCount: number) =>
+      `Split the ${playerCount} unlocked ${playerCount === 1 ? "player" : "players"} into balanced teams.`,
+    /** Team sizes are always within one of each other — see `basketballTeamSizes`. */
+    pickTeamsSizePreview: (sizes: number[]) =>
+      `Teams of ${sizes.join(" · ")}`,
     pickTeamsNeedPlayers: (teamCount: number) =>
       `Unlock at least ${teamCount} players to pick ${teamCount} teams.`,
     basketballRoundHelp: (teamCount: number) =>
       teamCount > 2
         ? `Assign players across Teams A–${String.fromCharCode(64 + teamCount)}, choose which two play this round, enter scores, then submit. Teams sitting out score nothing. Point deltas scale by game length and margin (capped at 2×).`
-        : "Assign players to Team A or B, enter scores, then submit. Point deltas scale by game length and margin (capped at 2×). Use Number of teams above to split into up to 6 teams.",
+        : "Assign players to Team A or B, enter scores, then submit. Point deltas scale by game length and margin (capped at 2×). Use Pick teams to split into up to 6 teams.",
     basketballMatchupNeedsBothTeams: (matchup: {
       home: string;
       away: string;
