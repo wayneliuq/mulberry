@@ -65,6 +65,15 @@ const matchSchema = z
     }
   });
 
+/**
+ * Validation contract for a single basketball matchup. Exported so callers that
+ * must *fail soft* (return null) rather than throw — e.g.
+ * `buildBasketballScoredRoundEntries`, which is called from a React `useMemo`
+ * and from the recalculation script — can `safeParse` the same rules
+ * `calculateBasketballRound` enforces instead of re-implementing a subset.
+ */
+export const basketballMatchSchema = matchSchema;
+
 export const basketballRoundSchema = z.object({
   priorRounds: z.array(matchSchema),
   match: matchSchema,
@@ -188,6 +197,29 @@ function replayPriorsIntoRatings(
     applyMatchToRatings(ratings, prior);
   }
   return ratings;
+}
+
+/**
+ * OpenSkill ordinals (`mu - 3 * sigma`) for every player appearing in
+ * `priorRoundsChronological`, after replaying them in order.
+ *
+ * This is the ranking the points ledger is meant to reproduce: for a player who
+ * only ever appears in automatic rounds, cumulative points telescope to exactly
+ * `LEDGER_SCALE * (finalOrdinal - ordinal(rating()))`, so points order and
+ * ordinal order must agree. Audits compare the two.
+ */
+export function basketballOrdinalsAfterRounds(
+  priorRoundsChronological: BasketballMatchInput[],
+): Map<number, number> {
+  const ratings = replayPriorsIntoRatings(priorRoundsChronological);
+  return new Map(
+    [...ratings.entries()].map(([playerId, r]) => [playerId, ordinal(r)]),
+  );
+}
+
+/** Ordinal of a never-rated player — the baseline every ledger total starts from. */
+export function baselineBasketballOrdinal(): number {
+  return ordinal(rating());
 }
 
 /**

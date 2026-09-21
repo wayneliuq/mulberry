@@ -1,4 +1,5 @@
 import {
+  basketballMatchSchema,
   calculateBasketballRound,
   priorBasketballMatchesFromSeasonHistory,
   type BasketballMatchInput,
@@ -30,36 +31,31 @@ export function buildBasketballScoredRoundEntries(
 ): BasketballRoundDraft | null {
   const { teamAPlayerIds, teamBPlayerIds, scoreTeamA, scoreTeamB, scoringSystem } = input;
 
-  if (teamAPlayerIds.length < 1 || teamBPlayerIds.length < 1) {
+  // Validate with the same schema `calculateBasketballRound` parses with, so a
+  // half-filled form (empty team, blank score) or a bad roster (duplicate
+  // player, player on both teams) comes back as null instead of throwing a
+  // ZodError out of a render or mid-way through a recalculation run.
+  const parsedMatch = basketballMatchSchema.safeParse({
+    teamAPlayerIds,
+    teamBPlayerIds,
+    scoreTeamA,
+    scoreTeamB,
+  });
+  if (!parsedMatch.success) {
     return null;
   }
-
-  if (
-    !Number.isFinite(scoreTeamA) ||
-    !Number.isFinite(scoreTeamB) ||
-    !Number.isInteger(scoreTeamA) ||
-    !Number.isInteger(scoreTeamB) ||
-    scoreTeamA < 0 ||
-    scoreTeamB < 0
-  ) {
-    return null;
-  }
+  const match: BasketballMatchInput = parsedMatch.data;
 
   const priorRounds: BasketballMatchInput[] =
     priorBasketballMatchesFromSeasonHistory(input.seasonHistory);
 
   const result = calculateBasketballRound({
     priorRounds,
-    match: {
-      teamAPlayerIds,
-      teamBPlayerIds,
-      scoreTeamA,
-      scoreTeamB,
-    },
+    match,
     scoringSystem,
   });
 
-  const rosterIds = [...teamAPlayerIds, ...teamBPlayerIds];
+  const rosterIds = [...match.teamAPlayerIds, ...match.teamBPlayerIds];
   const rawById = new Map(
     result.entries.map((entry) => [Number(entry.playerId), entry.pointDelta]),
   );

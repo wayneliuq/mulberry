@@ -1,40 +1,57 @@
 /**
- * Re-derive basketball round_entries for a season using the current
- * calculateBasketballRound formula (fixed scale × OpenSkill ordinal movement,
- * with the house line absorbing Bayesian drift).
+ * Re-derive basketball round_entries for a season using the production
+ * ghost-aware scoring path (`buildBasketballScoredRoundEntries`): fixed
+ * scale × OpenSkill ordinal movement, ghosts zeroed with their raw movement
+ * absorbed by the house line.
+ *
+ * I/O shell only — the decision of what to rewrite lives in the pure,
+ * unit-tested `recalculateSeasonPlan.ts`.
  *
  * Usage:
  *   npx tsx scripts/recalculate-season.ts              # dry run
  *   npx tsx scripts/recalculate-season.ts --execute     # apply updates
  *   npx tsx scripts/recalculate-season.ts --season 2    # target season id
  *
- * Requires linked Supabase CLI (`supabase db query --linked`).
+ * Transport is the Supabase Management API via the credential-surrogate helper
+ * (`supabase-mgmt db-query`), not the Supabase CLI: this environment has a
+ * Management API PAT but no linked-CLI login and no database password, so
+ * `supabase db query --linked` cannot authenticate. The helper is read-only
+ * unless `--write` is passed, so a dry run physically cannot mutate the project.
  */
 import { spawnSync } from "node:child_process";
 import { writeFileSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  calculateBasketballRound,
-  parseBasketballMatchFromRoundSnapshot,
-  parseBasketballScoringSystemFromRoundSnapshot,
-  type BasketballMatchInput,
-} from "../src/features/game-types/basketball.ts";
+  planSeasonRecalculation,
+  type BasketballRoundRow,
+} from "./recalculateSeasonPlan.ts";
 
-type RoundRow = {
-  round_id: string;
+type RoundRow = BasketballRoundRow & {
   created_at: string;
   summary_text: string | null;
-  settings_snapshot: Record<string, unknown> | string | null;
+};
+
+type PlayerRow = {
+  id: number;
+  display_name: string;
+  is_score_neutral_hidden: boolean;
 };
 
 function parseArgs(argv: string[]) {
   const execute = argv.includes("--execute");
   const seasonIdx = argv.indexOf("--season");
-  const seasonId =
-    seasonIdx >= 0 && argv[seasonIdx + 1]
-      ? Number(argv[seasonIdx + 1])
-      : null;
+  if (seasonIdx < 0) {
+    return { execute, seasonId: null };
+  }
+
+  // A typo'd flag must not silently fall through to "the active season" on a
+  // script that writes to production.
+  const raw = argv[seasonIdx + 1];
+  const seasonId = raw === undefined ? Number.NaN : Number(raw);
+  if (!Number.isInteger(seasonId)) {
+    throw new Error("--season requires an integer season id");
+  }
   return { execute, seasonId };
 }
 
@@ -88,45 +105,41 @@ function parseLinkedQueryJson(stdout: string): unknown {
   return parsed;
 }
 
-function runLinkedQuery(sql: string): unknown {
-  const result = spawnSync(
-    "supabase",
-    ["db", "query", "--linked", "--output", "json", sql],
-    {
-      encoding: "utf8",
-      cwd: join(import.meta.dirname, ".."),
-      maxBuffer: 32 * 1024 * 1024,
-    },
-  );
+const PROJECT_REF = process.env.SUPABASE_PROJECT_REF ?? "naemlxqtvwcfjannpoua";
+const MGMT_BIN =
+  process.env.SUPABASE_MGMT_BIN ??
+  join(homedir(), "workspace/skills/supabase/bin/supabase-mgmt");
+
+/**
+ * Run SQL through the Management API helper.
+ *
+ * `write` gates the helper's `--write` flag, which in turn decides whether the
+ * server runs the statement in a read-only transaction. Callers on the read
+ * path must leave it false so a bug here cannot become a production mutation.
+ */
+function runQuery(sql: string, options: { write?: boolean } = {}): unknown {
+  const dir = mkdtempSync(join(tmpdir(), "mulberry-sql-"));
+  const sqlPath = join(dir, "query.sql");
+  writeFileSync(sqlPath, sql, "utf8");
+
+  const args = [MGMT_BIN, "db-query", PROJECT_REF, "-f", sqlPath];
+  if (options.write === true) {
+    args.push("--write");
+  }
+  const result = spawnSync("python3", args, {
+    encoding: "utf8",
+    cwd: join(import.meta.dirname, ".."),
+    maxBuffer: 256 * 1024 * 1024,
+  });
   if (result.status !== 0) {
     throw new Error(
-      `supabase db query failed (${result.status}): ${result.stderr || result.stdout}`,
+      `supabase-mgmt db-query failed (${result.status}): ${result.stderr || result.stdout}`,
     );
   }
+  if (result.stderr.trim().length > 0) {
+    console.warn(result.stderr.trim());
+  }
   return parseLinkedQueryJson(result.stdout);
-}
-
-function normalizeSnapshot(
-  value: RoundRow["settings_snapshot"],
-): Record<string, unknown> | undefined {
-  if (!value) {
-    return undefined;
-  }
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value) as unknown;
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-  return value;
-}
-
-function escapeLiteral(value: string): string {
-  return value.replaceAll("'", "''");
 }
 
 function main() {
@@ -138,11 +151,32 @@ function main() {
            SELECT id FROM public.basketball_seasons WHERE is_active = true
            ORDER BY id DESC LIMIT 1
          )`
-      : `r.basketball_season_id = ${Number.isInteger(seasonId) ? seasonId : "NULL"}`;
+      : `r.basketball_season_id = ${seasonId}`;
 
-  if (seasonId !== null && !Number.isInteger(seasonId)) {
-    throw new Error("--season must be an integer season id");
+  console.log("Fetching players (ghost flags and display names)…");
+  const players = runQuery(
+    `SELECT id, display_name, is_score_neutral_hidden FROM public.players;`,
+  ) as PlayerRow[];
+  if (!Array.isArray(players)) {
+    throw new Error("Expected players array from query.");
   }
+
+  const ghostPlayerIds = new Set<number>();
+  const playerNameById = new Map<number, string>();
+  for (const player of players) {
+    playerNameById.set(Number(player.id), player.display_name);
+    if (player.is_score_neutral_hidden === true) {
+      ghostPlayerIds.add(Number(player.id));
+    }
+  }
+  const ghostLabels = [...ghostPlayerIds].map(
+    (id) => `${playerNameById.get(id) ?? id} (${id})`,
+  );
+  console.log(
+    ghostLabels.length === 0
+      ? "Found 0 ghost players."
+      : `Found ${ghostLabels.length} ghost players: ${ghostLabels.join(", ")}`,
+  );
 
   console.log(
     seasonId === null
@@ -150,7 +184,8 @@ function main() {
       : `Fetching rounds for basketball season ${seasonId}…`,
   );
 
-  const rounds = runLinkedQuery(`
+  // Order must match `fetchBasketballRoundHistory` so the replay is identical.
+  const rounds = runQuery(`
     SELECT r.id as round_id, r.created_at, r.summary_text, r.settings_snapshot
     FROM public.rounds r
     WHERE r.game_type_id = 'basketball'
@@ -164,110 +199,36 @@ function main() {
 
   console.log(`Fetched ${rounds.length} rounds`);
 
-  const priorRounds: BasketballMatchInput[] = [];
-  const updateStatements: string[] = [];
-  let entryUpdates = 0;
-  let skippedManual = 0;
-  let skippedUnparseable = 0;
-
-  for (const round of rounds) {
-    const snapshot = normalizeSnapshot(round.settings_snapshot);
-    const meta = snapshot?.metadata as Record<string, unknown> | undefined;
-    if (meta?.manualInput === true) {
-      // Manual-input rounds are hand-entered, player-zero-sum, and carry no
-      // house line, so their deltas are not ours to re-derive — skip rewriting
-      // them. They still feed the OpenSkill replay on exactly the same terms
-      // as the live app: the client replays every round the season query
-      // returns (`fetchBasketballRoundHistory`, no manualInput filter) and
-      // keeps the ones that parse. Manual rounds normally omit
-      // scoreTeamA/scoreTeamB, so `parseBasketball...` returns null and they
-      // drop out of the replay here too. Keeping this conditional push (rather
-      // than an unconditional `continue`) is what keeps the script's priors
-      // byte-identical to the app's for the rare manual round that does carry
-      // scores.
-      skippedManual += 1;
-      const match = parseBasketballMatchFromRoundSnapshot(snapshot);
-      if (match) {
-        priorRounds.push(match);
-      }
-      continue;
-    }
-
-    const match = parseBasketballMatchFromRoundSnapshot(snapshot);
-    if (!match) {
-      skippedUnparseable += 1;
-      continue;
-    }
-
-    const scoringSystem = parseBasketballScoringSystemFromRoundSnapshot(snapshot);
-    const result = calculateBasketballRound({
-      priorRounds,
-      match,
-      scoringSystem,
-    });
-
-    priorRounds.push(match);
-
-    for (const entry of result.entries) {
-      updateStatements.push(
-        `UPDATE public.round_entries SET point_delta = ${entry.pointDelta} ` +
-          `WHERE round_id = '${escapeLiteral(round.round_id)}' ` +
-          `AND player_id = ${entry.playerId};`,
-      );
-      entryUpdates += 1;
-    }
-
-    // Persist the house line into the round metadata so the ledger stays
-    // auditable: players + house = 0 for every basketball round.
-    updateStatements.push(
-      `UPDATE public.rounds SET summary_text = '${escapeLiteral(result.summary)}', ` +
-        `settings_snapshot = jsonb_set(COALESCE(settings_snapshot, '{}'::jsonb), ` +
-        `'{metadata,basketballHousePointDelta}', '${result.houseDelta}') ` +
-        `WHERE id = '${escapeLiteral(round.round_id)}';`,
-    );
-  }
+  const plan = planSeasonRecalculation({ rounds, ghostPlayerIds, playerNameById });
 
   console.log(
-    `Prepared ${updateStatements.length} SQL statements ` +
-      `(${entryUpdates} entry updates; skipped manual=${skippedManual}, unparseable=${skippedUnparseable})`,
+    `Prepared ${plan.statements.length} SQL statements ` +
+      `(${plan.roundsRewritten} rounds, ${plan.entryUpdates} entry updates; ` +
+      `skipped manual=${plan.skippedManual}, unparseable=${plan.skippedUnparseable}, ` +
+      `unscorable=${plan.skippedUnscorable})`,
   );
 
-  if (updateStatements.length === 0) {
+  if (plan.statements.length === 0) {
     console.log("Nothing to update.");
     return;
   }
 
-  const sql = updateStatements.join("\n");
+  const sql = plan.statements.join("\n");
 
   if (!execute) {
     const outPath = join(import.meta.dirname, "recalculate-season.sql");
     writeFileSync(outPath, sql, "utf8");
     console.log(`Dry run — SQL written to ${outPath}`);
     console.log("Sample updates:");
-    for (const line of updateStatements.slice(0, 6)) {
+    for (const line of plan.statements.slice(0, 6)) {
       console.log(`  ${line}`);
     }
     console.log("Re-run with --execute to apply.");
     return;
   }
 
-  const dir = mkdtempSync(join(tmpdir(), "mulberry-recalc-"));
-  const tmpPath = join(dir, "recalculate-season.sql");
-  writeFileSync(tmpPath, sql, "utf8");
-  console.log(`Executing updates via ${tmpPath}…`);
-  const result = spawnSync(
-    "supabase",
-    ["db", "query", "--linked", "-f", tmpPath],
-    {
-      encoding: "utf8",
-      cwd: join(import.meta.dirname, ".."),
-      maxBuffer: 32 * 1024 * 1024,
-    },
-  );
-  if (result.status !== 0) {
-    console.error(result.stderr || result.stdout);
-    process.exit(result.status ?? 1);
-  }
+  console.log(`Executing ${plan.statements.length} statements against ${PROJECT_REF}…`);
+  runQuery(sql, { write: true });
   console.log("Done — season round_entries recalculated with current formula.");
 }
 
