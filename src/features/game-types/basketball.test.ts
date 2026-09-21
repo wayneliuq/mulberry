@@ -164,6 +164,154 @@ describe("balanceBasketballTeams", () => {
   });
 });
 
+describe("balanceBasketballTeams even-size rule", () => {
+  /**
+   * Priors that make every player's rating distinct, so the skill objective has
+   * a real gradient and would happily pick an uneven split if it were allowed
+   * to. Each round is a decisive 1v1, which spreads the eight ids out across
+   * the ordinal range.
+   */
+  function lopsidedPriors(playerCount: number) {
+    const rounds = [];
+    for (let winner = 1; winner < playerCount; winner += 1) {
+      for (let loser = winner + 1; loser <= playerCount; loser += 1) {
+        rounds.push({
+          teamAPlayerIds: [winner],
+          teamBPlayerIds: [loser],
+          scoreTeamA: 21,
+          scoreTeamB: 0,
+        });
+      }
+    }
+    return rounds;
+  }
+
+  /**
+   * The shape that used to produce Wayne's 3v5: three players who have beaten
+   * the other five repeatedly. Three strong against five weak lands almost
+   * exactly on 50/50, while the closest 4v4 is a blowout — so a balancer that
+   * scored size as a mere tiebreaker would choose 3v5 every time.
+   */
+  function strongMinorityPriors() {
+    const strong = [1, 2, 3];
+    const weak = [4, 5, 6, 7, 8];
+    const rounds = [];
+    for (let rep = 0; rep < 4; rep += 1) {
+      for (const winner of strong) {
+        for (const loser of weak) {
+          rounds.push({
+            teamAPlayerIds: [winner],
+            teamBPlayerIds: [loser],
+            scoreTeamA: 21,
+            scoreTeamB: 0,
+          });
+        }
+      }
+    }
+    return rounds;
+  }
+
+  it("splits eight players 4v4, never 3v5, even when 3v5 is the fairer match", () => {
+    const ids = [1, 2, 3, 4, 5, 6, 7, 8];
+    const priors = strongMinorityPriors();
+
+    // Precondition: an uneven split really is the skill-optimal one here (two
+    // strong plus a weak against one strong plus four weak lands on 50.2%),
+    // so this test fails if the even-size rule is ever demoted to a tiebreaker.
+    const threeVsFive = predictBasketballMatchWinProbabilities(priors, {
+      teamAPlayerIds: [1, 3, 6],
+      teamBPlayerIds: [2, 4, 5, 7, 8],
+      scoreTeamA: 0,
+      scoreTeamB: 0,
+    });
+    expect(Math.abs(threeVsFive!.teamAWinProb - 0.5)).toBeLessThan(0.05);
+
+    const result = balanceBasketballTeams(ids, priors, 2);
+    expect(result).not.toBeNull();
+    expect(result!.teamAPlayerIds).toHaveLength(4);
+    expect(result!.teamBPlayerIds).toHaveLength(4);
+    // And the count rule wins outright: the resulting match is far from even,
+    // which is the accepted trade — sizes first, skill second.
+    expect(Math.abs(result!.teamAWinProb - 0.5)).toBeGreaterThan(0.05);
+  });
+
+  it.each([
+    { playerCount: 4, sizes: [2, 2] },
+    { playerCount: 5, sizes: [3, 2] },
+    { playerCount: 6, sizes: [3, 3] },
+    { playerCount: 7, sizes: [4, 3] },
+    { playerCount: 8, sizes: [4, 4] },
+    { playerCount: 9, sizes: [5, 4] },
+    { playerCount: 10, sizes: [5, 5] },
+    { playerCount: 11, sizes: [6, 5] },
+    { playerCount: 12, sizes: [6, 6] },
+  ])(
+    "splits $playerCount players into two teams of $sizes",
+    ({ playerCount, sizes }) => {
+      const ids = Array.from({ length: playerCount }, (_, i) => i + 1);
+      const result = balanceBasketballTeams(ids, lopsidedPriors(playerCount), 2);
+
+      expect(result).not.toBeNull();
+      expect(
+        [result!.teamAPlayerIds.length, result!.teamBPlayerIds.length].sort(
+          (a, b) => b - a,
+        ),
+      ).toEqual(sizes);
+      expect(
+        [...result!.teamAPlayerIds, ...result!.teamBPlayerIds].sort(
+          (a, b) => a - b,
+        ),
+      ).toEqual(ids);
+    },
+  );
+
+  it.each([2, 3, 4, 5, 6])(
+    "keeps %i-team splits within one player of each other for every roster size",
+    (numTeams) => {
+      for (let playerCount = numTeams; playerCount <= 12; playerCount += 1) {
+        const ids = Array.from({ length: playerCount }, (_, i) => i + 1);
+        const result = balanceBasketballTeams(
+          ids,
+          lopsidedPriors(playerCount),
+          numTeams,
+        );
+
+        expect(result).not.toBeNull();
+        const sizes = result!.teams!.map((team) => team.length);
+        expect(sizes).toHaveLength(numTeams);
+        expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThanOrEqual(1);
+        expect(sizes.reduce((sum, size) => sum + size, 0)).toBe(playerCount);
+      }
+    },
+  );
+
+  it("beats a naive split on skill while holding the even-size rule", () => {
+    // Ratings run 1 (strongest) to 8 (weakest). The naive split — strongest
+    // half against weakest half — is 4v4 but wildly lopsided; the balancer has
+    // to do better without breaking 4v4.
+    const ids = [1, 2, 3, 4, 5, 6, 7, 8];
+    const priors = lopsidedPriors(8);
+    const result = balanceBasketballTeams(ids, priors, 2);
+
+    expect(result).not.toBeNull();
+    expect(result!.teamAPlayerIds).toHaveLength(4);
+
+    const naive = predictBasketballMatchWinProbabilities(priors, {
+      teamAPlayerIds: [1, 2, 3, 4],
+      teamBPlayerIds: [5, 6, 7, 8],
+      scoreTeamA: 0,
+      scoreTeamB: 0,
+    });
+    expect(naive).not.toBeNull();
+
+    const balancedDistance = Math.abs(result!.teamAWinProb - 0.5);
+    const naiveDistance = Math.abs(naive!.teamAWinProb - 0.5);
+    expect(balancedDistance).toBeLessThan(naiveDistance);
+    // Wayne's bar: the stronger side should not be better than a ~60% favourite.
+    expect(Math.max(result!.teamAWinProb, 1 - result!.teamAWinProb)).toBeLessThanOrEqual(0.6);
+  });
+});
+
 describe("calculateBasketballRound", () => {
   it("balances every round through the house line", () => {
     const result = calculateBasketballRound({

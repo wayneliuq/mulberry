@@ -285,6 +285,13 @@ function partitionScore(
   };
 }
 
+/**
+ * Orders two *equally sized* candidate splits. Size balance is not a term here
+ * on purpose: candidates are filtered to even sizes before they are scored (see
+ * `balanceBasketballTeams`), so by the time two partitions are compared they
+ * already have identical size profiles and only skill and determinism are left
+ * to decide between them.
+ */
 function comparePartitions(
   left: {
     teamAPlayerIds: number[];
@@ -303,21 +310,27 @@ function comparePartitions(
     return left.distanceFromHalf - right.distanceFromHalf;
   }
 
-  const leftBalanced =
-    Math.abs(left.teamAPlayerIds.length - left.teamBPlayerIds.length);
-  const rightBalanced =
-    Math.abs(right.teamAPlayerIds.length - right.teamBPlayerIds.length);
-  if (leftBalanced !== rightBalanced) {
-    return leftBalanced - rightBalanced;
-  }
-
   const leftKey = [...left.teamAPlayerIds].sort((a, b) => a - b).join(",");
   const rightKey = [...right.teamAPlayerIds].sort((a, b) => a - b).join(",");
   return leftKey.localeCompare(rightKey);
 }
 
 /**
- * Partition unlocked players into numTeams (2 to 6) balanced teams.
+ * Partition unlocked players into numTeams (2 to 6) teams.
+ *
+ * Two objectives, in strict priority order — they can conflict, and when they
+ * do the count always wins:
+ *
+ *   1. **Even player counts (hard constraint).** Team sizes differ by at most
+ *      one: `floor(N / K)` or `ceil(N / K)` players each. 8 players over 2
+ *      teams is 4v4, never 3v5; 8 over 3 teams is 3/3/2. This is not a
+ *      tiebreaker — unevenly sized splits are never considered at all, however
+ *      much better their skill balance would look.
+ *   2. **Skill balance (best effort).** *Within* the evenly sized candidates,
+ *      pick the one whose sides are closest in OpenSkill terms — win
+ *      probability nearest 50/50 for two teams, minimum variance of team mean
+ *      ordinals for three or more. A lopsided roster can still leave the
+ *      stronger side favoured; that is accepted, the size rule is not.
  */
 export function balanceBasketballTeams(
   playerIds: number[],
@@ -337,6 +350,11 @@ export function balanceBasketballTeams(
   if (numTeams === 2) {
     const n = sortedIds.length;
     const maxMask = (1 << n) - 1;
+    // Hard size constraint: only splits whose sides differ by at most one
+    // player are candidates. 8 players means 4v4 — a 3v5 that happens to land
+    // closer to 50/50 is discarded before it is ever scored.
+    const minTeamSize = Math.floor(n / 2);
+    const maxTeamSize = Math.ceil(n / 2);
     let best: {
       teamAPlayerIds: number[];
       teamBPlayerIds: number[];
@@ -355,7 +373,10 @@ export function balanceBasketballTeams(
         }
       }
 
-      if (teamAPlayerIds.length < 1 || teamBPlayerIds.length < 1) {
+      if (
+        teamAPlayerIds.length < minTeamSize ||
+        teamAPlayerIds.length > maxTeamSize
+      ) {
         continue;
       }
 
@@ -392,6 +413,11 @@ export function balanceBasketballTeams(
   // sizes differ by at most one, minimising the variance of the teams' mean
   // OpenSkill ordinals. Win probability is a two-sided measure, so it cannot
   // stand in for "balanced" once there are more than two teams.
+  //
+  // The size bounds below are enforced by construction rather than scored: a
+  // team never grows past `maxTeamSize`, and `slackAfter` prunes any branch
+  // that can no longer bring every team up to `minTeamSize`. Skill variance
+  // only ever chooses among splits that already satisfy the size rule.
   const K = numTeams;
   const N = sortedIds.length;
   const minTeamSize = Math.floor(N / K);
