@@ -16,11 +16,23 @@ import { Link, useParams } from "react-router-dom";
 import { useAdminSession } from "../features/admin/AdminSessionContext";
 import { BasketballSeasonToolbar } from "../features/basketball/BasketballSeasonToolbar";
 import { BasketballPickedTeamsPanel } from "../features/basketball/BasketballPickedTeamsPanel";
-import { BasketballPresetRow } from "../features/basketball/BasketballPresetRow";
+import { BasketballLineupRow } from "../features/basketball/BasketballLineupRow";
+import { BasketballTeamPickerSection } from "../features/basketball/BasketballTeamPickerSection";
+import { basketballLineupApplication } from "../features/basketball/basketballLineups";
 import {
-  BasketballTeamPickerSection,
+  assignmentsClampedToTeamCount,
+  basketballMatchupRosters,
+  basketballMatchupWithSide,
+  basketballTeamLetters,
+  BASKETBALL_TEAM_COUNT_OPTIONS,
+  clampBasketballTeamCount,
+  DEFAULT_BASKETBALL_MATCHUP,
+  MIN_BASKETBALL_TEAM_COUNT,
+  normalizeBasketballMatchup,
+  type BasketballMatchup,
   type BasketballTeamChoice,
-} from "../features/basketball/BasketballTeamPickerSection";
+  type BasketballTeamLetter,
+} from "../features/basketball/basketballTeams";
 import { useBasketballSeasons } from "../features/basketball/useBasketballSeasons";
 import { calculateDixitRound } from "../features/game-types/dixit";
 import { calculateFightTheLandlordRound } from "../features/game-types/fightTheLandlord";
@@ -55,6 +67,7 @@ import {
   type PlayerSortMode,
   useSortedPlayers,
 } from "../features/players/SortablePlayerList";
+import { OptionPillGroup } from "../features/ui/OptionPillGroup";
 import { PlayerPill } from "../features/ui/PlayerPill";
 import {
   balanceManualEntriesExcludingGhosts,
@@ -145,7 +158,18 @@ export function GameViewPage() {
   const [basketballScoringSystem, setBasketballScoringSystem] = useState<
     "1/2" | "2/3"
   >("1/2");
-  const [basketballPickNumTeams, setBasketballPickNumTeams] = useState<number>(2);
+  /**
+   * How many teams the lineup is split into (2–6). Drives "Pick teams"
+   * balancing, the team pills in the round form, and which letters can be
+   * matched up.
+   */
+  const [basketballTeamCount, setBasketballTeamCount] = useState<number>(
+    MIN_BASKETBALL_TEAM_COUNT,
+  );
+  /** The two teams playing the round being entered; the rest sit it out. */
+  const [basketballMatchup, setBasketballMatchup] = useState<BasketballMatchup>(
+    DEFAULT_BASKETBALL_MATCHUP,
+  );
   const [basketballScores, setBasketballScores] = useState({
     teamA: "",
     teamB: "",
@@ -221,10 +245,6 @@ export function GameViewPage() {
     [allPlayers, currentGamePlayerIds, gameRoundCountByPlayerId],
   );
   const unlockedPlayers = game?.players.filter((player) => !player.isLocked) ?? [];
-  const unlockedPlayerIdSet = useMemo(
-    () => new Set(unlockedPlayers.map((player) => player.playerId)),
-    [unlockedPlayers],
-  );
   const basketballTeamPresets = game?.basketballTeamPresets ?? [];
   const playerDisplayNameById = useMemo(
     () =>
@@ -284,17 +304,16 @@ export function GameViewPage() {
       return null;
     }
 
-    const teamA = sortedUnlockedPlayers
-      .filter((player) => basketballTeamByPlayerId[player.playerId] === "A")
-      .map((player) => player.playerId);
-    const teamB = sortedUnlockedPlayers
-      .filter((player) => basketballTeamByPlayerId[player.playerId] === "B")
-      .map((player) => player.playerId);
+    const { teamAPlayerIds, teamBPlayerIds } = basketballMatchupRosters(
+      sortedUnlockedPlayers.map((player) => player.playerId),
+      basketballTeamByPlayerId,
+      basketballMatchup,
+    );
 
     return buildBasketballScoredRoundEntries({
       seasonHistory: basketballHistoryQuery.data ?? [],
-      teamAPlayerIds: teamA,
-      teamBPlayerIds: teamB,
+      teamAPlayerIds,
+      teamBPlayerIds,
       scoreTeamA: Number(basketballScores.teamA),
       scoreTeamB: Number(basketballScores.teamB),
       ghostPlayerIds,
@@ -305,6 +324,7 @@ export function GameViewPage() {
     basketballHistoryQuery.isLoading,
     basketballHistoryQuery.data,
     basketballTeamByPlayerId,
+    basketballMatchup,
     basketballScores.teamA,
     basketballScores.teamB,
     sortedUnlockedPlayers,
@@ -499,7 +519,7 @@ export function GameViewPage() {
     const balanced = balanceBasketballTeams(
       playerIds,
       priors,
-      basketballPickNumTeams,
+      basketballTeamCount,
     );
     if (!balanced) {
       window.alert(copy.gameView.pickTeamsFailed);
@@ -514,7 +534,7 @@ export function GameViewPage() {
     });
   }, [
     basketballHistoryQuery.data,
-    basketballPickNumTeams,
+    basketballTeamCount,
     saveBasketballTeamPresetMutation,
     sortedUnlockedPlayers,
   ]);
@@ -893,15 +913,15 @@ export function GameViewPage() {
       return;
     }
 
-    const teamA = sortedUnlockedPlayers
-      .filter((player) => basketballTeamByPlayerId[player.playerId] === "A")
-      .map((player) => player.playerId);
-    const teamB = sortedUnlockedPlayers
-      .filter((player) => basketballTeamByPlayerId[player.playerId] === "B")
-      .map((player) => player.playerId);
+    const { teamAPlayerIds: teamA, teamBPlayerIds: teamB } =
+      basketballMatchupRosters(
+        sortedUnlockedPlayers.map((player) => player.playerId),
+        basketballTeamByPlayerId,
+        basketballMatchup,
+      );
 
     if (teamA.length < 1 || teamB.length < 1) {
-      window.alert("Put at least one unlocked player on each team.");
+      window.alert(copy.gameView.basketballMatchupNeedsBothTeams(basketballMatchup));
       return;
     }
 
@@ -978,26 +998,17 @@ export function GameViewPage() {
       return;
     }
 
-    const teamA = sortedUnlockedPlayers
-      .filter((player) => basketballTeamByPlayerId[player.playerId] === "A")
-      .map((player) => player.playerId);
-    const teamB = sortedUnlockedPlayers
-      .filter((player) => basketballTeamByPlayerId[player.playerId] === "B")
-      .map((player) => player.playerId);
+    // A round is one matchup out of the lineup: the other teams sit it out and
+    // are simply absent from the stored `teamAPlayerIds` / `teamBPlayerIds`.
+    const { teamAPlayerIds: teamA, teamBPlayerIds: teamB } =
+      basketballMatchupRosters(
+        sortedUnlockedPlayers.map((player) => player.playerId),
+        basketballTeamByPlayerId,
+        basketballMatchup,
+      );
 
     if (teamA.length < 1 || teamB.length < 1) {
-      window.alert("Put at least one unlocked player on each team.");
-      return;
-    }
-
-    const sidelined = sortedUnlockedPlayers.filter((player) => {
-      const team = basketballTeamByPlayerId[player.playerId];
-      return team === "C" || team === "D" || team === "E" || team === "F";
-    });
-    if (sidelined.length > 0) {
-      window.alert(
-        "Scoring is Team A vs Team B only. Move players off Team C–F (or leave them as none) before saving.",
-      );
+      window.alert(copy.gameView.basketballMatchupNeedsBothTeams(basketballMatchup));
       return;
     }
 
@@ -1086,11 +1097,10 @@ export function GameViewPage() {
   }));
 
   const basketballManualPlayers = sortedUnlockedPlayers
-    .filter(
-      (player) =>
-        basketballTeamByPlayerId[player.playerId] === "A" ||
-        basketballTeamByPlayerId[player.playerId] === "B",
-    )
+    .filter((player) => {
+      const team = basketballTeamByPlayerId[player.playerId];
+      return team === basketballMatchup.home || team === basketballMatchup.away;
+    })
     .map((player) => ({
       playerId: player.playerId,
       displayName: player.displayName,
@@ -1109,25 +1119,19 @@ export function GameViewPage() {
     });
   }
 
-  function applyBasketballPreset(preset: BasketballTeamPreset) {
+  function applyBasketballLineup(preset: BasketballTeamPreset) {
     applyingPresetRef.current = true;
-    const next: Record<number, BasketballTeamChoice> = {};
-    for (const player of sortedUnlockedPlayers) {
-      next[player.playerId] = "none";
-    }
-    // Round scoring is always A vs B; multi-team presets still expose A/B via
-    // teamAPlayerIds / teamBPlayerIds (first two partitions).
-    for (const id of preset.teamAPlayerIds) {
-      if (unlockedPlayerIdSet.has(id)) {
-        next[id] = "A";
-      }
-    }
-    for (const id of preset.teamBPlayerIds) {
-      if (unlockedPlayerIdSet.has(id)) {
-        next[id] = "B";
-      }
-    }
-    setBasketballTeamByPlayerId(next);
+    // A lineup carries its whole split, so restore every partition (not just
+    // the two that played) and resize the picker to match what was saved.
+    const { teamCount, assignments } = basketballLineupApplication(
+      preset,
+      sortedUnlockedPlayers.map((player) => player.playerId),
+    );
+    setBasketballTeamCount(teamCount);
+    setBasketballMatchup((current) =>
+      normalizeBasketballMatchup(current, teamCount),
+    );
+    setBasketballTeamByPlayerId(assignments);
     applyingPresetRef.current = false;
     setPresetClearedNotice(false);
   }
@@ -1154,7 +1158,7 @@ export function GameViewPage() {
     }));
   }
 
-  function handleBasketballPresetSelect(preset: BasketballTeamPreset | null) {
+  function handleBasketballLineupSelect(preset: BasketballTeamPreset | null) {
     if (preset === null) {
       setSelectedPresetId(null);
       clearBasketballTeamAssignments();
@@ -1162,36 +1166,37 @@ export function GameViewPage() {
     }
 
     setSelectedPresetId(preset.id);
-    applyBasketballPreset(preset);
+    applyBasketballLineup(preset);
   }
 
-  function handleSelectLastRound() {
-    const history = basketballHistoryQuery.data ?? [];
-    if (history.length === 0) return;
-    const lastRound = history[history.length - 1];
-    if (!lastRound) return;
-    const match = parseBasketballMatchFromRoundSnapshot(lastRound.settingsSnapshot);
-    if (!match) return;
+  function handleBasketballTeamCountChange(count: number) {
+    const nextCount = clampBasketballTeamCount(count);
+    if (nextCount === basketballTeamCount) {
+      return;
+    }
+    // Resizing the lineup no longer matches whatever preset was applied.
+    if (selectedPresetId !== null) {
+      setSelectedPresetId(null);
+      setPresetClearedNotice(true);
+    }
+    setBasketballTeamCount(nextCount);
+    setBasketballMatchup((current) =>
+      normalizeBasketballMatchup(current, nextCount),
+    );
+    // Narrowing the lineup hides the trailing letters, so release anyone left
+    // on them instead of keeping an invisible assignment around.
+    setBasketballTeamByPlayerId((current) =>
+      assignmentsClampedToTeamCount(current, nextCount),
+    );
+  }
 
-    applyingPresetRef.current = true;
-    setSelectedPresetId("last");
-    const next: Record<number, BasketballTeamChoice> = {};
-    for (const player of sortedUnlockedPlayers) {
-      next[player.playerId] = "none";
-    }
-    for (const id of match.teamAPlayerIds) {
-      if (unlockedPlayerIdSet.has(id)) {
-        next[id] = "A";
-      }
-    }
-    for (const id of match.teamBPlayerIds) {
-      if (unlockedPlayerIdSet.has(id)) {
-        next[id] = "B";
-      }
-    }
-    setBasketballTeamByPlayerId(next);
-    applyingPresetRef.current = false;
-    setPresetClearedNotice(false);
+  function handleBasketballMatchupChange(
+    side: "home" | "away",
+    letter: BasketballTeamLetter,
+  ) {
+    setBasketballMatchup((current) =>
+      basketballMatchupWithSide(current, side, letter, basketballTeamCount),
+    );
   }
 
   function handlePickTeamsClick() {
@@ -1201,8 +1206,8 @@ export function GameViewPage() {
       return;
     }
 
-    if (sortedUnlockedPlayers.length < 2) {
-      window.alert(copy.gameView.pickTeamsNeedPlayers);
+    if (sortedUnlockedPlayers.length < basketballTeamCount) {
+      window.alert(copy.gameView.pickTeamsNeedPlayers(basketballTeamCount));
       return;
     }
 
@@ -1221,23 +1226,25 @@ export function GameViewPage() {
 
   const pickPanelPreset =
     latestPickedPreset ?? basketballTeamPresets[0] ?? null;
+  const basketballEditingDisabled = !isAdmin || game.status === "settled";
   const pickTeamsDisabled =
-    !isAdmin ||
-    game.status === "settled" ||
-    sortedUnlockedPlayers.length < 2 ||
+    basketballEditingDisabled ||
+    sortedUnlockedPlayers.length < basketballTeamCount ||
     sortedUnlockedPlayers.length > BASKETBALL_TEAM_BALANCE_MAX_PLAYERS;
 
-  const basketballPresetRow = (
-    <BasketballPresetRow
-      presets={basketballTeamPresets}
+  const basketballTeamLetterOptions = basketballTeamLetters(
+    basketballTeamCount,
+  ).map((letter) => ({ value: letter, label: `Team ${letter}` }));
+
+  const basketballLineupRow = (
+    <BasketballLineupRow
+      lineups={basketballTeamPresets}
       selectedPresetId={selectedPresetId}
-      onSelectPreset={handleBasketballPresetSelect}
-      hasLastRound={(basketballHistoryQuery.data ?? []).length > 0}
-      onSelectLastRound={handleSelectLastRound}
-      disabled={!isAdmin || game.status === "settled"}
+      onSelectLineup={handleBasketballLineupSelect}
+      disabled={basketballEditingDisabled}
       isLoading={basketballHistoryQuery.isLoading}
-      loadingMessage={copy.gameView.presetLineupsLoading}
-      emptyMessage={copy.gameView.presetLineupsEmpty}
+      loadingMessage={copy.gameView.lineupsLoading}
+      emptyMessage={copy.gameView.lineupsEmpty}
     />
   );
 
@@ -1293,14 +1300,19 @@ export function GameViewPage() {
               </button>
               {game.gameTypeId === "basketball" ? (
                 <>
-                  <div className="inline-actions" aria-label="Number of teams for Pick Teams">
-                    {[2, 3, 4, 5, 6].map((n) => (
+                  <div
+                    className="inline-actions"
+                    role="group"
+                    aria-label={copy.gameView.basketballTeamCountLabel}
+                  >
+                    {BASKETBALL_TEAM_COUNT_OPTIONS.map((n) => (
                       <button
                         key={n}
                         type="button"
-                        className={`pill-button${basketballPickNumTeams === n ? " pill-button--active" : ""}`}
-                        disabled={pickTeamsDisabled}
-                        onClick={() => setBasketballPickNumTeams(n)}
+                        className={`pill-button${basketballTeamCount === n ? " pill-button--active" : ""}`}
+                        aria-pressed={basketballTeamCount === n}
+                        disabled={basketballEditingDisabled}
+                        onClick={() => handleBasketballTeamCountChange(n)}
                       >
                         {n}
                       </button>
@@ -1758,8 +1770,7 @@ export function GameViewPage() {
               basketballManualMode ? (
                 <div className="stack-sm">
                   <p className="muted">
-                    Manual points for team A/B players only. These rounds do not
-                    affect basketball rating predictions.
+                    {copy.gameView.basketballManualHelp(basketballMatchup)}
                   </p>
                   <BasketballTeamPickerSection
                     players={sortedUnlockedPlayers}
@@ -1767,13 +1778,14 @@ export function GameViewPage() {
                     onTeamChange={handleBasketballTeamChange}
                     sortMode={unlockedSort}
                     onSortChange={setUnlockedSort}
+                    numTeams={basketballTeamCount}
                   />
                   {presetClearedNotice ? (
                     <p className="muted" role="status" aria-live="polite">
-                      {copy.gameView.presetClearedLive}
+                      {copy.gameView.lineupClearedLive}
                     </p>
                   ) : null}
-                  {basketballPresetRow}
+                  {basketballLineupRow}
                   <ManualRoundForm
                     players={basketballManualPlayers}
                     inputs={basketballManualInputs}
@@ -1808,10 +1820,38 @@ export function GameViewPage() {
                 }}
               >
                 <p className="muted">
-                  Assign players to Team A or B, enter scores, then submit.
-                  Point deltas scale by game length and margin (capped at 2×).
-                  Use Teams 2–6 above Pick Teams when balancing multi-team lineups.
+                  {copy.gameView.basketballRoundHelp(basketballTeamCount)}
                 </p>
+                {basketballTeamCount > MIN_BASKETBALL_TEAM_COUNT ? (
+                  <div className="form-grid">
+                    <label className="stack-xs">
+                      <span>Home team</span>
+                      <OptionPillGroup
+                        options={basketballTeamLetterOptions}
+                        value={basketballMatchup.home}
+                        onChange={(letter) => {
+                          if (letter) {
+                            handleBasketballMatchupChange("home", letter);
+                          }
+                        }}
+                        ariaLabel="Home team for this round"
+                      />
+                    </label>
+                    <label className="stack-xs">
+                      <span>Away team</span>
+                      <OptionPillGroup
+                        options={basketballTeamLetterOptions}
+                        value={basketballMatchup.away}
+                        onChange={(letter) => {
+                          if (letter) {
+                            handleBasketballMatchupChange("away", letter);
+                          }
+                        }}
+                        ariaLabel="Away team for this round"
+                      />
+                    </label>
+                  </div>
+                ) : null}
                 <div className="form-grid">
                   <label className="stack-xs">
                     <span>Scoring</span>
@@ -1831,7 +1871,7 @@ export function GameViewPage() {
                 </div>
                 <div className="form-grid">
                   <label className="stack-xs">
-                    <span>Team A score</span>
+                    <span>Team {basketballMatchup.home} score</span>
                     <input
                       type="number"
                       min="0"
@@ -1846,7 +1886,7 @@ export function GameViewPage() {
                     />
                   </label>
                   <label className="stack-xs">
-                    <span>Team B score</span>
+                    <span>Team {basketballMatchup.away} score</span>
                     <input
                       type="number"
                       min="0"
@@ -1867,7 +1907,7 @@ export function GameViewPage() {
                   onTeamChange={handleBasketballTeamChange}
                   sortMode={unlockedSort}
                   onSortChange={setUnlockedSort}
-                  numTeams={2}
+                  numTeams={basketballTeamCount}
                 />
                 {basketballDisplayEntries && basketballDisplayEntries.length > 0 ? (
                   <div className="stack-xs">
@@ -1893,10 +1933,10 @@ export function GameViewPage() {
                 ) : null}
                 {presetClearedNotice ? (
                   <p className="muted" role="status" aria-live="polite">
-                    {copy.gameView.presetClearedLive}
+                    {copy.gameView.lineupClearedLive}
                   </p>
                 ) : null}
-                {basketballPresetRow}
+                {basketballLineupRow}
                 {/*
                   No imbalance warning or "Balance to zero" here: scored
                   basketball entries are deliberately not player-zero-sum (the

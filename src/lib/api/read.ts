@@ -1,3 +1,4 @@
+import { MAX_BASKETBALL_LINEUPS_PER_GAME } from "../../features/basketball/basketballLineups";
 import type { GameTypeId } from "../../features/game-types/types";
 import { selectAll, supabase } from "../supabase/client";
 import {
@@ -411,7 +412,7 @@ export async function fetchGameDetails(gameId: string): Promise<GameDetails> {
       )
       .eq("game_id", gameId)
       .order("created_at", { ascending: false })
-      .limit(10),
+      .limit(MAX_BASKETBALL_LINEUPS_PER_GAME),
   ]);
 
   const game = assertData(gameResult.data as RawGame | null, gameResult.error);

@@ -1485,6 +1485,14 @@ tbody tr:last-child td {
   text-overflow: ellipsis;
 }
 
+/* Secondary text on a pill (e.g. a lineup's team count) — dimmed against
+   whichever background the pill currently has. */
+.pill-meta {
+  font-size: 0.6875rem;
+  font-weight: 400;
+  opacity: 0.7;
+}
+
 .avatar-tiny {
   width: 20px;
   height: 20px;

@@ -156,7 +156,12 @@ type PlayerRow = {
 };
 
 const SCORE_NEUTRAL_EPSILON = 0.01;
-const MAX_BASKETBALL_TEAM_PRESETS = 10;
+/**
+ * Lineups a game keeps. The UI addresses them by letter (A, B, C …), so 26
+ * keeps every single-letter lineup of a game re-appliable; only the 27th pick
+ * starts evicting. Mirrored by `MAX_BASKETBALL_LINEUPS_PER_GAME` in the app.
+ */
+const MAX_BASKETBALL_TEAM_PRESETS = 26;
 
 /**
  * Blast-radius bound on a scored basketball ledger line, not a correctness

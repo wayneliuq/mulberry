@@ -55,13 +55,26 @@ export const copy = {
     settleConfirmNoMoney: "End this game and mark as settled? (No money to exchange.)",
     settleConfirm: "End this game and calculate settlement?",
     pickTeams: "Pick teams",
-    pickTeamsNeedPlayers: "Unlock at least two players to pick teams.",
+    basketballTeamCountLabel: "Number of teams",
+    pickTeamsNeedPlayers: (teamCount: number) =>
+      `Unlock at least ${teamCount} players to pick ${teamCount} teams.`,
+    basketballRoundHelp: (teamCount: number) =>
+      teamCount > 2
+        ? `Assign players across Teams A–${String.fromCharCode(64 + teamCount)}, choose which two play this round, enter scores, then submit. Teams sitting out score nothing. Point deltas scale by game length and margin (capped at 2×).`
+        : "Assign players to Team A or B, enter scores, then submit. Point deltas scale by game length and margin (capped at 2×). Use Number of teams above to split into up to 6 teams.",
+    basketballMatchupNeedsBothTeams: (matchup: {
+      home: string;
+      away: string;
+    }) =>
+      `Put at least one unlocked player on Team ${matchup.home} and Team ${matchup.away}.`,
+    basketballManualHelp: (matchup: { home: string; away: string }) =>
+      `Manual points for Team ${matchup.home} / Team ${matchup.away} players only. These rounds do not affect basketball rating predictions.`,
     pickTeamsHistoryLoading: "Loading season ratings…",
     pickTeamsTooManyPlayers: "Too many unlocked players to auto-balance (max 12).",
     pickTeamsFailed: "Could not balance teams for this roster.",
-    presetLineupsLoading: "Loading saved lineups…",
-    presetLineupsEmpty: "No saved lineups yet",
-    presetClearedLive: "Lineup changed — preset cleared",
+    lineupsLoading: "Loading lineups…",
+    lineupsEmpty: "No lineups picked yet — tap Pick teams to make lineup A.",
+    lineupClearedLive: "Teams edited — no longer matches a picked lineup",
   },
   leaderboards: {
     eyebrow: "Leaderboards",

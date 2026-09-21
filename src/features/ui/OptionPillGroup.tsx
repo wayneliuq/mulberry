@@ -1,6 +1,10 @@
 export type OptionPillGroupOption<T extends string> = {
   value: T;
   label: string;
+  /** Optional secondary text rendered beside the label, e.g. "4 teams". */
+  description?: string;
+  /** Optional hover/long-press text for detail that will not fit on the pill. */
+  title?: string;
 };
 
 type OptionPillGroupProps<T extends string> = {
@@ -35,6 +39,7 @@ export function OptionPillGroup<T extends string>({
             }
             aria-pressed={selected}
             disabled={disabled}
+            title={option.title}
             onClick={() => onChange(selected ? null : option.value)}
           >
             {selected ? (
@@ -43,6 +48,9 @@ export function OptionPillGroup<T extends string>({
               </span>
             ) : null}
             <span className="pill-name">{option.label}</span>
+            {option.description ? (
+              <span className="pill-meta">{option.description}</span>
+            ) : null}
           </button>
         );
       })}

@@ -1,4 +1,9 @@
 import type { BasketballTeamPreset } from "../../lib/api/types";
+import { basketballLineupId } from "./basketballLineups";
+import {
+  ALL_BASKETBALL_TEAM_LETTERS,
+  basketballPresetPartitions,
+} from "./basketballTeams";
 
 type BasketballPickedTeamsPanelProps = {
   preset: BasketballTeamPreset | null;
@@ -30,15 +35,10 @@ export function BasketballPickedTeamsPanel({
   }
 
   const teamsList: { label: string; playerIds: number[] }[] =
-    preset.teams && preset.teams.length > 2
-      ? preset.teams.map((playerIds, idx) => ({
-          label: `Team ${String.fromCharCode(65 + idx)}`,
-          playerIds,
-        }))
-      : [
-          { label: "Team A", playerIds: preset.teamAPlayerIds },
-          { label: "Team B", playerIds: preset.teamBPlayerIds },
-        ];
+    basketballPresetPartitions(preset).map((playerIds, index) => ({
+      label: `Team ${ALL_BASKETBALL_TEAM_LETTERS[index] ?? index + 1}`,
+      playerIds,
+    }));
 
   const winPct =
     preset.teamAWinProb === null
@@ -48,7 +48,7 @@ export function BasketballPickedTeamsPanel({
   return (
     <div id="basketball-pick-teams-panel" className="card-subsection stack-sm">
       <div className="stack-xs">
-        <strong>Preset {preset.labelNumber}</strong>
+        <strong>Lineup {basketballLineupId(preset.labelNumber)}</strong>
         {winPct !== null && teamsList.length === 2 ? (
           <p className="muted">Team A {winPct}% predicted win</p>
         ) : null}
