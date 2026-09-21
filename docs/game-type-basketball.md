@@ -28,7 +28,8 @@ Each round stores, in the round `settings_snapshot.metadata` (and mirrored in ro
 - **`mode`**: `"basketball"`.
 - **`teamAPlayerIds`**, **`teamBPlayerIds`**: rosters for that game.
 - **`scoreTeamA`**, **`scoreTeamB`**: non‑negative integer totals.
-- **`basketballLedgerScale`**: the constant multiplier in effect when the round was saved (defaults to the app’s `DEFAULT_BASKETBALL_LEDGER_SCALE` if missing on old rows).
+- **`basketballLedgerScale`**: the constant multiplier in effect when the round was saved (defaults to the app’s `DEFAULT_BASKETBALL_LEDGER_SCALE` if missing on old rows). Recorded for audit; it has been `7` for every round to date and nothing reads it back.
+- **`basketballHousePointDelta`**: the round’s balancing house line (see below). Present on OpenSkill‑scored rounds only.
 
 Validation rules:
 
@@ -75,24 +76,54 @@ Locked players do not appear in new rounds but still participate in the replayed
 
 ---
 
-## Mulberry `pointDelta` (zero‑sum, ~10–20 swing)
+## Mulberry `pointDelta` (true OpenSkill ledger)
 
-Let `ledgerScale` be `round.metadata.basketballLedgerScale` when re‑deriving a stored round, otherwise **`DEFAULT_BASKETBALL_LEDGER_SCALE`** (currently **7**) for new calculations.
+Let `ledgerScale` be **`DEFAULT_BASKETBALL_LEDGER_SCALE`** — a fixed constant, currently **7**. `calculateBasketballRound` accepts a `ledgerScale` override for auditing, but nothing in the app passes one.
 
-For each player in this round’s roster:
+For each **real** (non‑ghost) player in this round’s roster:
 
-1. `scaled = (ordinal_after − ordinal_before) × ledgerScale`
-2. Round each value to **two decimal places**.
-3. Subtract the **mean** of those rounded values across **all participants** so the set sums to zero before the remainder fix.
-4. Apply a **single two‑decimal remainder fix** on the first participant (same pattern as Dixit) so stored entries sum to **exactly** zero.
+```
+pointDelta = ledgerScale × (ordinal_after − ordinal_before)
+```
 
-The **`ledgerScale`** is chosen so a fresh **2v2 game to 11 with a modest margin** (for example 11–7) yields roughly **10–16** points per player on the winning side (and the symmetric loss on the other side) after centering—large enough for settlement, still driven by OpenSkill and score margin.
+That is the whole formula. In particular:
+
+- **No game‑length scaling and no margin scaling.** OpenSkill reads only win / loss / tie from the score, so 11–0, 11–9, 7–5 and 17–14 all produce identical deltas for the same rosters. The **“1s & 2s” vs “2s & 3s”** setting is **metadata only** and does not affect points.
+- **No rounding and no mean‑centering.** Values keep full double precision; only display code rounds to 2dp. Rounding or re‑centering per round would break the property below.
+
+### Ghost players
+
+**Ghost** (non‑qualifying filler) players count toward OpenSkill team strength but receive a ledger delta of **exactly 0**. Their raw OpenSkill movement is absorbed by the house, **not** redistributed to teammates — redistributing it would decouple a real player’s total from their ordinal.
+
+### The house line
+
+OpenSkill updates are Bayesian and **not zero‑sum**, so the players’ deltas do not sum to zero on their own. Each round therefore records a balancing line in `settings_snapshot.metadata.basketballHousePointDelta`:
+
+```
+houseDelta = −(sum of all player deltas)     // including the ghosts' absorbed share
+```
+
+The house is **never a player entry** — it exists only in round metadata. `admin-write` enforces `sum(entries) + houseDelta ≈ 0` on create.
+
+### Why this matters
+
+Because each round’s delta telescopes, a player’s **cumulative** Mulberry points equal
+
+```
+ledgerScale × (their current OpenSkill ordinal − their starting ordinal)
+```
+
+so the **points leaderboard ranks players in exactly the same order as the OpenSkill ordinal**. This is the whole point of the design, and it is why `round_entries.point_delta` is stored as `double precision` (see `20260921000000_point_delta_precision.sql`): a `numeric(p,s)` column re‑quantizes every row and can reverse a near‑tie.
+
+### Settlement caveat
+
+Because scored basketball rounds are not player‑zero‑sum, a basketball game’s player point totals do **not** sum to zero. `calculate_settlement` requires a zero total for money games, so a basketball game with `money_per_point_cents > 0` cannot currently be settled. Zero‑money basketball games settle normally.
 
 ---
 
 ## Round summary
 
-The machine summary includes the scoreline and per‑player deltas (by id). The UI typically saves a human‑readable `summary_text` with display names.
+The machine summary includes the scoreline, per‑player deltas (by id), and the house line. The UI saves a human‑readable `summary_text` with display names, also ending in the house line.
 
 ---
 
@@ -183,7 +214,6 @@ Design notes and algorithm history: `docs/nba-comp-design.md`.
 
 OpenSkill replay for round *n* depends only on prior rounds’ **teams + scores** (not on past Mulberry deltas).
 
-Re‑deriving round *n*’s Mulberry deltas from history needs:
+Re‑deriving round *n*’s Mulberry deltas from history needs only the prior basketball metadata (teams + scores) in chronological order. The scale is the fixed `DEFAULT_BASKETBALL_LEDGER_SCALE`; pass an explicit `ledgerScale` into `calculateBasketballRound` only if auditing a round saved under a different constant.
 
-- Prior basketball metadata (teams + scores) in order,
-- The same **`ledgerScale`** as stored for round *n* (pass `ledgerScale` into `calculateBasketballRound` when auditing).
+`scripts/recalculate-season.ts` does exactly this for a whole season. It **skips manual‑input rounds** (hand‑entered deltas are not ours to re‑derive) while still feeding them into the replay on the same terms as the live app.

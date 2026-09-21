@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { ordinal, rate, rating } from "openskill";
 import {
   balanceBasketballTeams,
-  basketballEffectiveLedgerScale,
   calculateBasketballRound,
+  DEFAULT_BASKETBALL_LEDGER_SCALE,
   parseBasketballMatchFromRoundSnapshot,
   parseBasketballScoringSystemFromRoundSnapshot,
   predictBasketballMatchWinProbabilities,
@@ -72,7 +73,7 @@ describe("balanceBasketballTeams", () => {
 });
 
 describe("calculateBasketballRound", () => {
-  it("produces zero-sum entries for a first-round 2v2", () => {
+  it("balances every round through the house line", () => {
     const result = calculateBasketballRound({
       priorRounds: [],
       match: {
@@ -85,12 +86,119 @@ describe("calculateBasketballRound", () => {
 
     expect(result.isZeroSum).toBe(true);
     expect(result.entries).toHaveLength(4);
+    const playerTotal = result.entries.reduce((s, e) => s + e.pointDelta, 0);
+    expect(result.houseDelta).toBeCloseTo(-playerTotal, 10);
+    expect(playerTotal + result.houseDelta).toBeCloseTo(0, 10);
     const byId = new Map(result.entries.map((e) => [e.playerId, e.pointDelta]));
     expect((byId.get(1) ?? 0) + (byId.get(2) ?? 0)).toBeGreaterThan(0);
     expect((byId.get(3) ?? 0) + (byId.get(4) ?? 0)).toBeLessThan(0);
-    for (const [, delta] of byId) {
-      expect(Math.abs(delta)).toBeGreaterThanOrEqual(10);
-      expect(Math.abs(delta)).toBeLessThanOrEqual(20);
+  });
+
+  it("awards raw ordinal movement times the fixed ledger scale", () => {
+    const result = calculateBasketballRound({
+      priorRounds: [],
+      match: {
+        teamAPlayerIds: [1, 2],
+        teamBPlayerIds: [3, 4],
+        scoreTeamA: 11,
+        scoreTeamB: 7,
+      },
+    });
+
+    // Fresh 1v1-equivalent ratings: winner ordinal moves +x, loser -y (not
+    // symmetric); each entry must equal scale * that raw movement exactly.
+    const r = rating();
+    expect(ordinal(r)).toBeCloseTo(0, 10);
+    for (const entry of result.entries) {
+      expect(entry.pointDelta).not.toBe(0);
+    }
+    // Winners gain, losers lose; magnitudes need not mirror (not zero-sum).
+    const byId = new Map(result.entries.map((e) => [e.playerId, e.pointDelta]));
+    expect(byId.get(1)).toBeGreaterThan(0);
+    expect(byId.get(3)).toBeLessThan(0);
+  });
+
+  it("ignores margin: 11-0 and 11-9 produce identical deltas", () => {
+    const closeWin = calculateBasketballRound({
+      priorRounds: [],
+      match: {
+        teamAPlayerIds: [1, 2],
+        teamBPlayerIds: [3, 4],
+        scoreTeamA: 11,
+        scoreTeamB: 9,
+      },
+    });
+    const shutoutWin = calculateBasketballRound({
+      priorRounds: [],
+      match: {
+        teamAPlayerIds: [1, 2],
+        teamBPlayerIds: [3, 4],
+        scoreTeamA: 11,
+        scoreTeamB: 0,
+      },
+    });
+
+    for (const id of [1, 2, 3, 4]) {
+      const c = closeWin.entries.find((e) => e.playerId === id)!.pointDelta;
+      const s = shutoutWin.entries.find((e) => e.playerId === id)!.pointDelta;
+      expect(s).toBe(c);
+    }
+    expect(shutoutWin.houseDelta).toBe(closeWin.houseDelta);
+  });
+
+  it("ignores game length: 7-5 and 17-14 produce identical deltas", () => {
+    const short = calculateBasketballRound({
+      priorRounds: [],
+      match: {
+        teamAPlayerIds: [1, 2],
+        teamBPlayerIds: [3, 4],
+        scoreTeamA: 7,
+        scoreTeamB: 5,
+      },
+    });
+    const long = calculateBasketballRound({
+      priorRounds: [],
+      match: {
+        teamAPlayerIds: [1, 2],
+        teamBPlayerIds: [3, 4],
+        scoreTeamA: 17,
+        scoreTeamB: 14,
+      },
+    });
+
+    for (const id of [1, 2, 3, 4]) {
+      const a = short.entries.find((e) => e.playerId === id)!.pointDelta;
+      const b = long.entries.find((e) => e.playerId === id)!.pointDelta;
+      expect(b).toBe(a);
+    }
+  });
+
+  it("ignores the scoring system for point deltas", () => {
+    const oneTwo = calculateBasketballRound({
+      priorRounds: [],
+      match: {
+        teamAPlayerIds: [1, 2],
+        teamBPlayerIds: [3, 4],
+        scoreTeamA: 11,
+        scoreTeamB: 9,
+      },
+      scoringSystem: "1/2",
+    });
+    const twoThree = calculateBasketballRound({
+      priorRounds: [],
+      match: {
+        teamAPlayerIds: [1, 2],
+        teamBPlayerIds: [3, 4],
+        scoreTeamA: 21,
+        scoreTeamB: 19,
+      },
+      scoringSystem: "2/3",
+    });
+
+    for (const id of [1, 2, 3, 4]) {
+      const a = oneTwo.entries.find((e) => e.playerId === id)!.pointDelta;
+      const b = twoThree.entries.find((e) => e.playerId === id)!.pointDelta;
+      expect(b).toBe(a);
     }
   });
 
@@ -127,141 +235,71 @@ describe("calculateBasketballRound", () => {
     expect(second.isZeroSum).toBe(true);
   });
 
-  it("scales 11–0 shutout win at exactly 2.0x fold change compared to 11–9 close win", () => {
-    const closeWin = calculateBasketballRound({
-      priorRounds: [],
-      match: {
-        teamAPlayerIds: [1, 2],
-        teamBPlayerIds: [3, 4],
-        scoreTeamA: 11,
-        scoreTeamB: 9,
-      },
-    });
-    const shutoutWin = calculateBasketballRound({
-      priorRounds: [],
-      match: {
-        teamAPlayerIds: [1, 2],
-        teamBPlayerIds: [3, 4],
-        scoreTeamA: 11,
-        scoreTeamB: 0,
-      },
-    });
+  it("keeps cumulative totals exactly proportional to OpenSkill ordinals", () => {
+    // Scripted season with mixed rosters, scores, draws, and team sizes.
+    const matches = [
+      { teamAPlayerIds: [1, 2], teamBPlayerIds: [3, 4], scoreTeamA: 11, scoreTeamB: 7 },
+      { teamAPlayerIds: [1, 3], teamBPlayerIds: [2, 4], scoreTeamA: 17, scoreTeamB: 14 },
+      { teamAPlayerIds: [1, 2], teamBPlayerIds: [3, 4], scoreTeamA: 7, scoreTeamB: 7 },
+      { teamAPlayerIds: [2, 3], teamBPlayerIds: [1, 4], scoreTeamA: 11, scoreTeamB: 0 },
+      { teamAPlayerIds: [1, 2, 3], teamBPlayerIds: [4, 5, 6], scoreTeamA: 21, scoreTeamB: 19 },
+      { teamAPlayerIds: [4], teamBPlayerIds: [5], scoreTeamA: 11, scoreTeamB: 9 },
+      { teamAPlayerIds: [6, 1], teamBPlayerIds: [2, 5], scoreTeamA: 15, scoreTeamB: 13 },
+    ];
 
-    const closeDelta = closeWin.entries.find((e) => e.playerId === 1)!.pointDelta;
-    const shutoutDelta = shutoutWin.entries.find((e) => e.playerId === 1)!.pointDelta;
-    expect(shutoutDelta / closeDelta).toBeCloseTo(2.0, 1);
-  });
+    const totals = new Map<number, number>();
+    const priors: typeof matches = [];
+    for (const match of matches) {
+      const result = calculateBasketballRound({ priorRounds: priors, match });
+      expect(result.isZeroSum).toBe(true);
+      for (const entry of result.entries) {
+        totals.set(
+          Number(entry.playerId),
+          (totals.get(Number(entry.playerId)) ?? 0) + entry.pointDelta,
+        );
+      }
+      priors.push(match);
+    }
 
-  it("scales 7 vs 11 vs 15 point games proportionally", () => {
-    const game7 = calculateBasketballRound({
-      priorRounds: [],
-      match: {
-        teamAPlayerIds: [1, 2],
-        teamBPlayerIds: [3, 4],
-        scoreTeamA: 7,
-        scoreTeamB: 5,
-      },
-    });
-    const game11 = calculateBasketballRound({
-      priorRounds: [],
-      match: {
-        teamAPlayerIds: [1, 2],
-        teamBPlayerIds: [3, 4],
-        scoreTeamA: 11,
-        scoreTeamB: 9,
-      },
-    });
-    const game15 = calculateBasketballRound({
-      priorRounds: [],
-      match: {
-        teamAPlayerIds: [1, 2],
-        teamBPlayerIds: [3, 4],
-        scoreTeamA: 15,
-        scoreTeamB: 13,
-      },
-    });
+    // Ground truth: replay the same matches with raw openskill ordinals.
+    const ratings = new Map<number, ReturnType<typeof rating>>();
+    const getRating = (id: number) => {
+      let r = ratings.get(id);
+      if (!r) {
+        r = rating();
+        ratings.set(id, r);
+      }
+      return r;
+    };
+    for (const match of matches) {
+      const teamA = match.teamAPlayerIds.map(getRating);
+      const teamB = match.teamBPlayerIds.map(getRating);
+      // Same call the app makes: v4 derives win/loss/tie from the scores.
+      const [ratedA, ratedB] = rate([teamA, teamB], {
+        score: [match.scoreTeamA, match.scoreTeamB],
+      });
+      match.teamAPlayerIds.forEach((id, i) => ratings.set(id, ratedA[i]!));
+      match.teamBPlayerIds.forEach((id, i) => ratings.set(id, ratedB[i]!));
+    }
 
-    const delta7 = game7.entries.find((e) => e.playerId === 1)!.pointDelta;
-    const delta11 = game11.entries.find((e) => e.playerId === 1)!.pointDelta;
-    const delta15 = game15.entries.find((e) => e.playerId === 1)!.pointDelta;
-
-    expect(delta7 / delta11).toBeCloseTo(7 / 11, 1);
-    expect(delta15 / delta11).toBeCloseTo(15 / 11, 1);
-  });
-
-  it("halves effective point scale when 2s & 3s mode is selected", () => {
-    const game11_1s2s = calculateBasketballRound({
-      priorRounds: [],
-      match: {
-        teamAPlayerIds: [1, 2],
-        teamBPlayerIds: [3, 4],
-        scoreTeamA: 11,
-        scoreTeamB: 9,
-      },
-      scoringSystem: "1/2",
-    });
-    const game21_2s3s = calculateBasketballRound({
-      priorRounds: [],
-      match: {
-        teamAPlayerIds: [1, 2],
-        teamBPlayerIds: [3, 4],
-        scoreTeamA: 21,
-        scoreTeamB: 19,
-      },
-      scoringSystem: "2/3",
-    });
-
-    const delta11 = game11_1s2s.entries.find((e) => e.playerId === 1)!.pointDelta;
-    const delta21 = game21_2s3s.entries.find((e) => e.playerId === 1)!.pointDelta;
-    // 21 in 2s/3s mode is 10.5 effective pts vs 11 in 1s/2s mode -> nearly identical (~0.955 ratio)
-    expect(delta21 / delta11).toBeCloseTo(10.5 / 11, 1);
-  });
-
-  it("computes exact effective ledger scale for length and capped margin", () => {
-    expect(
-      basketballEffectiveLedgerScale({
-        scoreTeamA: 11,
-        scoreTeamB: 9,
-      }),
-    ).toBeCloseTo(7 * (11 / 11) * 1.0, 10);
-
-    expect(
-      basketballEffectiveLedgerScale({
-        scoreTeamA: 7,
-        scoreTeamB: 5,
-      }),
-    ).toBeCloseTo(7 * (7 / 11) * 1.0, 10);
-
-    expect(
-      basketballEffectiveLedgerScale({
-        scoreTeamA: 15,
-        scoreTeamB: 13,
-      }),
-    ).toBeCloseTo(7 * (15 / 11) * 1.0, 10);
-
-    expect(
-      basketballEffectiveLedgerScale({
-        scoreTeamA: 11,
-        scoreTeamB: 0,
-      }),
-    ).toBeCloseTo(7 * 1.0 * 2.0, 10);
-
-    expect(
-      basketballEffectiveLedgerScale({
-        scoreTeamA: 21,
-        scoreTeamB: 19,
-        scoringSystem: "2/3",
-      }),
-    ).toBeCloseTo(7 * (10.5 / 11) * 1.0, 10);
-
-    // Cap stays at 2.0x even for absurd margins after 2/3 halving.
-    expect(
-      basketballEffectiveLedgerScale({
-        scoreTeamA: 40,
-        scoreTeamB: 0,
-        scoringSystem: "2/3",
-      }),
-    ).toBeCloseTo(7 * (20 / 11) * 2.0, 10);
+    // Ranking by total must match ranking by ordinal for every pair of
+    // players, up to float dust: signs agree unless the gap is negligible
+    // (a true tie, where either order is correct).
+    const ids = [...totals.keys()];
+    for (const a of ids) {
+      for (const b of ids) {
+        if (a === b) continue;
+        const dt = totals.get(a)! - totals.get(b)!;
+        const dOrd = ordinal(ratings.get(a)!) - ordinal(ratings.get(b)!);
+        if (
+          Math.abs(dOrd) * DEFAULT_BASKETBALL_LEDGER_SCALE <
+          1e-9
+        ) {
+          continue; // tie: either order is a correct ranking
+        }
+        expect(Math.sign(dt)).toBe(Math.sign(dOrd));
+      }
+    }
   });
 
   it("defaults historical snapshots without scoringSystem to 1/2", () => {
@@ -290,27 +328,22 @@ describe("calculateBasketballRound", () => {
     ).toBe("2/3");
   });
 
-  it("respects an explicit ledgerScale for reproducibility", () => {
-    const scaled = calculateBasketballRound({
-      priorRounds: [],
-      match: {
-        teamAPlayerIds: [1, 2],
-        teamBPlayerIds: [3, 4],
-        scoreTeamA: 11,
-        scoreTeamB: 7,
-      },
-      ledgerScale: 4,
-    });
-    const defaultScaled = calculateBasketballRound({
-      priorRounds: [],
-      match: {
-        teamAPlayerIds: [1, 2],
-        teamBPlayerIds: [3, 4],
-        scoreTeamA: 11,
-        scoreTeamB: 7,
-      },
-    });
-    expect(defaultScaled.entries[0]!.pointDelta).not.toBe(scaled.entries[0]!.pointDelta);
+  it("respects an explicit ledgerScale as a fixed multiplier", () => {
+    const match = {
+      teamAPlayerIds: [1, 2],
+      teamBPlayerIds: [3, 4],
+      scoreTeamA: 11,
+      scoreTeamB: 7,
+    };
+    const scaled = calculateBasketballRound({ priorRounds: [], match, ledgerScale: 4 });
+    const def = calculateBasketballRound({ priorRounds: [], match });
+    for (const entry of def.entries) {
+      const s = scaled.entries.find((e) => e.playerId === entry.playerId)!.pointDelta;
+      expect(s).toBeCloseTo(
+        (entry.pointDelta / DEFAULT_BASKETBALL_LEDGER_SCALE) * 4,
+        10,
+      );
+    }
     expect(scaled.isZeroSum).toBe(true);
   });
 

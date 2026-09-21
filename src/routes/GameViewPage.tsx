@@ -31,10 +31,7 @@ import {
   balanceManualPointEntries,
   clampToTwoDecimals,
   finalizeRoundPointEntriesForSubmit,
-  isRoundEntryTotalBalanced,
   parseManualPointInputs,
-  roundEntryTotal,
-  shiftPointEntriesToZeroSum,
 } from "../features/game-types/manualPointBalance";
 import { ManualRoundForm } from "../features/rounds/ManualRoundForm";
 import { RoundFormFooter } from "../features/rounds/RoundFormFooter";
@@ -47,6 +44,7 @@ import {
   DEFAULT_BASKETBALL_LEDGER_SCALE,
   balanceBasketballTeams,
   BASKETBALL_TEAM_BALANCE_MAX_PLAYERS,
+  formatSignedPoints,
   parseBasketballMatchFromRoundSnapshot,
   predictBasketballMatchWinProbabilities,
   priorBasketballMatchesFromSeasonHistory,
@@ -152,9 +150,6 @@ export function GameViewPage() {
     teamA: "",
     teamB: "",
   });
-  const [basketballBalancedEntries, setBasketballBalancedEntries] = useState<
-    Array<{ playerId: number; pointDelta: number }> | null
-  >(null);
 
   const gameQuery = useQuery({
     queryKey: ["game", gameId],
@@ -280,17 +275,6 @@ export function GameViewPage() {
     }
   }, [showRoundForm]);
 
-  useEffect(() => {
-    setBasketballBalancedEntries(null);
-  }, [
-    basketballScores.teamA,
-    basketballScores.teamB,
-    basketballTeamByPlayerId,
-    basketballRosterKey,
-    basketballHistoryQuery.dataUpdatedAt,
-    basketballScoringSystem,
-  ]);
-
   const basketballDraft = useMemo(() => {
     if (
       !game ||
@@ -328,11 +312,7 @@ export function GameViewPage() {
     basketballScoringSystem,
   ]);
 
-  const basketballDisplayEntries =
-    basketballBalancedEntries ?? basketballDraft?.entries ?? null;
-  const basketballDisplayTotal = basketballDisplayEntries
-    ? roundEntryTotal(basketballDisplayEntries)
-    : null;
+  const basketballDisplayEntries = basketballDraft?.entries ?? null;
 
   const invalidateGameData = async () => {
     await Promise.all([
@@ -993,31 +973,6 @@ export function GameViewPage() {
     });
   }
 
-  function handleBasketballBalanceToZero() {
-    const source = basketballBalancedEntries ?? basketballDraft?.entries;
-    if (!source) {
-      return;
-    }
-
-    const teamA = sortedUnlockedPlayers
-      .filter((player) => basketballTeamByPlayerId[player.playerId] === "A")
-      .map((player) => player.playerId);
-    const teamB = sortedUnlockedPlayers
-      .filter((player) => basketballTeamByPlayerId[player.playerId] === "B")
-      .map((player) => player.playerId);
-    const rosterIds = [...teamA, ...teamB];
-    const scoringPlayerIds = rosterIds.filter((id) => !ghostPlayerIds.has(id));
-    const adjustIds =
-      scoringPlayerIds.length > 0 ? scoringPlayerIds : rosterIds;
-
-    setBasketballBalancedEntries(
-      shiftPointEntriesToZeroSum(
-        source.map((entry) => ({ ...entry })),
-        adjustIds,
-      ),
-    );
-  }
-
   async function handleBasketballRoundSubmit() {
     if (!game) {
       return;
@@ -1066,43 +1021,24 @@ export function GameViewPage() {
       return;
     }
 
-    const rosterIds = [...teamA, ...teamB];
-    const scoringPlayerIds = rosterIds.filter((id) => !ghostPlayerIds.has(id));
-    const adjustIds =
-      scoringPlayerIds.length > 0 ? scoringPlayerIds : rosterIds;
-
-    let entries = basketballBalancedEntries;
-    if (!entries) {
-      const draft = buildBasketballScoredRoundEntries({
-        seasonHistory: basketballHistoryQuery.data ?? [],
-        teamAPlayerIds: teamA,
-        teamBPlayerIds: teamB,
-        scoreTeamA,
-        scoreTeamB,
-        ghostPlayerIds,
-        scoringSystem: basketballScoringSystem,
-      });
-      if (!draft) {
-        window.alert("Could not calculate points for this matchup.");
-        return;
-      }
-      const finalized = finalizeRoundPointEntriesForSubmit(
-        draft.entries,
-        adjustIds,
-      );
-      if (!finalized.balanced) {
-        window.alert(
-          `Round entries do not balance (total ${finalized.total.toFixed(2)}). Use Balance to zero, then save.`,
-        );
-        return;
-      }
-      entries = finalized.entries;
-    } else if (!isRoundEntryTotalBalanced(roundEntryTotal(entries))) {
-      window.alert(
-        "Round still does not balance. Use Balance to zero, then save.",
-      );
+    // Always recompute from the current teams/scores. The draft is exact by
+    // construction (players + house = 0) and is never user-editable, so there
+    // is nothing to reconcile — and never run it through the cent-rounding
+    // finalizer, which would break the exact match with the OpenSkill ranking.
+    const draft = buildBasketballScoredRoundEntries({
+      seasonHistory: basketballHistoryQuery.data ?? [],
+      teamAPlayerIds: teamA,
+      teamBPlayerIds: teamB,
+      scoreTeamA,
+      scoreTeamB,
+      ghostPlayerIds,
+      scoringSystem: basketballScoringSystem,
+    });
+    if (!draft) {
+      window.alert("Could not calculate points for this matchup.");
       return;
     }
+    const { entries, houseDelta } = draft;
 
     const playerNameById = new Map(
       sortedUnlockedPlayers.map((player) => [
@@ -1110,14 +1046,14 @@ export function GameViewPage() {
         player.displayName,
       ]),
     );
-    const summaryText = entries
-      .map((entry) => {
+    const summaryText = [
+      ...entries.map((entry) => {
         const displayName =
           playerNameById.get(entry.playerId) ?? entry.playerId;
-        const rounded = clampToTwoDecimals(entry.pointDelta);
-        return `${displayName} ${rounded > 0 ? "+" : ""}${rounded}`;
-      })
-      .join(", ");
+        return `${displayName} ${formatSignedPoints(entry.pointDelta)}`;
+      }),
+      `House ${formatSignedPoints(houseDelta)}`,
+    ].join(", ");
 
     await createRoundMutation.mutateAsync({
       entries,
@@ -1130,10 +1066,12 @@ export function GameViewPage() {
         scoreTeamB,
         basketballLedgerScale: DEFAULT_BASKETBALL_LEDGER_SCALE,
         scoringSystem: basketballScoringSystem,
+        // The house line is what makes the round ledger balance exactly.
+        // Never add it to a player entry.
+        basketballHousePointDelta: houseDelta,
       },
     });
     setBasketballScores({ teamA: "", teamB: "" });
-    setBasketballBalancedEntries(null);
   }
 
   const manualPointStep =
@@ -1949,6 +1887,7 @@ export function GameViewPage() {
                           </li>
                         );
                       })}
+                      <li>House {formatSignedPoints(basketballDraft?.houseDelta ?? 0)}</li>
                     </ul>
                   </div>
                 ) : null}
@@ -1958,9 +1897,13 @@ export function GameViewPage() {
                   </p>
                 ) : null}
                 {basketballPresetRow}
+                {/*
+                  No imbalance warning or "Balance to zero" here: scored
+                  basketball entries are deliberately not player-zero-sum (the
+                  house line absorbs the drift) and are not user-editable, so
+                  there is never anything to balance.
+                */}
                 <RoundFormFooter
-                  imbalanceTotal={basketballDisplayTotal}
-                  onBalanceToZero={handleBasketballBalanceToZero}
                   onCancel={() => setShowRoundForm(false)}
                   submitError={createRoundMutation.error?.message}
                 />

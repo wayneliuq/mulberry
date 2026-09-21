@@ -1,6 +1,7 @@
 /**
  * Re-derive basketball round_entries for a season using the current
- * calculateBasketballRound formula (game-length + capped margin scaling).
+ * calculateBasketballRound formula (fixed scale × OpenSkill ordinal movement,
+ * with the house line absorbing Bayesian drift).
  *
  * Usage:
  *   npx tsx scripts/recalculate-season.ts              # dry run
@@ -15,7 +16,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   calculateBasketballRound,
-  parseBasketballLedgerScaleFromRoundSnapshot,
   parseBasketballMatchFromRoundSnapshot,
   parseBasketballScoringSystemFromRoundSnapshot,
   type BasketballMatchInput,
@@ -166,7 +166,7 @@ function main() {
 
   const priorRounds: BasketballMatchInput[] = [];
   const updateStatements: string[] = [];
-  let changedEntries = 0;
+  let entryUpdates = 0;
   let skippedManual = 0;
   let skippedUnparseable = 0;
 
@@ -174,6 +174,17 @@ function main() {
     const snapshot = normalizeSnapshot(round.settings_snapshot);
     const meta = snapshot?.metadata as Record<string, unknown> | undefined;
     if (meta?.manualInput === true) {
+      // Manual-input rounds are hand-entered, player-zero-sum, and carry no
+      // house line, so their deltas are not ours to re-derive — skip rewriting
+      // them. They still feed the OpenSkill replay on exactly the same terms
+      // as the live app: the client replays every round the season query
+      // returns (`fetchBasketballRoundHistory`, no manualInput filter) and
+      // keeps the ones that parse. Manual rounds normally omit
+      // scoreTeamA/scoreTeamB, so `parseBasketball...` returns null and they
+      // drop out of the replay here too. Keeping this conditional push (rather
+      // than an unconditional `continue`) is what keeps the script's priors
+      // byte-identical to the app's for the rare manual round that does carry
+      // scores.
       skippedManual += 1;
       const match = parseBasketballMatchFromRoundSnapshot(snapshot);
       if (match) {
@@ -189,12 +200,10 @@ function main() {
     }
 
     const scoringSystem = parseBasketballScoringSystemFromRoundSnapshot(snapshot);
-    const ledgerScale = parseBasketballLedgerScaleFromRoundSnapshot(snapshot);
     const result = calculateBasketballRound({
       priorRounds,
       match,
       scoringSystem,
-      ledgerScale,
     });
 
     priorRounds.push(match);
@@ -205,19 +214,22 @@ function main() {
           `WHERE round_id = '${escapeLiteral(round.round_id)}' ` +
           `AND player_id = ${entry.playerId};`,
       );
-      changedEntries += 1;
+      entryUpdates += 1;
     }
 
-    const summaryText = escapeLiteral(result.summary);
+    // Persist the house line into the round metadata so the ledger stays
+    // auditable: players + house = 0 for every basketball round.
     updateStatements.push(
-      `UPDATE public.rounds SET summary_text = '${summaryText}' ` +
+      `UPDATE public.rounds SET summary_text = '${escapeLiteral(result.summary)}', ` +
+        `settings_snapshot = jsonb_set(COALESCE(settings_snapshot, '{}'::jsonb), ` +
+        `'{metadata,basketballHousePointDelta}', '${result.houseDelta}') ` +
         `WHERE id = '${escapeLiteral(round.round_id)}';`,
     );
   }
 
   console.log(
     `Prepared ${updateStatements.length} SQL statements ` +
-      `(${changedEntries} entry updates; skipped manual=${skippedManual}, unparseable=${skippedUnparseable})`,
+      `(${entryUpdates} entry updates; skipped manual=${skippedManual}, unparseable=${skippedUnparseable})`,
   );
 
   if (updateStatements.length === 0) {

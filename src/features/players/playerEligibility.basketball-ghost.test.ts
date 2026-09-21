@@ -1,38 +1,36 @@
 import { describe, expect, it } from "vitest";
 import {
-  calculateBasketballRound,
-  priorBasketballMatchesFromSeasonHistory,
-} from "../game-types/basketball";
-import { clampToTwoDecimals } from "../game-types/manualPointBalance";
-import { mergeCalculatedEntriesWithGhostZeros } from "./playerEligibility";
+  buildBasketballScoredRoundEntries,
+} from "../game-types/basketballRoundDraft";
+import { calculateBasketballRound } from "../game-types/basketball";
 
-function mergeBasketballWithGhost(
-  priorRounds: Parameters<typeof calculateBasketballRound>[0]["priorRounds"],
+function draftWithGhost(
   match: Parameters<typeof calculateBasketballRound>[0]["match"],
   ghostPlayerIds: number[],
+  priorRounds: Parameters<typeof calculateBasketballRound>[0]["priorRounds"] = [],
 ) {
-  const result = calculateBasketballRound({ priorRounds, match });
-  const teamA = match.teamAPlayerIds;
-  const teamB = match.teamBPlayerIds;
-  const teamByPlayerId = new Map<number, "A" | "B">();
-  for (const id of teamA) teamByPlayerId.set(id, "A");
-  for (const id of teamB) teamByPlayerId.set(id, "B");
-
-  const merged = mergeCalculatedEntriesWithGhostZeros(
-    result.entries.map((entry) => ({
-      playerId: Number(entry.playerId),
-      pointDelta: clampToTwoDecimals(entry.pointDelta),
-    })),
-    [...teamA, ...teamB],
-    new Set(ghostPlayerIds),
-    { teamByPlayerId },
-  );
-
-  const total = merged.reduce((sum, entry) => sum + entry.pointDelta, 0);
-  return { merged, total, result };
+  const priorHistory = priorRounds.map((m) => ({
+    settingsSnapshot: {
+      metadata: {
+        mode: "basketball",
+        teamAPlayerIds: m.teamAPlayerIds,
+        teamBPlayerIds: m.teamBPlayerIds,
+        scoreTeamA: m.scoreTeamA,
+        scoreTeamB: m.scoreTeamB,
+      },
+    },
+  }));
+  return buildBasketballScoredRoundEntries({
+    seasonHistory: priorHistory,
+    teamAPlayerIds: match.teamAPlayerIds,
+    teamBPlayerIds: match.teamBPlayerIds,
+    scoreTeamA: match.scoreTeamA,
+    scoreTeamB: match.scoreTeamB,
+    ghostPlayerIds: new Set(ghostPlayerIds),
+  });
 }
 
-describe("basketball ghost merge zero-sum", () => {
+describe("basketball ghost entries go to the house", () => {
   const firstMatch = {
     teamAPlayerIds: [1, 99],
     teamBPlayerIds: [2, 3],
@@ -40,24 +38,35 @@ describe("basketball ghost merge zero-sum", () => {
     scoreTeamB: 7,
   };
 
-  it("stays zero-sum on second round with ghost (season-scoped priors)", () => {
-    const priorRounds = priorBasketballMatchesFromSeasonHistory([
-      { settingsSnapshot: { metadata: { mode: "basketball", ...firstMatch } } },
-    ]);
-    const { total } = mergeBasketballWithGhost(
-      priorRounds,
-      { ...firstMatch, scoreTeamA: 11, scoreTeamB: 9 },
-      [99],
-    );
-    expect(Math.abs(total)).toBeLessThanOrEqual(0.01);
-    expect(
-      mergeBasketballWithGhost([firstMatch], firstMatch, [99]).merged.find(
-        (e) => e.playerId === 99,
-      )?.pointDelta,
-    ).toBe(0);
+  it("zeroes the ghost and absorbs its share in the house, keeping players + house balanced", () => {
+    const draft = draftWithGhost(firstMatch, [99], [firstMatch]);
+    expect(draft).not.toBeNull();
+
+    const ghost = draft!.entries.find((e) => e.playerId === 99);
+    expect(ghost?.pointDelta).toBe(0);
+
+    const playerTotal = draft!.entries.reduce((s, e) => s + e.pointDelta, 0);
+    expect(playerTotal + draft!.houseDelta).toBeCloseTo(0, 10);
   });
 
-  it("stays zero-sum across varied scores and rosters with ghosts", () => {
+  it("leaves real players' deltas identical to the no-ghost calculation", () => {
+    const withGhost = draftWithGhost(firstMatch, [99])!;
+    const raw = calculateBasketballRound({ priorRounds: [], match: firstMatch });
+
+    for (const entry of withGhost.entries) {
+      if (entry.playerId === 99) continue;
+      const expected = raw.entries.find(
+        (e) => Number(e.playerId) === entry.playerId,
+      )!.pointDelta;
+      expect(entry.pointDelta).toBe(expected);
+    }
+
+    // House = -(players) = raw house + ghost's raw share.
+    const ghostRaw = raw.entries.find((e) => Number(e.playerId) === 99)!.pointDelta;
+    expect(withGhost.houseDelta).toBeCloseTo(raw.houseDelta + ghostRaw, 10);
+  });
+
+  it("stays balanced across varied scores and rosters with ghosts", () => {
     const priors = [firstMatch];
     const cases: Parameters<typeof calculateBasketballRound>[0]["match"][] = [
       { teamAPlayerIds: [1, 99], teamBPlayerIds: [2, 3], scoreTeamA: 11, scoreTeamB: 9 },
@@ -67,16 +76,16 @@ describe("basketball ghost merge zero-sum", () => {
     ];
 
     for (const match of cases) {
-      const { total, merged } = mergeBasketballWithGhost(priors, match, [99]);
-      if (Math.abs(total) > 0.01) {
+      const draft = draftWithGhost(match, [99], priors)!;
+      const playerTotal = draft.entries.reduce((s, e) => s + e.pointDelta, 0);
+      if (Math.abs(playerTotal + draft.houseDelta) > 1e-9) {
         throw new Error(
-          `zero-sum failed: total=${total} entries=${JSON.stringify(merged)}`,
+          `balance failed: total=${playerTotal} house=${draft.houseDelta}`,
         );
       }
-      for (const ghostId of [99]) {
-        const ghost = merged.find((e) => e.playerId === ghostId);
-        expect(ghost?.pointDelta ?? 0).toBe(0);
-      }
+      expect(
+        draft.entries.find((e) => e.playerId === 99)?.pointDelta,
+      ).toBe(0);
     }
   });
 });

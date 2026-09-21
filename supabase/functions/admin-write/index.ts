@@ -94,6 +94,11 @@ const actionSchema = z.discriminatedUnion("action", [
     ]),
     summaryText: z.string().trim().min(1),
     metadata: z.record(z.string(), z.unknown()).optional(),
+    // OpenSkill-scored basketball rounds carry a "house" line in metadata
+    // (basketballHousePointDelta) so that players + house = 0 exactly.
+    // The house is OpenSkill's non-zero-sum Bayesian drift plus any
+    // ghost-player share. It is never a player entry. Manual-input basketball
+    // rounds have no house line and stay player-zero-sum.
     entries: z
       .array(
         z.object({
@@ -152,6 +157,14 @@ type PlayerRow = {
 
 const SCORE_NEUTRAL_EPSILON = 0.01;
 const MAX_BASKETBALL_TEAM_PRESETS = 10;
+
+/**
+ * Blast-radius bound on a scored basketball ledger line, not a correctness
+ * check. One OpenSkill round moves an ordinal by single digits, so a scaled
+ * delta is tens; the house line can stack a whole roster's worth of ghosts.
+ * Anything past this is a broken or hostile client, never a real pickup game.
+ */
+const MAX_BASKETBALL_ROUND_POINT_DELTA = 1000;
 
 function isNearZeroPointDelta(value: number): boolean {
   return Math.abs(value) <= SCORE_NEUTRAL_EPSILON;
@@ -1034,11 +1047,49 @@ async function handleCreateRound(
     throw new Error("Round game type does not match the game.");
   }
 
-  const entryTotal = Math.round(
-    action.entries.reduce((sum, entry) => sum + entry.pointDelta, 0) * 100,
-  ) / 100;
+  const entryTotal = action.entries.reduce(
+    (sum, entry) => sum + entry.pointDelta,
+    0,
+  );
 
-  if (Math.abs(entryTotal) > 0.01) {
+  // Manual-input basketball rounds are hand-entered and stay player-zero-sum
+  // like every other game type; only OpenSkill-scored rounds carry a house line.
+  const isScoredBasketballRound =
+    action.gameTypeId === "basketball" && action.metadata?.manualInput !== true;
+
+  if (isScoredBasketballRound) {
+    // Scored basketball is not player-zero-sum: OpenSkill updates drift, and
+    // ghost players keep no points, so the round balances only once the house
+    // line is included.
+    //
+    // LIMITATION: this verifies the two client-supplied numbers are mutually
+    // consistent, NOT that they are the correct OpenSkill result. The server
+    // does not replay OpenSkill, so a client could submit any entries at all
+    // as long as it sets houseDelta = -sum(entries). The magnitude bound below
+    // is the only real cap on how wrong a round can be.
+    const houseDelta = action.metadata?.["basketballHousePointDelta"];
+    if (typeof houseDelta !== "number" || !Number.isFinite(houseDelta)) {
+      throw new Error(
+        "Scored basketball rounds must include basketballHousePointDelta in metadata.",
+      );
+    }
+    if (Math.abs(entryTotal + houseDelta) > 0.01) {
+      throw new Error(
+        "Basketball round entries plus the house line must sum to zero.",
+      );
+    }
+    // Sanity bound: a single OpenSkill round moves an ordinal by a few points,
+    // so LEDGER_SCALE-sized deltas are tens, never hundreds. This does not
+    // prove correctness, it just bounds the blast radius of a bad client.
+    for (const entry of action.entries) {
+      if (Math.abs(entry.pointDelta) > MAX_BASKETBALL_ROUND_POINT_DELTA) {
+        throw new Error("Basketball round point delta is out of range.");
+      }
+    }
+    if (Math.abs(houseDelta) > MAX_BASKETBALL_ROUND_POINT_DELTA) {
+      throw new Error("Basketball house line is out of range.");
+    }
+  } else if (Math.abs(entryTotal) > 0.01) {
     throw new Error("Round entries must sum to zero.");
   }
 

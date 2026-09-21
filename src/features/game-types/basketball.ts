@@ -1,15 +1,17 @@
 import { ordinal, predictWin, rate, rating } from "openskill";
 import { z } from "zod";
-import type {
-  GameTypeDefinition,
-  PointEntry,
-  RoundCalculationResult,
-} from "./types";
+import type { GameTypeDefinition, PointEntry } from "./types";
 
 /**
- * Scales OpenSkill ordinal movement into Mulberry-sized point swings.
- * Tuned so a fresh 2v2 game to ~11 with a few points margin lands near
- * ~10–15 |delta| per player after zero-sum centering (see unit tests).
+ * Fixed ledger multiplier applied to raw OpenSkill ordinal movement.
+ * One constant for every round: cumulative player totals are exactly
+ * LEDGER_SCALE x final OpenSkill ordinal, so the points leaderboard ranking
+ * always matches the true OpenSkill ranking. Score and margin do not affect
+ * points (OpenSkill only reads win/loss/tie from the score).
+ *
+ * Each round also records a balancing "house" line
+ * (houseDelta = -sum(player deltas)) in the round metadata, because OpenSkill
+ * updates are not zero-sum across the participants.
  */
 export const DEFAULT_BASKETBALL_LEDGER_SCALE = 7;
 
@@ -23,8 +25,13 @@ export type BalancedBasketballTeams = {
   teams?: number[][];
 };
 
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
+/**
+ * Display-only formatting for a ledger line: signed, rounded to 2dp.
+ * Stored and computed values always keep full precision.
+ */
+export function formatSignedPoints(value: number): string {
+  const rounded = Math.round(value * 100) / 100;
+  return `${rounded > 0 ? "+" : ""}${rounded}`;
 }
 
 const matchSchema = z
@@ -131,16 +138,6 @@ export function parseBasketballScoringSystemFromRoundSnapshot(
 ): "1/2" | "2/3" {
   const meta = settingsSnapshot?.metadata as Record<string, unknown> | undefined;
   return meta?.scoringSystem === "2/3" ? "2/3" : "1/2";
-}
-
-export function parseBasketballLedgerScaleFromRoundSnapshot(
-  settingsSnapshot: Record<string, unknown> | undefined,
-): number | undefined {
-  const meta = settingsSnapshot?.metadata as Record<string, unknown> | undefined;
-  const scale = meta?.basketballLedgerScale;
-  return typeof scale === "number" && Number.isFinite(scale) && scale > 0
-    ? scale
-    : undefined;
 }
 
 export function priorBasketballMatchesFromRoundSnapshots(
@@ -429,36 +426,29 @@ export function balanceBasketballTeams(
   };
 }
 
-export function basketballEffectiveLedgerScale(input: {
-  scoreTeamA: number;
-  scoreTeamB: number;
-  scoringSystem?: "1/2" | "2/3";
-  ledgerScale?: number;
-}): number {
-  const baseLedgerScale = input.ledgerScale ?? DEFAULT_BASKETBALL_LEDGER_SCALE;
-  const scoringSystem = input.scoringSystem ?? "1/2";
-  const pointDivisor = scoringSystem === "2/3" ? 2 : 1;
-
-  const scoreAEff = input.scoreTeamA / pointDivisor;
-  const scoreBEff = input.scoreTeamB / pointDivisor;
-  const maxScoreEff = Math.max(scoreAEff, scoreBEff);
-  const marginEff = Math.abs(scoreAEff - scoreBEff);
-
-  const mPoints = maxScoreEff / 11;
-  const mMargin = Math.min(2.0, 1.0 + Math.max(0, marginEff - 2) / 9);
-  return baseLedgerScale * mPoints * mMargin;
-}
+export type BasketballRoundCalculationResult = {
+  entries: PointEntry[];
+  /**
+   * Ledger-balancing line for the round: always -sum(entries). Stored in the
+   * round's metadata (not as a player entry) so the books balance every round
+   * while player totals stay exactly LEDGER_SCALE x OpenSkill ordinal.
+   */
+  houseDelta: number;
+  /**
+   * Sum of the player entries. Unlike other game types this is deliberately
+   * NOT zero — it is exactly `-houseDelta`, the drift the house absorbs.
+   */
+  total: number;
+  /** Whether the round ledger (players + house) balances. */
+  isZeroSum: boolean;
+  summary: string;
+};
 
 export function calculateBasketballRound(
   input: BasketballRoundInput,
-): RoundCalculationResult {
+): BasketballRoundCalculationResult {
   const parsed = basketballRoundSchema.parse(input);
-  const effectiveLedgerScale = basketballEffectiveLedgerScale({
-    scoreTeamA: parsed.match.scoreTeamA,
-    scoreTeamB: parsed.match.scoreTeamB,
-    scoringSystem: parsed.scoringSystem,
-    ledgerScale: parsed.ledgerScale,
-  });
+  const ledgerScale = parsed.ledgerScale ?? DEFAULT_BASKETBALL_LEDGER_SCALE;
 
   const ratings = replayPriorsIntoRatings(parsed.priorRounds);
 
@@ -473,39 +463,28 @@ export function calculateBasketballRound(
 
   applyMatchToRatings(ratings, parsed.match);
 
-  const rawDeltas = participantIds.map((id) => {
-    const after = ordinalFor(ratings, id);
-    const before = beforeOrd.get(id) ?? 0;
-    return round2((after - before) * effectiveLedgerScale);
-  });
-
-  const n = rawDeltas.length;
-  const meanAdj = n > 0 ? round2(rawDeltas.reduce((s, d) => s + d, 0) / n) : 0;
-  const centered = rawDeltas.map((d) => round2(d - meanAdj));
-  const sumCentered = round2(centered.reduce((s, d) => s + d, 0));
-  const fix = round2(-sumCentered);
-  const finalDeltas = centered.map((d, i) =>
-    i === 0 ? round2(d + fix) : d,
-  );
-
-  const entries: PointEntry[] = participantIds.map((playerId, i) => ({
+  // Full precision: rounding here would let cent-level dust flip near-ties,
+  // breaking the exact match with the OpenSkill ranking. Display code rounds.
+  // Entry order stays team A then team B so the summary reads by side.
+  const entries: PointEntry[] = participantIds.map((playerId) => ({
     playerId,
-    pointDelta: finalDeltas[i]!,
+    pointDelta:
+      (ordinalFor(ratings, playerId) - (beforeOrd.get(playerId) ?? 0)) *
+      ledgerScale,
   }));
 
-  const total = round2(finalDeltas.reduce((s, d) => s + d, 0));
+  const total = entries.reduce((sum, e) => sum + e.pointDelta, 0);
+  const houseDelta = -total;
 
   const summary = `Team A ${parsed.match.scoreTeamA}–${parsed.match.scoreTeamB} Team B · ${entries
-    .map(
-      (e) =>
-        `${e.playerId} ${e.pointDelta > 0 ? "+" : ""}${e.pointDelta}`,
-    )
-    .join(", ")}`;
+    .map((e) => `${e.playerId} ${formatSignedPoints(e.pointDelta)}`)
+    .join(", ")} · House ${formatSignedPoints(houseDelta)}`;
 
   return {
     entries,
+    houseDelta,
     total,
-    isZeroSum: Math.abs(total) < 0.0001,
+    isZeroSum: Math.abs(total + houseDelta) <= 0.01,
     summary,
   };
 }

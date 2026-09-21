@@ -1,8 +1,3 @@
-import { mergeCalculatedEntriesWithGhostZeros } from "../players/playerEligibility";
-import {
-  roundEntryTotal,
-  type ManualPointEntry,
-} from "./manualPointBalance";
 import {
   calculateBasketballRound,
   priorBasketballMatchesFromSeasonHistory,
@@ -19,9 +14,20 @@ export type BasketballRoundDraftInput = {
   scoringSystem?: "1/2" | "2/3";
 };
 
+export type BasketballRoundDraft = {
+  /** Roster order (team A then team B); ghosts present with a zero delta. */
+  entries: Array<{ playerId: number; pointDelta: number }>;
+  /**
+   * Ledger-balancing line: -(sum of entries). Ghosts' raw deltas are absorbed
+   * here (not redistributed to teammates) so every real player's cumulative
+   * total stays exactly LEDGER_SCALE x OpenSkill ordinal.
+   */
+  houseDelta: number;
+};
+
 export function buildBasketballScoredRoundEntries(
   input: BasketballRoundDraftInput,
-): { entries: ManualPointEntry[]; total: number } | null {
+): BasketballRoundDraft | null {
   const { teamAPlayerIds, teamBPlayerIds, scoreTeamA, scoreTeamB, scoringSystem } = input;
 
   if (teamAPlayerIds.length < 1 || teamBPlayerIds.length < 1) {
@@ -53,24 +59,24 @@ export function buildBasketballScoredRoundEntries(
     scoringSystem,
   });
 
-  const teamByPlayerId = new Map<number, "A" | "B">();
-  for (const id of teamAPlayerIds) {
-    teamByPlayerId.set(id, "A");
-  }
-  for (const id of teamBPlayerIds) {
-    teamByPlayerId.set(id, "B");
-  }
-
   const rosterIds = [...teamAPlayerIds, ...teamBPlayerIds];
-  const entries = mergeCalculatedEntriesWithGhostZeros(
-    result.entries.map((entry) => ({
-      playerId: Number(entry.playerId),
-      pointDelta: entry.pointDelta,
-    })),
-    rosterIds,
-    input.ghostPlayerIds,
-    { teamByPlayerId },
+  const rawById = new Map(
+    result.entries.map((entry) => [Number(entry.playerId), entry.pointDelta]),
   );
 
-  return { entries, total: roundEntryTotal(entries) };
+  let ghostAbsorbed = 0;
+  const entries = rosterIds.map((playerId) => {
+    const raw = rawById.get(playerId) ?? 0;
+    if (input.ghostPlayerIds.has(playerId)) {
+      // Ghosts count toward OpenSkill team strength but keep no ledger points;
+      // their share goes to the house instead of to their teammates.
+      ghostAbsorbed += raw;
+      return { playerId, pointDelta: 0 };
+    }
+    return { playerId, pointDelta: raw };
+  });
+
+  // result.houseDelta is -(all raw deltas), so adding back the ghosts' share
+  // leaves exactly -(sum of the entries we keep).
+  return { entries, houseDelta: result.houseDelta + ghostAbsorbed };
 }
