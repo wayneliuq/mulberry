@@ -7,22 +7,13 @@ import {
   type PlayerLike,
   type PlayerSortMode,
 } from "../players/SortablePlayerList";
+import {
+  basketballTeamLetters,
+  MIN_BASKETBALL_TEAM_COUNT,
+  type BasketballTeamChoice,
+} from "./basketballTeams";
 
-export type BasketballTeamChoice = "none" | "A" | "B" | "C" | "D" | "E" | "F";
-
-const ALL_TEAM_LETTERS: ("A" | "B" | "C" | "D" | "E" | "F")[] = [
-  "A",
-  "B",
-  "C",
-  "D",
-  "E",
-  "F",
-];
-
-export const BASKETBALL_TEAM_PILL_OPTIONS = [
-  { value: "A", label: "Team A" },
-  { value: "B", label: "Team B" },
-] as const satisfies readonly OptionPillGroupOption<"A" | "B">[];
+export type { BasketballTeamChoice };
 
 type BasketballTeamPickerSectionProps<T extends PlayerLike> = {
   players: T[];
@@ -46,10 +37,9 @@ export function BasketballTeamPickerSection<T extends PlayerLike>({
   onTeamChange,
   sortMode,
   onSortChange,
-  numTeams = 2,
+  numTeams = MIN_BASKETBALL_TEAM_COUNT,
 }: BasketballTeamPickerSectionProps<T>) {
-  const activeCount = Math.max(2, Math.min(6, numTeams));
-  const activeLetters = ALL_TEAM_LETTERS.slice(0, activeCount);
+  const activeLetters = basketballTeamLetters(numTeams);
   const activeLetterSet = new Set<BasketballTeamChoice>(activeLetters);
 
   const pillOptions: OptionPillGroupOption<BasketballTeamChoice>[] =

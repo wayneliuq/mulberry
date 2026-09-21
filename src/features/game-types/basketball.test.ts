@@ -70,6 +70,98 @@ describe("balanceBasketballTeams", () => {
       expect(team).toHaveLength(2);
     }
   });
+
+  it("defaults to two teams when no count is given", () => {
+    const result = balanceBasketballTeams([1, 2, 3, 4, 5, 6], []);
+    expect(result).not.toBeNull();
+    expect(result!.teams).toHaveLength(2);
+    expect(result!.teams![0]).toEqual(result!.teamAPlayerIds);
+    expect(result!.teams![1]).toEqual(result!.teamBPlayerIds);
+    expect(
+      result!.teamAPlayerIds.length + result!.teamBPlayerIds.length,
+    ).toBe(6);
+  });
+
+  it("splits twelve players into 6 teams of 2", () => {
+    const ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    const result = balanceBasketballTeams(ids, [], 6);
+    expect(result).not.toBeNull();
+    expect(result!.teams).toHaveLength(6);
+    for (const team of result!.teams!) {
+      expect(team).toHaveLength(2);
+    }
+    expect([...result!.teams!.flat()].sort((a, b) => a - b)).toEqual(ids);
+  });
+
+  it.each([
+    { playerCount: 7, numTeams: 3, sizes: [3, 2, 2] },
+    { playerCount: 9, numTeams: 4, sizes: [3, 2, 2, 2] },
+    { playerCount: 11, numTeams: 5, sizes: [3, 2, 2, 2, 2] },
+    { playerCount: 8, numTeams: 6, sizes: [2, 2, 1, 1, 1, 1] },
+  ])(
+    "spreads $playerCount players across $numTeams teams as evenly as possible",
+    ({ playerCount, numTeams, sizes }) => {
+      const ids = Array.from({ length: playerCount }, (_, i) => i + 1);
+      const result = balanceBasketballTeams(ids, [], numTeams);
+
+      expect(result).not.toBeNull();
+      expect(result!.teams).toHaveLength(numTeams);
+      expect(
+        result!
+          .teams!.map((team) => team.length)
+          .sort((a, b) => b - a),
+      ).toEqual(sizes);
+      // Every player is placed exactly once.
+      expect([...result!.teams!.flat()].sort((a, b) => a - b)).toEqual(ids);
+      // Teams A and B stay the first two partitions, so the round form and the
+      // stored preset agree on which rosters "team A" and "team B" name.
+      expect(result!.teamAPlayerIds).toEqual(result!.teams![0]);
+      expect(result!.teamBPlayerIds).toEqual(result!.teams![1]);
+    },
+  );
+
+  it("rejects counts outside 2–6 and rosters smaller than the team count", () => {
+    expect(balanceBasketballTeams([1, 2, 3, 4], [], 1)).toBeNull();
+    expect(balanceBasketballTeams([1, 2, 3, 4, 5, 6, 7], [], 7)).toBeNull();
+    expect(balanceBasketballTeams([1, 2, 3], [], 4)).toBeNull();
+  });
+
+  it("is deterministic for a given roster and team count", () => {
+    const ids = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    const first = balanceBasketballTeams(ids, [], 3);
+    const second = balanceBasketballTeams(ids, [], 3);
+    expect(first!.teams).toEqual(second!.teams);
+  });
+
+  it("spreads proven strength across three teams", () => {
+    // 1 and 2 beat everyone they have played; they should not end up together.
+    const priors = [
+      {
+        teamAPlayerIds: [1, 2],
+        teamBPlayerIds: [3, 4],
+        scoreTeamA: 21,
+        scoreTeamB: 0,
+      },
+      {
+        teamAPlayerIds: [1, 2],
+        teamBPlayerIds: [5, 6],
+        scoreTeamA: 21,
+        scoreTeamB: 0,
+      },
+    ];
+    const result = balanceBasketballTeams([1, 2, 3, 4, 5, 6], priors, 3);
+    expect(result).not.toBeNull();
+    const teamOfOne = result!.teams!.find((team) => team.includes(1));
+    expect(teamOfOne).toBeDefined();
+    expect(teamOfOne).not.toContain(2);
+  });
+
+  it("balances twelve players into six teams without timing out", () => {
+    const ids = Array.from({ length: 12 }, (_, i) => i + 1);
+    const started = Date.now();
+    expect(balanceBasketballTeams(ids, [], 6)).not.toBeNull();
+    expect(Date.now() - started).toBeLessThan(5000);
+  });
 });
 
 describe("calculateBasketballRound", () => {

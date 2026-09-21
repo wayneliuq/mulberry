@@ -388,7 +388,10 @@ export function balanceBasketballTeams(
     };
   }
 
-  // Multi-team balancing (K = 3..6): partition N players into K non-empty teams
+  // Multi-team balancing (K = 3..6): partition N players into K teams whose
+  // sizes differ by at most one, minimising the variance of the teams' mean
+  // OpenSkill ordinals. Win probability is a two-sided measure, so it cannot
+  // stand in for "balanced" once there are more than two teams.
   const K = numTeams;
   const N = sortedIds.length;
   const minTeamSize = Math.floor(N / K);
@@ -398,46 +401,88 @@ export function balanceBasketballTeams(
 
   let bestTeams: number[][] | null = null;
   let bestVariance = Infinity;
+  let bestKey = "";
 
   const currentAssignment: number[] = new Array(N).fill(-1);
+  const teamSizes: number[] = new Array(K).fill(0);
+  const teamOrdinalSums: number[] = new Array(K).fill(0);
+
+  /**
+   * Players still to place, minus the ones already spoken for by teams that
+   * have not reached `minTeamSize` (counting untouched teams as needing a full
+   * `minTeamSize`). Negative means this branch can no longer fill every team.
+   */
+  function slackAfter(playerIdx: number, teamsUsedCount: number): number {
+    let needed = minTeamSize * (K - teamsUsedCount);
+    for (let t = 0; t < teamsUsedCount; t += 1) {
+      const short = minTeamSize - teamSizes[t]!;
+      if (short > 0) {
+        needed += short;
+      }
+    }
+    return N - playerIdx - needed;
+  }
 
   function search(playerIdx: number, teamsUsedCount: number) {
+    if (slackAfter(playerIdx, teamsUsedCount) < 0) {
+      return;
+    }
+
     if (playerIdx === N) {
-      if (teamsUsedCount < K) return;
       const teamLists: number[][] = Array.from({ length: K }, () => []);
-      const teamMeans: number[] = new Array(K).fill(0);
-
       for (let i = 0; i < N; i += 1) {
-        const t = currentAssignment[i]!;
-        teamLists[t]!.push(sortedIds[i]!);
-        teamMeans[t]! += playerOrdinals[i]!;
+        teamLists[currentAssignment[i]!]!.push(sortedIds[i]!);
       }
 
+      let meanOfMeans = 0;
+      const teamMeans: number[] = new Array(K);
       for (let t = 0; t < K; t += 1) {
-        const len = teamLists[t]!.length;
-        if (len < minTeamSize || len > maxTeamSize) return;
-        teamMeans[t] /= len;
+        const mean = teamOrdinalSums[t]! / teamSizes[t]!;
+        teamMeans[t] = mean;
+        meanOfMeans += mean;
       }
+      meanOfMeans /= K;
 
-      const meanOfMeans = teamMeans.reduce((a, b) => a + b, 0) / K;
-      const variance =
-        teamMeans.reduce((sum, m) => sum + (m - meanOfMeans) ** 2, 0) / K;
+      let variance = 0;
+      for (let t = 0; t < K; t += 1) {
+        variance += (teamMeans[t]! - meanOfMeans) ** 2;
+      }
+      variance /= K;
 
-      if (variance < bestVariance) {
-        bestVariance = variance;
+      // Ties are common with fresh (identically rated) players, so break them
+      // on a stable roster key rather than on traversal order.
+      const key = teamLists.map((team) => team.join(",")).join("|");
+      if (
+        variance < bestVariance - 1e-12 ||
+        (variance < bestVariance + 1e-12 && (!bestTeams || key < bestKey))
+      ) {
+        bestVariance = Math.min(variance, bestVariance);
         bestTeams = teamLists;
+        bestKey = key;
       }
       return;
     }
 
+    // Canonical labelling: a player may only open the next unused team, which
+    // keeps each partition from being re-explored under every permutation of
+    // team letters.
     const maxTeamToTry = Math.min(teamsUsedCount, K - 1);
+    const ordinalValue = playerOrdinals[playerIdx]!;
     for (let t = 0; t <= maxTeamToTry; t += 1) {
+      if (teamSizes[t]! >= maxTeamSize) {
+        continue;
+      }
       currentAssignment[playerIdx] = t;
+      teamSizes[t]! += 1;
+      teamOrdinalSums[t]! += ordinalValue;
       search(
         playerIdx + 1,
         t === teamsUsedCount ? teamsUsedCount + 1 : teamsUsedCount,
       );
+      teamSizes[t]! -= 1;
+      teamOrdinalSums[t]! -= ordinalValue;
     }
+    currentAssignment[playerIdx] = -1;
   }
 
   search(0, 0);
