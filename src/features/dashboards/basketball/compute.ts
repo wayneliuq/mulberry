@@ -77,7 +77,30 @@ function didPlayerWin(round: NormalizedRound, playerId: number): boolean | null 
   return null;
 }
 
+/**
+ * Ghost players (score-neutral-hidden one-time fill-ins) are stripped here,
+ * once, rather than in each of the eight ranking sections below.
+ *
+ * `data.players` already excludes them, but the stored round rosters and round
+ * entries still carry their ids — and every section falls back to
+ * `String(playerId)` when a name is missing, so a ghost used to surface as a
+ * "player" named after its own row id. Removing the ids from the rosters, the
+ * participant lists and the point-delta map means no section can name a ghost,
+ * pair one up, count it as a teammate, or rank it.
+ *
+ * The trade: a round a ghost filled in on is analysed as the smaller lineup it
+ * effectively was (a 4v4 with one ghost reads as 4v3 for the upset section's
+ * win-probability prediction). Ghosts never return and their ledger entries are
+ * already zeroed, so this is the honest reading of the round for a dashboard
+ * about the regular players.
+ */
 function normalizeData(data: BasketballDashboardData, maxRounds: number): NormalizedRound[] {
+  const ghostPlayerIds = new Set(data.ghostPlayerIds);
+  const withoutGhosts = (playerIds: number[]) =>
+    ghostPlayerIds.size === 0
+      ? playerIds
+      : playerIds.filter((playerId) => !ghostPlayerIds.has(playerId));
+
   const sorted = [...data.rounds].sort((left, right) =>
     left.createdAt === right.createdAt
       ? left.roundId.localeCompare(right.roundId)
@@ -86,11 +109,19 @@ function normalizeData(data: BasketballDashboardData, maxRounds: number): Normal
   const rounds = sorted.slice(Math.max(0, sorted.length - maxRounds));
   const entriesByRoundId = new Map<string, Map<number, number>>();
   for (const entry of data.roundEntries) {
+    if (ghostPlayerIds.has(entry.playerId)) {
+      continue;
+    }
     const perRound = entriesByRoundId.get(entry.roundId) ?? new Map<number, number>();
     perRound.set(entry.playerId, entry.pointDelta);
     entriesByRoundId.set(entry.roundId, perRound);
   }
-  return rounds.map((round) => {
+  return rounds.map((rawRound) => {
+    const round = {
+      ...rawRound,
+      teamAPlayerIds: withoutGhosts(rawRound.teamAPlayerIds),
+      teamBPlayerIds: withoutGhosts(rawRound.teamBPlayerIds),
+    };
     const teamASet = new Set(round.teamAPlayerIds);
     const teamBSet = new Set(round.teamBPlayerIds);
     const participants = [...teamASet, ...teamBSet];

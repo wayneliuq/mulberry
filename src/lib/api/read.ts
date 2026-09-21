@@ -162,6 +162,7 @@ type RawPlayer = {
   id: number;
   display_name: string;
   family_id: string | null;
+  is_active?: boolean;
   is_score_neutral_hidden?: boolean;
 };
 
@@ -712,11 +713,13 @@ export async function fetchBasketballDashboardData(
         .select("round_id, player_id, point_delta")
         .range(from, to),
     ),
+    // Deliberately unfiltered by `is_active`: a deactivated ghost still has
+    // rows in `rounds` / `round_entries`, and dropping it here is what used to
+    // leave the dashboard labelling it by raw id.
     selectAll<RawPlayer>((from, to) =>
       supabase
         .from("players")
-        .select("id, display_name, family_id, is_score_neutral_hidden")
-        .eq("is_active", true)
+        .select("id, display_name, family_id, is_active, is_score_neutral_hidden")
         .range(from, to),
     ),
   ]);
@@ -747,10 +750,15 @@ export async function fetchBasketballDashboardData(
   const activePlayerIds = new Set(
     roundEntries.map((entry) => entry.playerId),
   );
+  const ghostPlayerIds = playersResult.data
+    .filter((player) => player.is_score_neutral_hidden)
+    .map((player) => player.id);
   const players = playersResult.data
     .filter(
       (player) =>
-        activePlayerIds.has(player.id) && !player.is_score_neutral_hidden,
+        player.is_active !== false &&
+        activePlayerIds.has(player.id) &&
+        !player.is_score_neutral_hidden,
     )
     .map((player) => ({
       id: player.id,
@@ -768,6 +776,7 @@ export async function fetchBasketballDashboardData(
     players,
     rounds,
     roundEntries,
+    ghostPlayerIds,
   };
 }
 
@@ -1140,15 +1149,12 @@ export async function fetchFtlDashboardData(): Promise<FtlDashboardData> {
           .select("round_id, player_id, point_delta")
           .range(from, to),
     ),
-    selectAll<{
-      id: number;
-      display_name: string;
-      family_id: string | null;
-    }>((from, to) =>
+    // As in `fetchBasketballDashboardData`, unfiltered by `is_active` so that
+    // deactivated ghosts are still recognisable as ghosts.
+    selectAll<RawPlayer>((from, to) =>
       supabase
         .from("players")
-        .select("id, display_name, family_id")
-        .eq("is_active", true)
+        .select("id, display_name, family_id, is_active, is_score_neutral_hidden")
         .range(from, to),
     ),
   ]);
@@ -1199,10 +1205,23 @@ export async function fetchFtlDashboardData(): Promise<FtlDashboardData> {
     }));
 
   const activePlayerIds = new Set(ftlEntries.map((e) => e.playerId));
+  const ghostPlayerIds = playersResult.data
+    .filter((p) => p.is_score_neutral_hidden)
+    .map((p) => p.id);
   const players = playersResult.data
-    .filter((p) => activePlayerIds.has(p.id))
+    .filter(
+      (p) =>
+        p.is_active !== false &&
+        activePlayerIds.has(p.id) &&
+        !p.is_score_neutral_hidden,
+    )
     .map((p) => ({ id: p.id, displayName: p.display_name, familyId: p.family_id }))
     .sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }));
 
-  return { players, rounds: ftlRounds, roundEntries: ftlEntries };
+  return {
+    players,
+    rounds: ftlRounds,
+    roundEntries: ftlEntries,
+    ghostPlayerIds,
+  };
 }

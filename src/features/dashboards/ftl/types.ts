@@ -24,6 +24,12 @@ export type FtlDashboardData = {
   players: FtlDashboardPlayer[];
   rounds: FtlDashboardRound[];
   roundEntries: FtlDashboardRoundEntry[];
+  /**
+   * Score-neutral-hidden ("ghost") players. `players` already excludes them,
+   * but the stored landlord-side selections and round entries still name them,
+   * so the compute layer strips these ids before labelling anything.
+   */
+  ghostPlayerIds: number[];
 };
 
 export type FtlStatRow = {

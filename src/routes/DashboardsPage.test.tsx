@@ -89,6 +89,7 @@ describe("DashboardsPage", () => {
           { roundId, playerId: 4, pointDelta: aWon ? -1 : 1 },
         ];
       }),
+      ghostPlayerIds: [],
     });
 
     renderDashboardsPage();
@@ -104,6 +105,55 @@ describe("DashboardsPage", () => {
     expect(screen.getByRole("link", { name: "Pro match" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Upset Machine" })).toBeInTheDocument();
     expect(screen.getByText(/New season starts on/i)).toBeInTheDocument();
+  });
+
+  it("never renders a ghost player in the basketball dashboard", async () => {
+    // Ghost 64 fills in on team A for half the season. It is absent from
+    // `players` (the fetcher already excludes ghosts there) but still named by
+    // the round rosters and entries — the shape that used to render a "player"
+    // called 64 in every ranked section.
+    const ghostId = 64;
+    fetchBasketballDashboardDataMock.mockResolvedValue({
+      seasonId: 1,
+      players: [
+        { id: 1, displayName: "Alice", familyId: "f1" },
+        { id: 2, displayName: "Bob", familyId: "f2" },
+        { id: 3, displayName: "Cara", familyId: "f3" },
+        { id: 4, displayName: "Duke", familyId: "f4" },
+      ],
+      rounds: Array.from({ length: 24 }).map((_, idx) => ({
+        roundId: `r-${idx + 1}`,
+        gameId: "g-1",
+        roundNumber: idx + 1,
+        createdAt: `2026-02-${String((idx % 28) + 1).padStart(2, "0")}T10:00:00.000Z`,
+        teamAPlayerIds: idx % 2 === 0 ? [1, 2, ghostId] : [1, 2],
+        teamBPlayerIds: [3, 4],
+        scoreTeamA: idx % 2 === 0 ? 11 : 8,
+        scoreTeamB: idx % 2 === 0 ? 8 : 11,
+      })),
+      roundEntries: Array.from({ length: 24 }).flatMap((_, idx) => {
+        const roundId = `r-${idx + 1}`;
+        const aWon = idx % 2 === 0;
+        return [
+          { roundId, playerId: 1, pointDelta: aWon ? 1 : -1 },
+          { roundId, playerId: 2, pointDelta: aWon ? 1 : -1 },
+          { roundId, playerId: 3, pointDelta: aWon ? -1 : 1 },
+          { roundId, playerId: 4, pointDelta: aWon ? -1 : 1 },
+          ...(idx % 2 === 0
+            ? [{ roundId, playerId: ghostId, pointDelta: 0 }]
+            : []),
+        ];
+      }),
+      ghostPlayerIds: [ghostId],
+    });
+
+    const { container } = renderDashboardsPage();
+
+    expect(
+      await screen.findByRole("heading", { name: "Best / Worst Combos" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Alice").length).toBeGreaterThan(0);
+    expect(container.textContent).not.toContain(String(ghostId));
   });
 
   it("shows an error state when data fetch fails", async () => {

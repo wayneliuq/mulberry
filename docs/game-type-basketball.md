@@ -95,6 +95,8 @@ That is the whole formula. In particular:
 
 **Ghost** (non‑qualifying filler) players count toward OpenSkill team strength but receive a ledger delta of **exactly 0**. Their raw OpenSkill movement is absorbed by the house, **not** redistributed to teammates — redistributing it would decouple a real player’s total from their ordinal.
 
+Ghosts are flagged by `players.is_score_neutral_hidden` and are **excluded from every player-facing read**: leaderboards, family aggregates, and both dashboards (basketball and Fight the Landlord). Zeroed ledger entries are not enough on their own — a ghost still appears in stored round rosters and round entries, and the dashboards label unknown ids with the raw id, so a ghost used to surface as a "player" named after its own row id. The dashboard fetchers therefore return a `ghostPlayerIds` list alongside the data, and the compute layer strips those ids from rosters, participant lists and entry maps **before** anything is counted or labelled. A round a ghost filled in on is analysed as the smaller lineup it effectively was.
+
 ### The house line
 
 OpenSkill updates are Bayesian and **not zero‑sum**, so the players’ deltas do not sum to zero on their own. Each round therefore records a balancing line in `settings_snapshot.metadata.basketballHousePointDelta`:

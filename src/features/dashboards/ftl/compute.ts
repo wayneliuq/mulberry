@@ -56,7 +56,30 @@ function comboLabel(
 export function buildFtlDashboardMetrics(
   data: FtlDashboardData,
 ): FtlDashboardModel {
-  const { players, rounds, roundEntries } = data;
+  const { players } = data;
+
+  // Ghost players (score-neutral-hidden one-time fill-ins) never appear on a
+  // dashboard. `players` already excludes them, but the stored landlord-side
+  // selections and round entries still name them and `playerDisplayName` falls
+  // back to the raw id — so strip them here, once, before anything is counted
+  // or labelled. Pot sizes shrink by any ghost that was on the landlord side,
+  // which is the intended reading: ghosts score nothing.
+  const ghostPlayerIds = new Set(data.ghostPlayerIds);
+  const rounds =
+    ghostPlayerIds.size === 0
+      ? data.rounds
+      : data.rounds.map((round) => ({
+          ...round,
+          landlordSideSelections: round.landlordSideSelections.filter(
+            (playerId) => !ghostPlayerIds.has(playerId),
+          ),
+        }));
+  const roundEntries =
+    ghostPlayerIds.size === 0
+      ? data.roundEntries
+      : data.roundEntries.filter(
+          (entry) => !ghostPlayerIds.has(entry.playerId),
+        );
 
   // Build per-round lookup: roundId → Set<playerId> of landlord-side players
   const roundLandlordSet = new Map<string, Set<number>>();
@@ -311,7 +334,12 @@ export function buildFtlDashboardMetrics(
     const potSize =
       1 * meta.gameMultiplier * (meta.numBombs + 1) * meta.selections.length;
     const entries = roundEntries.filter((e) => e.roundId === round.roundId);
-    const maxDelta = Math.max(...entries.map((e) => Math.abs(e.pointDelta)));
+    // `Math.max()` of nothing is -Infinity; a round can be left with no
+    // scoring entries at all (e.g. everyone in it was a ghost).
+    const maxDelta =
+      entries.length === 0
+        ? 0
+        : Math.max(...entries.map((e) => Math.abs(e.pointDelta)));
     return { round, potSize, maxDelta, meta, entries };
   });
 

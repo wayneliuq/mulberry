@@ -182,6 +182,19 @@ export type BasketballDashboardData = {
   players: BasketballDashboardPlayer[];
   rounds: BasketballDashboardRound[];
   roundEntries: BasketballDashboardRoundEntry[];
+  /**
+   * Score-neutral-hidden ("ghost") players — one-time fill-ins who must not
+   * surface anywhere player-facing. `players` already excludes them, but the
+   * stored round rosters and round entries still name them, so the compute
+   * layer needs the ids to strip them out before anything is labelled. Without
+   * this, a ghost survives as a bare id string (a "player" called `64`).
+   *
+   * The fetcher reads ghosts without filtering on `is_active`, so a ghost
+   * deactivated after its one game is still listed here — that is exactly the
+   * case that used to render as a bare id, since it is missing from `players`
+   * entirely and so has no name to fall back on.
+   */
+  ghostPlayerIds: number[];
 };
 
 export type FtlDashboardRound = {
@@ -210,4 +223,6 @@ export type FtlDashboardData = {
   players: FtlDashboardPlayer[];
   rounds: FtlDashboardRound[];
   roundEntries: FtlDashboardRoundEntry[];
+  /** Ghost players to strip before labelling; see `BasketballDashboardData.ghostPlayerIds`. */
+  ghostPlayerIds: number[];
 };

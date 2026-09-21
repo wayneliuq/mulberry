@@ -105,6 +105,7 @@ describe("buildBasketballDashboardMetrics", () => {
       players,
       rounds,
       roundEntries: entries,
+      ghostPlayerIds: [],
     };
     const result = buildBasketballDashboardMetrics({ data, maxRounds: 500 });
 
@@ -165,6 +166,7 @@ describe("buildBasketballDashboardMetrics", () => {
       players,
       rounds,
       roundEntries: entries,
+      ghostPlayerIds: [],
     };
     const result = buildBasketballDashboardMetrics({ data, maxRounds: 500 });
     const rivalry = result.sections.find((section) => section.id === "rivalry");
@@ -214,6 +216,7 @@ describe("buildBasketballDashboardMetrics", () => {
       players,
       rounds,
       roundEntries: entries,
+      ghostPlayerIds: [],
     };
     const result = buildBasketballDashboardMetrics({ data, maxRounds: 500 });
     const rivalry = result.sections.find((section) => section.id === "rivalry");
@@ -287,6 +290,7 @@ describe("buildBasketballDashboardMetrics", () => {
       players,
       rounds,
       roundEntries: entries,
+      ghostPlayerIds: [],
     };
     const result = buildBasketballDashboardMetrics({ data, maxRounds: 500 });
     const families = result.splitSections.find((section) => section.id === "families");
@@ -325,7 +329,13 @@ describe("buildBasketballDashboardMetrics", () => {
         { roundId, playerId: 4, pointDelta: aWon ? -1 : 1 },
       ];
     });
-    const data: BasketballDashboardData = { seasonId: 1, players, rounds, roundEntries };
+    const data: BasketballDashboardData = {
+      seasonId: 1,
+      players,
+      rounds,
+      roundEntries,
+      ghostPlayerIds: [],
+    };
     const once = buildBasketballDashboardMetrics({ data, maxRounds: 500 });
     const twice = buildBasketballDashboardMetrics({ data, maxRounds: 500 });
     const nbaOnce = once.nbaComparisons;
@@ -372,7 +382,13 @@ describe("buildBasketballDashboardMetrics", () => {
         { roundId, playerId: 4, pointDelta: aWon ? -1 : 1 },
       ];
     });
-    const data: BasketballDashboardData = { seasonId: 1, players, rounds, roundEntries };
+    const data: BasketballDashboardData = {
+      seasonId: 1,
+      players,
+      rounds,
+      roundEntries,
+      ghostPlayerIds: [],
+    };
     const opts = { nbaCompStorage: storage, nbaCompHysteresisTau: 1e9 };
     const first = buildBasketballDashboardMetrics({ data, maxRounds: 500 }, opts);
     const second = buildBasketballDashboardMetrics({ data, maxRounds: 500 }, opts);
@@ -410,7 +426,13 @@ describe("buildBasketballDashboardMetrics", () => {
         { roundId, playerId: 4, pointDelta: aWon ? -1 : 1 },
       ];
     });
-    const data: BasketballDashboardData = { seasonId: 1, players, rounds, roundEntries };
+    const data: BasketballDashboardData = {
+      seasonId: 1,
+      players,
+      rounds,
+      roundEntries,
+      ghostPlayerIds: [],
+    };
     const a = buildBasketballDashboardMetrics(
       { data, maxRounds: 500 },
       { nbaCompStorage: noopStorage },
@@ -450,7 +472,13 @@ describe("buildBasketballDashboardMetrics", () => {
         { roundId, playerId: 4, pointDelta: aWon ? -1 : 1 },
       ];
     });
-    const data: BasketballDashboardData = { seasonId: 1, players, rounds, roundEntries };
+    const data: BasketballDashboardData = {
+      seasonId: 1,
+      players,
+      rounds,
+      roundEntries,
+      ghostPlayerIds: [],
+    };
     buildBasketballDashboardMetrics({ data, maxRounds: 500 }, { nbaCompStorage: storage });
 
     const store = storage.load()!;
@@ -518,7 +546,13 @@ describe("buildBasketballDashboardMetrics", () => {
           r.teamAPlayerIds.includes(playerId) ? (aWon ? 1 : -1) : aWon ? -1 : 1,
       }));
     });
-    const data: BasketballDashboardData = { seasonId: 1, players, rounds, roundEntries };
+    const data: BasketballDashboardData = {
+      seasonId: 1,
+      players,
+      rounds,
+      roundEntries,
+      ghostPlayerIds: [],
+    };
     const metrics = buildBasketballDashboardMetrics(
       { data, maxRounds: 500 },
       { nbaCompStorage: storage },
@@ -578,7 +612,13 @@ describe("buildBasketballDashboardMetrics", () => {
         { roundId, playerId: 4, pointDelta: aWon ? -1 : 1 },
       ];
     });
-    const data: BasketballDashboardData = { seasonId: 1, players, rounds, roundEntries };
+    const data: BasketballDashboardData = {
+      seasonId: 1,
+      players,
+      rounds,
+      roundEntries,
+      ghostPlayerIds: [],
+    };
     const metrics = buildBasketballDashboardMetrics(
       { data, maxRounds: 500 },
       { nbaCompStorage: createMemoryNbaCompStorage(null) },

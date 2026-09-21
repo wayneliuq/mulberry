@@ -71,6 +71,7 @@ describe("upset section probability source", () => {
       ],
       rounds,
       roundEntries,
+      ghostPlayerIds: [],
     };
 
     buildBasketballDashboardMetrics({ data, maxRounds: 500 });
