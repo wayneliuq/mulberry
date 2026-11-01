@@ -1,4 +1,5 @@
 import { MAX_BASKETBALL_LINEUPS_PER_GAME } from "../../features/basketball/basketballLineups";
+import { isFtlSeeBottomCardRound } from "../../features/game-types/fightTheLandlord";
 import type { GameTypeId } from "../../features/game-types/types";
 import { selectAll, supabase } from "../supabase/client";
 import {
@@ -851,6 +852,28 @@ export async function fetchPlayerRoundCountsByGameType(
   return aggregatePlayerRoundCounts(entries);
 }
 
+/**
+ * Round ids of Fight the Landlord rounds that are See Bottom Card payments,
+ * judged from each round's entries (see `isFtlSeeBottomCardRound`).
+ */
+export function findFtlSeeBottomCardRoundIds(
+  roundEntries: Array<{ round_id: string; game_id: string; point_delta: number }>,
+  gameTypeByGameId: Map<string, GameTypeId>,
+): Set<string> {
+  const entriesByRoundId = new Map<string, Array<{ pointDelta: number }>>();
+  for (const entry of roundEntries) {
+    if (gameTypeByGameId.get(entry.game_id) !== "fight-the-landlord") continue;
+    const list = entriesByRoundId.get(entry.round_id) ?? [];
+    list.push({ pointDelta: entry.point_delta });
+    entriesByRoundId.set(entry.round_id, list);
+  }
+  const result = new Set<string>();
+  for (const [roundId, entries] of entriesByRoundId) {
+    if (isFtlSeeBottomCardRound({ entries })) result.add(roundId);
+  }
+  return result;
+}
+
 export async function fetchLeaderboards(
   gameTypeFilter: GameTypeId | "all" = "all",
   options?: { basketballSeasonId?: number; applyMinRoundsFilter?: boolean },
@@ -973,6 +996,11 @@ export async function fetchLeaderboards(
     }
   }
 
+  const seeBottomCardRoundIds = findFtlSeeBottomCardRoundIds(
+    roundEntries,
+    gameTypeByGameId,
+  );
+
   const pointsByPlayerId = new Map<
     number,
     { totalPoints: number; roundsWon: number; roundsLost: number }
@@ -987,8 +1015,12 @@ export async function fetchLeaderboards(
       roundsLost: 0,
     };
     existing.totalPoints += entry.point_delta;
-    if (entry.point_delta > 0) existing.roundsWon += 1;
-    else if (entry.point_delta < 0) existing.roundsLost += 1;
+    // See Bottom Card moves points but is not a played hand, so it is
+    // neither a round win nor a round loss.
+    if (!seeBottomCardRoundIds.has(entry.round_id)) {
+      if (entry.point_delta > 0) existing.roundsWon += 1;
+      else if (entry.point_delta < 0) existing.roundsLost += 1;
+    }
     pointsByPlayerId.set(entry.player_id, existing);
   }
 
@@ -1163,13 +1195,29 @@ export async function fetchFtlDashboardData(): Promise<FtlDashboardData> {
   if (entriesResult.error) throw new Error(entriesResult.error.message);
   if (playersResult.error) throw new Error(playersResult.error.message);
 
-  // Filter to rounds with landlordSideSelections in metadata
+  const entriesByRoundId = new Map<string, Array<{ pointDelta: number }>>();
+  for (const entry of entriesResult.data) {
+    const list = entriesByRoundId.get(entry.round_id) ?? [];
+    list.push({ pointDelta: entry.point_delta });
+    entriesByRoundId.set(entry.round_id, list);
+  }
+
+  // Filter to rounds with landlordSideSelections in metadata. See Bottom Card
+  // rounds are not played hands, so they never feed landlord stats.
   const ftlRounds = roundsResult.data
     .filter((round) => {
       const meta = round.settings_snapshot?.metadata as
         | Record<string, unknown>
         | undefined;
       if (!meta || meta.mode !== "fight-the-landlord") return false;
+      if (
+        isFtlSeeBottomCardRound({
+          metadata: meta,
+          entries: entriesByRoundId.get(round.id) ?? [],
+        })
+      ) {
+        return false;
+      }
       const selections = meta.landlordSideSelections;
       return (
         Array.isArray(selections) &&

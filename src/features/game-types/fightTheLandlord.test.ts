@@ -1,4 +1,8 @@
-import { calculateFightTheLandlordRound } from "./fightTheLandlord";
+import {
+  calculateFightTheLandlordRound,
+  calculateSeeBottomCardRound,
+  isFtlSeeBottomCardRound,
+} from "./fightTheLandlord";
 
 describe("calculateFightTheLandlordRound", () => {
   it("stays zero-sum when the landlord side wins with simple selections", () => {
@@ -97,5 +101,77 @@ describe("calculateFightTheLandlordRound", () => {
         gameMultiplier: 1,
       }),
     ).toThrow();
+  });
+});
+
+describe("calculateSeeBottomCardRound", () => {
+  it("charges the user 3 and splits it evenly across the others", () => {
+    const entries = calculateSeeBottomCardRound({
+      activePlayerIds: [1, 2, 3, 4],
+      userPlayerId: 2,
+    });
+    expect(entries).toEqual([
+      { playerId: 1, pointDelta: 1 },
+      { playerId: 2, pointDelta: -3 },
+      { playerId: 3, pointDelta: 1 },
+      { playerId: 4, pointDelta: 1 },
+    ]);
+  });
+
+  it("stays exactly zero-sum when the split is uneven", () => {
+    const entries = calculateSeeBottomCardRound({
+      activePlayerIds: [1, 2, 3, 4, 5, 6, 7, 8],
+      userPlayerId: 1,
+    });
+    const cents = entries.reduce(
+      (sum, entry) => sum + Math.round(entry.pointDelta * 100),
+      0,
+    );
+    expect(cents).toBe(0);
+    for (const entry of entries.slice(1)) {
+      expect([0.42, 0.43]).toContain(entry.pointDelta);
+    }
+  });
+
+  it("rejects a user who is not in the round", () => {
+    expect(() =>
+      calculateSeeBottomCardRound({ activePlayerIds: [1, 2, 3], userPlayerId: 9 }),
+    ).toThrow();
+  });
+});
+
+describe("isFtlSeeBottomCardRound", () => {
+  it("trusts the metadata flag", () => {
+    expect(
+      isFtlSeeBottomCardRound({ metadata: { seeBottomCard: true }, entries: [] }),
+    ).toBe(true);
+  });
+
+  it("recognises a past round where one player alone lost exactly 3", () => {
+    expect(
+      isFtlSeeBottomCardRound({
+        entries: [
+          { pointDelta: -3 },
+          { pointDelta: 0.75 },
+          { pointDelta: 0.75 },
+          { pointDelta: 0.75 },
+          { pointDelta: 0.75 },
+          { pointDelta: 0 },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it("ignores ordinary hands", () => {
+    expect(
+      isFtlSeeBottomCardRound({
+        entries: [{ pointDelta: -3 }, { pointDelta: -3 }, { pointDelta: 6 }],
+      }),
+    ).toBe(false);
+    expect(
+      isFtlSeeBottomCardRound({
+        entries: [{ pointDelta: -2 }, { pointDelta: 1 }, { pointDelta: 1 }],
+      }),
+    ).toBe(false);
   });
 });

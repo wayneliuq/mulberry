@@ -35,7 +35,11 @@ import {
 } from "../features/basketball/basketballTeams";
 import { useBasketballSeasons } from "../features/basketball/useBasketballSeasons";
 import { calculateDixitRound } from "../features/game-types/dixit";
-import { calculateFightTheLandlordRound } from "../features/game-types/fightTheLandlord";
+import {
+  calculateFightTheLandlordRound,
+  calculateSeeBottomCardRound,
+  FTL_SEE_BOTTOM_CARD_COST,
+} from "../features/game-types/fightTheLandlord";
 import { getGameTypeOption } from "../features/game-types";
 import { buildBasketballScoredRoundEntries } from "../features/game-types/basketballRoundDraft";
 import {
@@ -139,6 +143,10 @@ export function GameViewPage() {
     selections: {} as Record<number, number>,
   });
   const [ftlManualMode, setFtlManualMode] = useState(false);
+  const [ftlSeeBottomCardMode, setFtlSeeBottomCardMode] = useState(false);
+  const [ftlSeeBottomCardPlayerId, setFtlSeeBottomCardPlayerId] = useState<
+    number | null
+  >(null);
   const [ftlManualInputs, setFtlManualInputs] = useState<Record<number, string>>(
     {},
   );
@@ -484,6 +492,8 @@ export function GameViewPage() {
       });
       setFtlManualMode(false);
       setFtlManualInputs({});
+      setFtlSeeBottomCardMode(false);
+      setFtlSeeBottomCardPlayerId(null);
       setWerewolvesManualMode(false);
       setWerewolfManualInputs({});
       setDixitManualMode(false);
@@ -856,6 +866,48 @@ export function GameViewPage() {
         landlordSideSelections: landlordSideSelections.map((id) => Number(id)),
         numBombs: landlordValues.numBombs,
         gameMultiplier: landlordValues.gameMultiplier,
+      },
+    });
+  }
+
+  async function handleFtlSeeBottomCardSubmit() {
+    if (!game) {
+      return;
+    }
+    const userPlayerId = ftlSeeBottomCardPlayerId;
+    if (userPlayerId === null) {
+      window.alert("Select who used See Bottom Card.");
+      return;
+    }
+    const scoringPlayers = sortedUnlockedPlayers.filter(
+      (player) => !ghostPlayerIds.has(player.playerId),
+    );
+    const calculated = calculateSeeBottomCardRound({
+      activePlayerIds: scoringPlayers.map((player) => player.playerId),
+      userPlayerId,
+    });
+    const entries = mergeCalculatedEntriesWithGhostZeros(
+      calculated,
+      unlockedPlayers.map((player) => player.playerId),
+      ghostPlayerIds,
+    );
+    const nameById = new Map(
+      unlockedPlayers.map((player) => [player.playerId, player.displayName]),
+    );
+    const summaryText = `See Bottom Card: ${entries
+      .map((entry) => {
+        const name = nameById.get(entry.playerId) ?? entry.playerId;
+        return `${name} ${entry.pointDelta > 0 ? "+" : ""}${entry.pointDelta}`;
+      })
+      .join(", ")}`;
+
+    await createRoundMutation.mutateAsync({
+      entries,
+      summaryText,
+      metadata: {
+        mode: "fight-the-landlord",
+        seeBottomCard: true,
+        seeBottomCardPlayerId: userPlayerId,
       },
     });
   }
@@ -1943,6 +1995,53 @@ export function GameViewPage() {
               </form>
               </>
               )
+            ) : ftlSeeBottomCardMode ? (
+              <form
+                className="stack-sm"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleFtlSeeBottomCardSubmit();
+                }}
+              >
+                <strong>See Bottom Card</strong>
+                <p className="muted">
+                  The player pays {FTL_SEE_BOTTOM_CARD_COST} points, split evenly
+                  across everyone else. It does not count as a round win or loss.
+                </p>
+                <span>Who used it?</span>
+                <OptionPillGroup
+                  ariaLabel="Player who used See Bottom Card"
+                  options={sortedUnlockedPlayers
+                    .filter((player) => !ghostPlayerIds.has(player.playerId))
+                    .map((player) => ({
+                      value: String(player.playerId),
+                      label: player.displayName,
+                    }))}
+                  value={
+                    ftlSeeBottomCardPlayerId === null
+                      ? null
+                      : String(ftlSeeBottomCardPlayerId)
+                  }
+                  onChange={(value) =>
+                    setFtlSeeBottomCardPlayerId(
+                      value === null ? null : Number(value),
+                    )
+                  }
+                />
+                <RoundFormFooter
+                  submitDisabled={
+                    ftlSeeBottomCardPlayerId === null ||
+                    createRoundMutation.isPending
+                  }
+                  onCancel={() => setShowRoundForm(false)}
+                  backLabel="Use structured scoring"
+                  onBack={() => {
+                    setFtlSeeBottomCardMode(false);
+                    setFtlSeeBottomCardPlayerId(null);
+                  }}
+                  submitError={createRoundMutation.error?.message}
+                />
+              </form>
             ) : ftlManualMode ? (
               <ManualRoundForm
                 players={manualRoundPlayers}
@@ -1967,6 +2066,13 @@ export function GameViewPage() {
                     onClick={() => setFtlManualMode(true)}
                   >
                     Manual input
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setFtlSeeBottomCardMode(true)}
+                  >
+                    See Bottom Card
                   </button>
                 </div>
                 <form

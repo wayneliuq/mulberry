@@ -111,3 +111,90 @@ export const fightTheLandlordGameType: GameTypeDefinition<FightTheLandlordRoundI
     icon: "cards",
     calculateRound: calculateFightTheLandlordRound,
   };
+
+// ── See Bottom Card ──────────────────────────────────────────────────
+//
+// A player pays a flat 3 points to look at the bottom cards; the 3 points are
+// split evenly across every other scoring player. It moves points but is not a
+// hand of Fight the Landlord, so it never counts as a round win or loss.
+
+export const FTL_SEE_BOTTOM_CARD_COST = 3;
+
+const SEE_BOTTOM_CARD_EPSILON = 0.005;
+
+export type SeeBottomCardInput = {
+  /** Scoring (non-ghost) players in the round, in display order. */
+  activePlayerIds: number[];
+  /** The player who used See Bottom Card. */
+  userPlayerId: number;
+};
+
+/**
+ * Returns one entry per active player: the user pays the cost and everyone
+ * else receives an even share. Shares are rounded to cents, with any cent
+ * left over from an uneven split given to the first recipients so the round
+ * stays exactly zero-sum.
+ */
+export function calculateSeeBottomCardRound({
+  activePlayerIds,
+  userPlayerId,
+}: SeeBottomCardInput): Array<{ playerId: number; pointDelta: number }> {
+  const playerIds = [...new Set(activePlayerIds)];
+  if (!playerIds.includes(userPlayerId)) {
+    throw new Error("The See Bottom Card player must be in the round.");
+  }
+  const recipients = playerIds.filter((id) => id !== userPlayerId);
+  if (recipients.length === 0) {
+    throw new Error("See Bottom Card needs at least one other scoring player.");
+  }
+
+  const costCents = FTL_SEE_BOTTOM_CARD_COST * 100;
+  const baseShareCents = Math.floor(costCents / recipients.length);
+  let leftoverCents = costCents - baseShareCents * recipients.length;
+  const shareByPlayer = new Map<number, number>();
+  for (const id of recipients) {
+    const extra = leftoverCents > 0 ? 1 : 0;
+    leftoverCents -= extra;
+    shareByPlayer.set(id, (baseShareCents + extra) / 100);
+  }
+
+  return playerIds.map((playerId) => ({
+    playerId,
+    pointDelta:
+      playerId === userPlayerId
+        ? -FTL_SEE_BOTTOM_CARD_COST
+        : (shareByPlayer.get(playerId) ?? 0),
+  }));
+}
+
+/**
+ * Whether a Fight the Landlord round is a See Bottom Card payment rather than
+ * a played hand.
+ *
+ * New rounds carry `metadata.seeBottomCard: true`. Rounds saved before the
+ * mechanic existed were entered by hand, so they are recognised by their
+ * shape: exactly one player lost points and that player lost exactly 3.
+ */
+export function isFtlSeeBottomCardRound({
+  metadata,
+  entries,
+}: {
+  metadata?: Record<string, unknown> | null;
+  entries: Array<{ pointDelta: number }>;
+}): boolean {
+  if (metadata?.seeBottomCard === true) {
+    return true;
+  }
+  const losers = entries.filter(
+    (entry) => entry.pointDelta < -SEE_BOTTOM_CARD_EPSILON,
+  );
+  const hasWinner = entries.some(
+    (entry) => entry.pointDelta > SEE_BOTTOM_CARD_EPSILON,
+  );
+  return (
+    hasWinner &&
+    losers.length === 1 &&
+    Math.abs(losers[0].pointDelta + FTL_SEE_BOTTOM_CARD_COST) <
+      SEE_BOTTOM_CARD_EPSILON
+  );
+}

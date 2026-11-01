@@ -176,3 +176,14 @@ This structure keeps every round **fair, symmetric, and zero-sum**, while making
 The default round form uses outcome, bombs, multipliers, and landlord-side selections (above).
 
 **Manual input** is available as a secondary option. It uses the shared rules in `docs/rules.md` (`0` = auto-split, non-zero = fixed delta). Saved rounds are tagged with `metadata.manualInput: true` (older rows may use `quickFill`).
+
+---
+
+## See Bottom Card
+
+A player can pay **3 points** to look at the bottom cards. In the New round dialog, choose **See Bottom Card**, pick the player, and save.
+
+- The player gets `-3`; the 3 points are split evenly across every other scoring (non-ghost) player. Uneven splits are rounded to cents, with leftover cents going to the first recipients, so the round stays exactly zero-sum.
+- Saved rounds carry `metadata.seeBottomCard: true` and `metadata.seeBottomCardPlayerId`.
+- The points count toward totals and money, but the round is **not a round win or loss** for anyone, and it is left out of the FTL dashboard.
+- Rounds saved before this existed are recognised by shape (`isFtlSeeBottomCardRound`): a Fight the Landlord round where exactly one player lost points and that player lost exactly 3. They are excluded from win/loss in the same way.
