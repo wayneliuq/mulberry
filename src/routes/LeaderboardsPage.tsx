@@ -11,6 +11,7 @@ import { SectionHeader } from "../features/ui/SectionHeader";
 import { BasketballSeasonToolbar } from "../features/basketball/BasketballSeasonToolbar";
 import { useBasketballSeasons } from "../features/basketball/useBasketballSeasons";
 import { fetchLeaderboards } from "../lib/api/read";
+import { FTL_LEADERBOARD_MIN_ROUNDS } from "../lib/api/leaderboardFilter";
 import { formatMoneyCents, formatPoints } from "../lib/format";
 import type {
   FamilyLeaderboardRow,
@@ -180,8 +181,9 @@ export function LeaderboardsPage() {
     seasonsQuery,
   } = useBasketballSeasons(isBasketballLeaderboard);
 
+  const isFtlLeaderboard = selectedGameType === "fight-the-landlord";
   const applyMinRoundsFilter =
-    isBasketballLeaderboard && selectedSeasonId != null;
+    (isBasketballLeaderboard && selectedSeasonId != null) || isFtlLeaderboard;
 
   const leaderboardsQuery = useQuery({
     queryKey: [
@@ -198,7 +200,12 @@ export function LeaderboardsPage() {
               basketballSeasonId: selectedSeasonId,
               applyMinRoundsFilter,
             }
-          : undefined,
+          : isFtlLeaderboard
+            ? {
+                applyMinRoundsFilter,
+                minRounds: FTL_LEADERBOARD_MIN_ROUNDS,
+              }
+            : undefined,
       ),
     enabled: !isBasketballLeaderboard || selectedSeasonId !== null,
   });

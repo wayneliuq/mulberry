@@ -8,14 +8,22 @@
 export const LEADERBOARD_MIN_ROUNDS = 10;
 
 /**
+ * Minimum rounds (won + lost) for a player to appear in the Fight the Landlord
+ * player leaderboard. See Bottom Card rounds are neither won nor lost, so they
+ * do not count toward it.
+ */
+export const FTL_LEADERBOARD_MIN_ROUNDS = 5;
+
+/**
  * Drop player rows that have not exceeded the leaderboard min-rounds threshold.
- * A player is kept when `roundsWon + roundsLost > LEADERBOARD_MIN_ROUNDS`.
+ * A player is kept when `roundsWon + roundsLost > minRounds`
+ * (default `LEADERBOARD_MIN_ROUNDS`).
  */
 export function applyLeaderboardMinRoundsFilter<
   T extends { roundsWon: number; roundsLost: number },
->(players: T[]): T[] {
+>(players: T[], minRounds: number = LEADERBOARD_MIN_ROUNDS): T[] {
   return players.filter(
-    (player) => player.roundsWon + player.roundsLost > LEADERBOARD_MIN_ROUNDS,
+    (player) => player.roundsWon + player.roundsLost > minRounds,
   );
 }
 

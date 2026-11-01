@@ -876,7 +876,12 @@ export function findFtlSeeBottomCardRoundIds(
 
 export async function fetchLeaderboards(
   gameTypeFilter: GameTypeId | "all" = "all",
-  options?: { basketballSeasonId?: number; applyMinRoundsFilter?: boolean },
+  options?: {
+    basketballSeasonId?: number;
+    applyMinRoundsFilter?: boolean;
+    /** Overrides the default `LEADERBOARD_MIN_ROUNDS` threshold. */
+    minRounds?: number;
+  },
 ): Promise<LeaderboardData> {
   const [gamesResult, totalsResult, playersResult, familiesResult] = await Promise.all([
     selectAll<{ id: string; game_type_id: GameTypeId }>((from, to) =>
@@ -1113,7 +1118,7 @@ export async function fetchLeaderboards(
     .sort((left, right) => right.totalPoints - left.totalPoints);
 
   const filteredPlayerRows = options?.applyMinRoundsFilter
-    ? applyLeaderboardMinRoundsFilter(playerRows)
+    ? applyLeaderboardMinRoundsFilter(playerRows, options?.minRounds)
     : playerRows;
 
   const families = familiesResult.data;

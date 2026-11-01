@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  FTL_LEADERBOARD_MIN_ROUNDS,
   LEADERBOARD_MIN_ROUNDS,
   aggregatePlayerRoundCounts,
   applyLeaderboardMinRoundsFilter,
@@ -89,5 +90,21 @@ describe("aggregatePlayerRoundCounts", () => {
       { round_id: "r1", player_id: 1, point_delta: 4 },
     ]);
     expect(counts.has(2)).toBe(false);
+  });
+});
+
+describe("FTL leaderboard threshold", () => {
+  it("keeps only players with more than 5 rounds", () => {
+    const players = [
+      { id: 1, roundsWon: 3, roundsLost: 3 }, // 6 → kept
+      { id: 2, roundsWon: 2, roundsLost: 3 }, // 5 → dropped
+      { id: 3, roundsWon: 0, roundsLost: 1 }, // 1 → dropped
+    ];
+    expect(FTL_LEADERBOARD_MIN_ROUNDS).toBe(5);
+    expect(
+      applyLeaderboardMinRoundsFilter(players, FTL_LEADERBOARD_MIN_ROUNDS).map(
+        (p) => p.id,
+      ),
+    ).toEqual([1]);
   });
 });
